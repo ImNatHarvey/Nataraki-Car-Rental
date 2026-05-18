@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using NatarakiCarRental.Data;
 using NatarakiCarRental.Models;
@@ -74,6 +75,42 @@ public sealed class ActivityLogRepository
             });
 
         return logs.ToList();
+    }
+
+    public async Task InsertAsync(ActivityLog log, IDbTransaction? transaction = null)
+    {
+        const string sql = """
+            INSERT INTO dbo.ActivityLogs
+            (
+                UserId,
+                ActionType,
+                EntityName,
+                EntityId,
+                Description
+            )
+            VALUES
+            (
+                @UserId,
+                @ActionType,
+                @EntityName,
+                @EntityId,
+                @Description
+            );
+            """;
+
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            await connection.ExecuteAsync(sql, log, transaction);
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
     }
 
     public async Task<ActivityLogMetrics> GetMetricsAsync()

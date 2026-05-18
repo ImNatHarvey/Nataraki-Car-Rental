@@ -81,6 +81,16 @@ public sealed class CustomerService
         return _customerRepository.PhoneNumberExistsAsync(phoneNumber, excludingCustomerId);
     }
 
+    public Task<Customer?> GetCustomerByPhoneNumberAsync(string phoneNumber)
+    {
+        return _customerRepository.GetCustomerByPhoneNumberAsync(phoneNumber);
+    }
+
+    public Task<Customer> GetOrCreateWalkInCustomerAsync()
+    {
+        return _customerRepository.GetOrCreateWalkInCustomerAsync();
+    }
+
     public async Task<int> AddCustomerAsync(Customer customer)
     {
         NormalizeCustomer(customer);

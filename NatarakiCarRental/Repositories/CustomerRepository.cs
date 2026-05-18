@@ -49,6 +49,115 @@ public sealed class CustomerRepository
         return await connection.QuerySingleOrDefaultAsync<Customer>(sql, new { CustomerId = customerId });
     }
 
+    public async Task<Customer?> GetCustomerByPhoneNumberAsync(string phoneNumber)
+    {
+        const string sql = """
+            SELECT
+                CustomerId,
+                FirstName,
+                LastName,
+                Email,
+                PhoneNumber,
+                Region,
+                Province,
+                City,
+                Barangay,
+                StreetAddress,
+                IsBlacklisted,
+                BlacklistReason,
+                IsArchived,
+                DriverLicensePath,
+                ProofOfBillingPath,
+                CreatedAt,
+                UpdatedAt,
+                ArchivedAt
+            FROM dbo.Customers
+            WHERE PhoneNumber = @PhoneNumber;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<Customer>(sql, new { PhoneNumber = phoneNumber });
+    }
+
+    public async Task<Customer> GetOrCreateWalkInCustomerAsync(IDbTransaction? transaction = null)
+    {
+        const string sql = """
+            IF EXISTS (
+                SELECT 1
+                FROM dbo.Customers WITH (UPDLOCK, HOLDLOCK)
+                WHERE PhoneNumber = N'00000000000'
+            )
+            BEGIN
+                UPDATE dbo.Customers
+                SET FirstName = N'Walk-In',
+                    LastName = N'Customer',
+                    IsBlacklisted = 0,
+                    BlacklistReason = NULL,
+                    IsArchived = 0,
+                    ArchivedAt = NULL,
+                    UpdatedAt = sysdatetime()
+                WHERE PhoneNumber = N'00000000000';
+            END
+            ELSE
+            BEGIN
+                INSERT INTO dbo.Customers
+                (
+                    FirstName,
+                    LastName,
+                    PhoneNumber,
+                    IsBlacklisted,
+                    BlacklistReason,
+                    IsArchived
+                )
+                VALUES
+                (
+                    N'Walk-In',
+                    N'Customer',
+                    N'00000000000',
+                    0,
+                    NULL,
+                    0
+                );
+            END;
+
+            SELECT
+                CustomerId,
+                FirstName,
+                LastName,
+                Email,
+                PhoneNumber,
+                Region,
+                Province,
+                City,
+                Barangay,
+                StreetAddress,
+                IsBlacklisted,
+                BlacklistReason,
+                IsArchived,
+                DriverLicensePath,
+                ProofOfBillingPath,
+                CreatedAt,
+                UpdatedAt,
+                ArchivedAt
+            FROM dbo.Customers
+            WHERE PhoneNumber = N'00000000000';
+            """;
+
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.QuerySingleAsync<Customer>(sql, transaction: transaction);
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
     public async Task<IReadOnlyList<Customer>> SearchCustomersAsync(string searchText, CustomerListFilter filter)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;

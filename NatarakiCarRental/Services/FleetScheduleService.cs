@@ -70,11 +70,16 @@ public sealed class FleetScheduleService
         return _scheduleRepository.GetRecentUpcomingSchedulesAsync(referenceDate, take);
     }
 
-    public async Task<int> CreateAsync(FleetSchedule schedule)
+    public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null)
     {
         Normalize(schedule);
-        await ValidateAsync(schedule);
+        await ValidateAsync(schedule, excludedScheduleId);
         GenerateTitle(schedule);
+    }
+
+    public async Task<int> CreateAsync(FleetSchedule schedule)
+    {
+        await PrepareForSaveAsync(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
@@ -102,9 +107,7 @@ public sealed class FleetScheduleService
 
     public async Task UpdateAsync(FleetSchedule schedule)
     {
-        Normalize(schedule);
-        await ValidateAsync(schedule, excludedScheduleId: schedule.ScheduleId);
-        GenerateTitle(schedule);
+        await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();

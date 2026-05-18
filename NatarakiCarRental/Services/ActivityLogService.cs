@@ -1,5 +1,4 @@
 using System.Data;
-using Dapper;
 using NatarakiCarRental.Data;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Repositories;
@@ -8,7 +7,6 @@ namespace NatarakiCarRental.Services;
 
 public sealed class ActivityLogService
 {
-    private readonly DbConnectionFactory _connectionFactory;
     private readonly ActivityLogRepository _activityLogRepository;
 
     public ActivityLogService()
@@ -18,7 +16,6 @@ public sealed class ActivityLogService
 
     public ActivityLogService(DbConnectionFactory connectionFactory)
     {
-        _connectionFactory = connectionFactory;
         _activityLogRepository = new ActivityLogRepository(connectionFactory);
     }
 
@@ -57,47 +54,15 @@ public sealed class ActivityLogService
         ArgumentException.ThrowIfNullOrWhiteSpace(actionType);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
-        const string sql = """
-            INSERT INTO dbo.ActivityLogs
-            (
-                UserId,
-                ActionType,
-                EntityName,
-                EntityId,
-                Description
-            )
-            VALUES
-            (
-                @UserId,
-                @ActionType,
-                @EntityName,
-                @EntityId,
-                @Description
-            );
-            """;
-
-        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
-
-        try
-        {
-            await connection.ExecuteAsync(
-                sql,
-                new
-                {
-                    UserId = userId,
-                    ActionType = actionType.Trim(),
-                    EntityName = string.IsNullOrWhiteSpace(entityName) ? null : entityName.Trim(),
-                    EntityId = entityId,
-                    Description = description.Trim()
-                },
-                transaction);
-        }
-        finally
-        {
-            if (transaction is null)
+        await _activityLogRepository.InsertAsync(
+            new ActivityLog
             {
-                connection.Dispose();
-            }
-        }
+                UserId = userId,
+                ActionType = actionType.Trim(),
+                EntityName = string.IsNullOrWhiteSpace(entityName) ? null : entityName.Trim(),
+                EntityId = entityId,
+                Description = description.Trim()
+            },
+            transaction);
     }
 }

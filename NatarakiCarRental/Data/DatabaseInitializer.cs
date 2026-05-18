@@ -380,7 +380,126 @@ public static class DatabaseInitializer
             END;
             """);
 
-        // 7. Customers Schema Updates
+        // 7. Transactions
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.Transactions
+                (
+                    TransactionId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    TransactionCode nvarchar(40) NOT NULL,
+                    FleetScheduleId int NOT NULL,
+                    CustomerId int NOT NULL,
+                    CarId int NOT NULL,
+                    StartDate date NOT NULL,
+                    EndDate date NOT NULL,
+                    DailyRate decimal(18,2) NOT NULL,
+                    TotalDays int NOT NULL,
+                    TotalAmount decimal(18,2) NOT NULL,
+                    ModeOfPayment nvarchar(30) NOT NULL,
+                    PaymentStatus nvarchar(30) NOT NULL,
+                    TransactionStatus nvarchar(30) NOT NULL,
+                    Notes nvarchar(500) NULL,
+                    CreatedByUserId int NULL,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
+                    UpdatedAt datetime2 NULL,
+                    ArchivedAt datetime2 NULL,
+                    IsArchived bit NOT NULL DEFAULT 0,
+                    CONSTRAINT UQ_Transactions_TransactionCode UNIQUE (TransactionCode),
+                    CONSTRAINT FK_Transactions_FleetSchedules FOREIGN KEY (FleetScheduleId) REFERENCES dbo.FleetSchedules(ScheduleId),
+                    CONSTRAINT FK_Transactions_Customers FOREIGN KEY (CustomerId) REFERENCES dbo.Customers(CustomerId),
+                    CONSTRAINT FK_Transactions_Cars FOREIGN KEY (CarId) REFERENCES dbo.Cars(CarId),
+                    CONSTRAINT FK_Transactions_Users FOREIGN KEY (CreatedByUserId) REFERENCES dbo.Users(UserId),
+                    CONSTRAINT CK_Transactions_DateRange_Valid CHECK (StartDate <= EndDate),
+                    CONSTRAINT CK_Transactions_DailyRate_Positive CHECK (DailyRate > 0),
+                    CONSTRAINT CK_Transactions_TotalDays_Positive CHECK (TotalDays > 0),
+                    CONSTRAINT CK_Transactions_TotalAmount_NonNegative CHECK (TotalAmount >= 0),
+                    CONSTRAINT CK_Transactions_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')),
+                    CONSTRAINT CK_Transactions_PaymentStatus_Valid CHECK (PaymentStatus IN (N'Unpaid', N'Partial', N'Paid')),
+                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Active', N'Completed', N'Cancelled'))
+                );
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+            BEGIN
+                IF OBJECT_ID(N'dbo.UQ_Transactions_TransactionCode', N'UQ') IS NULL
+                   AND NOT EXISTS (
+                        SELECT TransactionCode
+                        FROM dbo.Transactions
+                        GROUP BY TransactionCode
+                        HAVING COUNT(1) > 1
+                   )
+                BEGIN
+                    ALTER TABLE dbo.Transactions
+                    ADD CONSTRAINT UQ_Transactions_TransactionCode UNIQUE (TransactionCode);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_DateRange_Valid', N'C') IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.Transactions WHERE StartDate > EndDate)
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_DateRange_Valid CHECK (StartDate <= EndDate);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_DailyRate_Positive', N'C') IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.Transactions WHERE DailyRate <= 0)
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_DailyRate_Positive CHECK (DailyRate > 0);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_TotalDays_Positive', N'C') IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.Transactions WHERE TotalDays <= 0)
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_TotalDays_Positive CHECK (TotalDays > 0);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_TotalAmount_NonNegative', N'C') IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.Transactions WHERE TotalAmount < 0)
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_TotalAmount_NonNegative CHECK (TotalAmount >= 0);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_ModeOfPayment_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.Transactions
+                        WHERE ModeOfPayment NOT IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'));
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_PaymentStatus_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.Transactions
+                        WHERE PaymentStatus NOT IN (N'Unpaid', N'Partial', N'Paid')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_PaymentStatus_Valid CHECK (PaymentStatus IN (N'Unpaid', N'Partial', N'Paid'));
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_Status_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.Transactions
+                        WHERE TransactionStatus NOT IN (N'Pending', N'Active', N'Completed', N'Cancelled')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Active', N'Completed', N'Cancelled'));
+                END;
+            END;
+            """);
+
+        // 8. Customers Schema Updates
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
             BEGIN
@@ -416,7 +535,7 @@ public static class DatabaseInitializer
             END;
             """);
 
-        // 8. Customers Data Migration (Wrapped in sp_executesql to prevent parser errors)
+        // 9. Customers Data Migration (Wrapped in sp_executesql to prevent parser errors)
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
             BEGIN
@@ -434,7 +553,7 @@ public static class DatabaseInitializer
             END;
             """);
 
-        // 9. Customers Constraints
+        // 10. Customers Constraints
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
             BEGIN
@@ -497,7 +616,50 @@ public static class DatabaseInitializer
             END;
             """);
 
-        // 10. Indexes
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM dbo.Customers
+                    WHERE PhoneNumber = N'00000000000'
+                )
+                BEGIN
+                    UPDATE dbo.Customers
+                    SET FirstName = N'Walk-In',
+                        LastName = N'Customer',
+                        IsBlacklisted = 0,
+                        BlacklistReason = NULL,
+                        IsArchived = 0,
+                        ArchivedAt = NULL,
+                        UpdatedAt = sysdatetime()
+                    WHERE PhoneNumber = N'00000000000';
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO dbo.Customers
+                    (
+                        FirstName,
+                        LastName,
+                        PhoneNumber,
+                        IsBlacklisted,
+                        BlacklistReason,
+                        IsArchived
+                    )
+                    VALUES
+                    (
+                        N'Walk-In',
+                        N'Customer',
+                        N'00000000000',
+                        0,
+                        NULL,
+                        0
+                    );
+                END;
+            END;
+            """);
+
+        // 11. Indexes
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL
                AND NOT EXISTS (
@@ -565,6 +727,90 @@ public static class DatabaseInitializer
             BEGIN
                 CREATE NONCLUSTERED INDEX IX_Customers_IsArchived_IsBlacklisted
                 ON dbo.Customers (IsArchived, IsBlacklisted);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_Transactions_CustomerId'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_Transactions_CustomerId
+                ON dbo.Transactions (CustomerId);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_Transactions_CarId'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_Transactions_CarId
+                ON dbo.Transactions (CarId);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_Transactions_FleetScheduleId'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_Transactions_FleetScheduleId
+                ON dbo.Transactions (FleetScheduleId);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_Transactions_DateRange'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_Transactions_DateRange
+                ON dbo.Transactions (StartDate, EndDate);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_Transactions_TransactionStatus'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_Transactions_TransactionStatus
+                ON dbo.Transactions (TransactionStatus);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_Transactions_IsArchived_CreatedAt'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_Transactions_IsArchived_CreatedAt
+                ON dbo.Transactions (IsArchived, CreatedAt DESC);
             END;
             """);
     }

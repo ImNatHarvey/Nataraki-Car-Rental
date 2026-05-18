@@ -1,0 +1,460 @@
+using FluentValidation;
+using FluentValidation.Results;
+using Microsoft.Data.SqlClient;
+using NatarakiCarRental.Data;
+using NatarakiCarRental.Exceptions;
+using NatarakiCarRental.Helpers;
+using NatarakiCarRental.Models;
+using NatarakiCarRental.Repositories;
+
+namespace NatarakiCarRental.Services;
+
+public sealed class TransactionService
+{
+    private readonly TransactionRepository _transactionRepository;
+    private readonly FleetScheduleRepository _scheduleRepository;
+    private readonly FleetScheduleService _scheduleService;
+    private readonly CarRepository _carRepository;
+    private readonly CustomerRepository _customerRepository;
+    private readonly ActivityLogService _activityLogService;
+    private readonly DbConnectionFactory _connectionFactory;
+    private readonly int? _currentUserId;
+
+    public TransactionService(int? currentUserId = null)
+        : this(new DbConnectionFactory(), currentUserId)
+    {
+    }
+
+    private TransactionService(DbConnectionFactory connectionFactory, int? currentUserId)
+        : this(
+            new TransactionRepository(connectionFactory),
+            new FleetScheduleRepository(connectionFactory),
+            new FleetScheduleService(
+                new FleetScheduleRepository(connectionFactory),
+                new CarRepository(connectionFactory),
+                new CustomerRepository(connectionFactory),
+                new ActivityLogService(connectionFactory),
+                connectionFactory,
+                currentUserId),
+            new CarRepository(connectionFactory),
+            new CustomerRepository(connectionFactory),
+            new ActivityLogService(connectionFactory),
+            connectionFactory,
+            currentUserId)
+    {
+    }
+
+    public TransactionService(
+        TransactionRepository transactionRepository,
+        FleetScheduleRepository scheduleRepository,
+        FleetScheduleService scheduleService,
+        CarRepository carRepository,
+        CustomerRepository customerRepository,
+        ActivityLogService activityLogService,
+        DbConnectionFactory connectionFactory,
+        int? currentUserId = null)
+    {
+        _transactionRepository = transactionRepository;
+        _scheduleRepository = scheduleRepository;
+        _scheduleService = scheduleService;
+        _carRepository = carRepository;
+        _customerRepository = customerRepository;
+        _activityLogService = activityLogService;
+        _connectionFactory = connectionFactory;
+        _currentUserId = currentUserId;
+    }
+
+    public Task<Transaction?> GetByIdAsync(int transactionId)
+    {
+        return _transactionRepository.GetByIdAsync(transactionId);
+    }
+
+    public Task<IReadOnlyList<TransactionListItem>> SearchTransactionsAsync(string searchText, int maxRows = 100)
+    {
+        return _transactionRepository.SearchAsync(searchText, maxRows);
+    }
+
+    public async Task<int> CreateFromReservationAsync(CreateTransactionFromReservationRequest request)
+    {
+        FleetSchedule? reservation = await _scheduleRepository.GetByIdAsync(request.FleetScheduleId);
+
+        if (reservation is null || reservation.IsArchived)
+        {
+            throw Validation(nameof(CreateTransactionFromReservationRequest.FleetScheduleId), "Reservation schedule was not found or is archived.");
+        }
+
+        if (reservation.ScheduleType != FleetScheduleConstants.Type.Reservation
+            || reservation.Status is not FleetScheduleConstants.Status.Pending and not FleetScheduleConstants.Status.Reserved)
+        {
+            throw Validation(nameof(CreateTransactionFromReservationRequest.FleetScheduleId), "Only pending or reserved reservation schedules can be converted into transactions.");
+        }
+
+        if (!reservation.CustomerId.HasValue)
+        {
+            throw Validation(nameof(FleetSchedule.CustomerId), "A customer is required before a reservation can become a rental transaction.");
+        }
+
+        Customer customer = await GetEligibleCustomerAsync(reservation.CustomerId.Value);
+        Car car = await GetEligibleCarAsync(reservation.CarId);
+        DateTime startDate = request.StartDate?.Date ?? reservation.StartDate.Date;
+        DateTime endDate = request.EndDate?.Date ?? reservation.EndDate.Date;
+        decimal dailyRate = request.DailyRate ?? car.RatePerDay;
+        ValidateCommercialInputs(startDate, endDate, dailyRate, request.ModeOfPayment, request.PaymentStatus);
+
+        FleetSchedule rentalSchedule = CreateRentalSchedule(
+            reservation.ScheduleId,
+            car.CarId,
+            customer.CustomerId,
+            startDate,
+            endDate,
+            reservation.Notes);
+        await _scheduleService.PrepareForSaveAsync(rentalSchedule, reservation.ScheduleId);
+
+        Transaction transaction = BuildTransaction(
+            reservation.ScheduleId,
+            customer.CustomerId,
+            car.CarId,
+            startDate,
+            endDate,
+            dailyRate,
+            request.ModeOfPayment,
+            request.PaymentStatus,
+            request.Notes);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            transaction.TransactionCode = await GenerateTransactionCodeAsync(dbTransaction);
+            int affectedRows = await _scheduleRepository.UpdateAsync(rentalSchedule, dbTransaction);
+
+            if (affectedRows == 0)
+            {
+                throw new RecordNotFoundException($"Reservation schedule #{reservation.ScheduleId} was not found or is archived.");
+            }
+
+            int transactionId = await _transactionRepository.CreateAsync(transaction, dbTransaction);
+            await _activityLogService.LogAsync(
+                "Create transaction",
+                "Transaction",
+                transactionId,
+                $"Created transaction {transaction.TransactionCode} from reservation schedule #{reservation.ScheduleId}.",
+                _currentUserId,
+                dbTransaction);
+            await _activityLogService.LogAsync(
+                "Convert reservation to rental",
+                "FleetSchedule",
+                reservation.ScheduleId,
+                $"Converted reservation schedule #{reservation.ScheduleId} into rental schedule for transaction {transaction.TransactionCode}.",
+                _currentUserId,
+                dbTransaction);
+            dbTransaction.Commit();
+            return transactionId;
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    public async Task<int> CreateWalkInTransactionAsync(CreateWalkInTransactionRequest request)
+    {
+        Customer customer = request.CustomerId.HasValue
+            ? await GetEligibleCustomerAsync(request.CustomerId.Value)
+            : await _customerRepository.GetOrCreateWalkInCustomerAsync();
+        Car car = await GetEligibleCarAsync(request.CarId);
+        decimal dailyRate = request.DailyRate ?? car.RatePerDay;
+        ValidateCommercialInputs(request.StartDate.Date, request.EndDate.Date, dailyRate, request.ModeOfPayment, request.PaymentStatus);
+
+        FleetSchedule rentalSchedule = CreateRentalSchedule(
+            scheduleId: 0,
+            car.CarId,
+            customer.CustomerId,
+            request.StartDate.Date,
+            request.EndDate.Date,
+            request.Notes);
+        await _scheduleService.PrepareForSaveAsync(rentalSchedule);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            rentalSchedule.CreatedByUserId = _currentUserId;
+            int scheduleId = await _scheduleRepository.CreateAsync(rentalSchedule, dbTransaction);
+            Transaction transaction = BuildTransaction(
+                scheduleId,
+                customer.CustomerId,
+                car.CarId,
+                request.StartDate.Date,
+                request.EndDate.Date,
+                dailyRate,
+                request.ModeOfPayment,
+                request.PaymentStatus,
+                request.Notes);
+            transaction.TransactionCode = await GenerateTransactionCodeAsync(dbTransaction);
+
+            int transactionId = await _transactionRepository.CreateAsync(transaction, dbTransaction);
+            await _activityLogService.LogAsync(
+                "Create walk-in transaction",
+                "Transaction",
+                transactionId,
+                $"Created walk-in transaction {transaction.TransactionCode} with rental schedule #{scheduleId}.",
+                _currentUserId,
+                dbTransaction);
+            dbTransaction.Commit();
+            return transactionId;
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    public Task CompleteTransactionAsync(int transactionId, int currentUserId)
+    {
+        return ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Completed, FleetScheduleConstants.Status.Completed, "Complete transaction");
+    }
+
+    public Task CancelTransactionAsync(int transactionId, int currentUserId, string? reason = null)
+    {
+        string? trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        return ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Cancelled, FleetScheduleConstants.Status.Cancelled, "Cancel transaction", trimmedReason);
+    }
+
+    public async Task ArchiveTransactionAsync(int transactionId, int currentUserId)
+    {
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            int affectedRows = await _transactionRepository.ArchiveAsync(transactionId, dbTransaction);
+
+            if (affectedRows == 0)
+            {
+                throw new RecordNotFoundException($"Transaction record #{transactionId} was not found or is already archived.");
+            }
+
+            await _activityLogService.LogAsync(
+                "Archive transaction",
+                "Transaction",
+                transactionId,
+                $"Archived transaction {transaction.TransactionCode}.",
+                currentUserId,
+                dbTransaction);
+            dbTransaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    private async Task ChangeStatusAsync(
+        int transactionId,
+        int currentUserId,
+        string transactionStatus,
+        string scheduleStatus,
+        string actionType,
+        string? reason = null)
+    {
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        if (transaction.TransactionStatus == TransactionConstants.Status.Cancelled)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Cancelled transactions cannot be changed.");
+        }
+
+        if (transaction.TransactionStatus == TransactionConstants.Status.Completed)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Completed transactions cannot be changed.");
+        }
+
+        FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
+        if (schedule is null || schedule.IsArchived)
+        {
+            throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found or is archived.");
+        }
+
+        schedule.ScheduleType = FleetScheduleConstants.Type.Rental;
+        schedule.Status = scheduleStatus;
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            await _transactionRepository.UpdateStatusAsync(transactionId, transactionStatus, dbTransaction);
+            await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
+            string description = reason is null
+                ? $"{actionType} for {transaction.TransactionCode}."
+                : $"{actionType} for {transaction.TransactionCode}. Reason: {reason}";
+            await _activityLogService.LogAsync(actionType, "Transaction", transactionId, description, currentUserId, dbTransaction);
+            dbTransaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    private async Task<Transaction> GetActiveTransactionAsync(int transactionId)
+    {
+        Transaction? transaction = await _transactionRepository.GetByIdAsync(transactionId);
+
+        if (transaction is null || transaction.IsArchived)
+        {
+            throw new RecordNotFoundException($"Transaction record #{transactionId} was not found or is archived.");
+        }
+
+        return transaction;
+    }
+
+    private async Task<Car> GetEligibleCarAsync(int carId)
+    {
+        Car? car = await _carRepository.GetCarByIdAsync(carId);
+
+        if (car is null || car.IsArchived)
+        {
+            throw Validation(nameof(Transaction.CarId), "Selected car was not found or is archived.");
+        }
+
+        return car;
+    }
+
+    private async Task<Customer> GetEligibleCustomerAsync(int customerId)
+    {
+        Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+
+        if (customer is null || customer.IsArchived)
+        {
+            throw Validation(nameof(Transaction.CustomerId), "Selected customer was not found or is archived.");
+        }
+
+        if (customer.IsBlacklisted)
+        {
+            throw Validation(nameof(Transaction.CustomerId), "This customer is blacklisted and cannot be assigned to a new transaction.");
+        }
+
+        return customer;
+    }
+
+    private static FleetSchedule CreateRentalSchedule(
+        int scheduleId,
+        int carId,
+        int customerId,
+        DateTime startDate,
+        DateTime endDate,
+        string? notes)
+    {
+        return new FleetSchedule
+        {
+            ScheduleId = scheduleId,
+            CarId = carId,
+            CustomerId = customerId,
+            ScheduleType = FleetScheduleConstants.Type.Rental,
+            Status = FleetScheduleConstants.Status.Rented,
+            StartDate = startDate.Date,
+            EndDate = endDate.Date,
+            Notes = notes
+        };
+    }
+
+    private Transaction BuildTransaction(
+        int scheduleId,
+        int customerId,
+        int carId,
+        DateTime startDate,
+        DateTime endDate,
+        decimal dailyRate,
+        string modeOfPayment,
+        string paymentStatus,
+        string? notes)
+    {
+        int totalDays = (endDate.Date - startDate.Date).Days + 1;
+        return new Transaction
+        {
+            FleetScheduleId = scheduleId,
+            CustomerId = customerId,
+            CarId = carId,
+            StartDate = startDate.Date,
+            EndDate = endDate.Date,
+            DailyRate = dailyRate,
+            TotalDays = totalDays,
+            TotalAmount = dailyRate * totalDays,
+            ModeOfPayment = modeOfPayment.Trim(),
+            PaymentStatus = paymentStatus.Trim(),
+            TransactionStatus = TransactionConstants.Status.Active,
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+            CreatedByUserId = _currentUserId
+        };
+    }
+
+    private static void ValidateCommercialInputs(
+        DateTime startDate,
+        DateTime endDate,
+        decimal dailyRate,
+        string modeOfPayment,
+        string paymentStatus)
+    {
+        List<ValidationFailure> failures = [];
+
+        if (startDate.Date > endDate.Date)
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.EndDate), "End date must be on or after start date."));
+        }
+
+        if (dailyRate <= 0)
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.DailyRate), "Daily rate must be greater than 0."));
+        }
+
+        if (!TransactionConstants.ModeOfPayment.All.Contains(modeOfPayment))
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.ModeOfPayment), "Mode of payment is invalid."));
+        }
+
+        if (!TransactionConstants.PaymentStatus.All.Contains(paymentStatus))
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.PaymentStatus), "Payment status is invalid."));
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new ValidationException(failures);
+        }
+    }
+
+    private async Task<string> GenerateTransactionCodeAsync(SqlTransaction dbTransaction)
+    {
+        int year = DateTime.Today.Year;
+        int sequence = await _transactionRepository.GetNextSequenceForYearAsync(year, dbTransaction);
+        return $"TXN-{year}-{sequence:000000}";
+    }
+
+    private static ValidationException Validation(string propertyName, string message)
+    {
+        return new ValidationException([new ValidationFailure(propertyName, message)]);
+    }
+
+    private static void RollbackQuietly(SqlTransaction transaction)
+    {
+        try
+        {
+            transaction.Rollback();
+        }
+        catch
+        {
+            // Preserve the original exception that caused rollback.
+        }
+    }
+}
