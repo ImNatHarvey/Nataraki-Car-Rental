@@ -217,10 +217,19 @@ public sealed class FleetScheduleService
                     [new ValidationFailure(nameof(FleetSchedule.CustomerId), "Selected customer was not found or is archived.")]);
             }
 
-            if (excludedScheduleId is null && customer.IsBlacklisted)
+            if (customer.IsBlacklisted)
             {
-                throw new ValidationException(
-                    [new ValidationFailure(nameof(FleetSchedule.CustomerId), "This customer is blacklisted and cannot be assigned to a new schedule.")]);
+                FleetSchedule? existingSchedule = excludedScheduleId.HasValue
+                    ? await _scheduleRepository.GetByIdAsync(excludedScheduleId.Value)
+                    : null;
+
+                bool isExistingBlacklistedAssignment = existingSchedule?.CustomerId == schedule.CustomerId;
+
+                if (!isExistingBlacklistedAssignment)
+                {
+                    throw new ValidationException(
+                        [new ValidationFailure(nameof(FleetSchedule.CustomerId), "This customer is blacklisted and cannot be assigned to a new schedule.")]);
+                }
             }
         }
 

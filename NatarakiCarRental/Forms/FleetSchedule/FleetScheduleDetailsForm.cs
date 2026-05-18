@@ -151,6 +151,18 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             _cars = await _carService.GetActiveCarsAsync();
             _customers = await _customerService.SearchCustomersAsync(string.Empty, CustomerListFilter.Active);
+
+            if (_sourceSchedule?.CustomerId is int sourceCustomerId
+                && !_customers.Any(customer => customer.CustomerId == sourceCustomerId))
+            {
+                Customer? sourceCustomer = await _customerService.GetCustomerByIdAsync(sourceCustomerId);
+
+                if (sourceCustomer is not null && !sourceCustomer.IsArchived)
+                {
+                    _customers = [.. _customers, sourceCustomer];
+                }
+            }
+
             PopulateLookups();
 
             if (_sourceSchedule is not null)
