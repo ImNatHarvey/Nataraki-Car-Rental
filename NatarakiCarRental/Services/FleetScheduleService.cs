@@ -70,6 +70,11 @@ public sealed class FleetScheduleService
         return _scheduleRepository.GetRecentUpcomingSchedulesAsync(referenceDate, take);
     }
 
+    public Task<IReadOnlyList<FleetSchedule>> GetEligibleReservationsAsync(DateTime referenceDate)
+    {
+        return _scheduleRepository.GetEligibleReservationsAsync(referenceDate);
+    }
+
     public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null)
     {
         Normalize(schedule);

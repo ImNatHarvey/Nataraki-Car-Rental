@@ -70,9 +70,18 @@ public sealed class TransactionService
         return _transactionRepository.GetByIdAsync(transactionId);
     }
 
-    public Task<IReadOnlyList<TransactionListItem>> SearchTransactionsAsync(string searchText, int maxRows = 100)
+    public Task<IReadOnlyList<TransactionListItem>> SearchTransactionsAsync(
+        string searchText,
+        string? transactionStatus = null,
+        string? paymentStatus = null,
+        int maxRows = 100)
     {
-        return _transactionRepository.SearchAsync(searchText, maxRows);
+        return _transactionRepository.SearchAsync(searchText, transactionStatus, paymentStatus, maxRows);
+    }
+
+    public Task<TransactionMetrics> GetMetricsAsync(DateTime referenceDate)
+    {
+        return _transactionRepository.GetMetricsAsync(referenceDate);
     }
 
     public async Task<int> CreateFromReservationAsync(CreateTransactionFromReservationRequest request)

@@ -13,6 +13,7 @@ public sealed class OverviewControl : UserControl
     private readonly CarService _carService = new();
     private readonly CustomerService _customerService = new();
     private readonly FleetScheduleService _scheduleService = new(currentUserId: null);
+    private readonly TransactionService _transactionService = new();
     private readonly MetricCardControl _totalCarsCard = new();
     private readonly MetricCardControl _availableCarsCard = new();
     private readonly MetricCardControl _maintenanceCarsCard = new();
@@ -25,6 +26,7 @@ public sealed class OverviewControl : UserControl
     private readonly DataGridView _recentSchedulesGrid = CreateOverviewGrid();
     private readonly Label _recentCustomersEmptyLabel = CreateEmptyLabel("No recent customers yet.");
     private readonly Label _recentSchedulesEmptyLabel = CreateEmptyLabel("No upcoming schedules yet.");
+    private readonly Label _transactionSummaryLabel = new();
 
     public OverviewControl()
     {
@@ -50,7 +52,7 @@ public sealed class OverviewControl : UserControl
         mainLayout.Controls.Add(CreateHeaderPanel());
         mainLayout.Controls.Add(CreateMetricGrid());
         mainLayout.Controls.Add(CreateRecentGrid());
-        mainLayout.Controls.Add(CreateTransactionNoticePanel());
+        mainLayout.Controls.Add(CreateTransactionSummaryPanel());
 
         Controls.Add(mainLayout);
     }
@@ -183,23 +185,30 @@ public sealed class OverviewControl : UserControl
         return panel;
     }
 
-    private static Panel CreateTransactionNoticePanel()
+    private Panel CreateTransactionSummaryPanel()
     {
         Panel panel = ControlFactory.CreateCardPanel(new Size(0, 86));
         panel.Dock = DockStyle.Top;
         panel.Margin = new Padding(0, 18, 0, 0);
         panel.Padding = new Padding(20);
 
-        Label label = new()
+        Label titleLabel = new()
         {
-            Text = "Transaction metrics will appear once the Transaction module is available.",
-            Dock = DockStyle.Fill,
-            Font = FontHelper.Regular(10F),
-            ForeColor = ThemeHelper.TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
+            Text = "Transaction Summary",
+            Dock = DockStyle.Top,
+            Height = 24,
+            Font = FontHelper.Title(12F),
+            ForeColor = ThemeHelper.TextPrimary
         };
 
-        panel.Controls.Add(label);
+        _transactionSummaryLabel.Dock = DockStyle.Fill;
+        _transactionSummaryLabel.Text = "Loading transaction metrics...";
+        _transactionSummaryLabel.Font = FontHelper.Regular(10F);
+        _transactionSummaryLabel.ForeColor = ThemeHelper.TextSecondary;
+        _transactionSummaryLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        panel.Controls.Add(_transactionSummaryLabel);
+        panel.Controls.Add(titleLabel);
         return panel;
     }
 
@@ -259,10 +268,12 @@ public sealed class OverviewControl : UserControl
             CarCounts carCounts = await _carService.GetCarCountsAsync();
             CustomerCounts customerCounts = await _customerService.GetCustomerCountsAsync();
             FleetScheduleOverviewCounts scheduleCounts = await _scheduleService.GetOverviewCountsAsync(DateTime.Today);
+            TransactionMetrics transactionMetrics = await _transactionService.GetMetricsAsync(DateTime.Today);
             IReadOnlyList<Customer> recentCustomers = await _customerService.GetRecentCustomersAsync(RecentItemLimit);
             IReadOnlyList<FleetScheduleModel> recentSchedules = await _scheduleService.GetRecentUpcomingSchedulesAsync(DateTime.Today, RecentItemLimit);
 
             UpdateMetricCards(carCounts, customerCounts, scheduleCounts);
+            UpdateTransactionSummary(transactionMetrics);
             PopulateRecentCustomers(recentCustomers);
             PopulateRecentSchedules(recentSchedules);
         }
@@ -270,6 +281,15 @@ public sealed class OverviewControl : UserControl
         {
             MessageBoxHelper.ShowWarning($"Unable to load overview data.\n\n{exception.Message}", "Overview");
         }
+    }
+
+    private void UpdateTransactionSummary(TransactionMetrics metrics)
+    {
+        _transactionSummaryLabel.Text =
+            $"Total Transactions: {metrics.TotalTransactions}    " +
+            $"Active Rentals: {metrics.ActiveTransactions}    " +
+            $"Unpaid: {metrics.UnpaidTransactions}    " +
+            $"Completed This Month: {metrics.CompletedTransactions}";
     }
 
     private void UpdateMetricCards(CarCounts carCounts, CustomerCounts customerCounts, FleetScheduleOverviewCounts scheduleCounts)

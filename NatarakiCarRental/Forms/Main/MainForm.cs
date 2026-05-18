@@ -6,6 +6,7 @@ using NatarakiCarRental.UserControls.Cars;
 using NatarakiCarRental.UserControls.Customers;
 using NatarakiCarRental.UserControls.Dashboard;
 using NatarakiCarRental.UserControls.FleetSchedule;
+using NatarakiCarRental.UserControls.Transactions;
 
 namespace NatarakiCarRental.Forms.Main;
 
@@ -89,7 +90,7 @@ public sealed class MainForm : Form
             new("Car Garage", IconChar.Car, true),
             new("Fleet Schedule", IconChar.CalendarDays, true),
             new("Customers", IconChar.Users, true),
-            new("Transactions", IconChar.Receipt, false),
+            new("Transactions", IconChar.Receipt, true),
             new("Offsite", IconChar.LocationDot, false),
             new("Activity Log", IconChar.ClipboardList, true),
             new("Manage System", IconChar.Gear, false)
@@ -161,6 +162,12 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (pageName == "Transactions")
+        {
+            ShowTransactions();
+            return;
+        }
+
         ShowPlaceholder(pageName);
     }
 
@@ -192,6 +199,12 @@ public sealed class MainForm : Form
     {
         LoadContent(new ActivityLogControl());
         SetActiveNavigation("Activity Log");
+    }
+
+    private void ShowTransactions()
+    {
+        LoadContent(new TransactionControl(CurrentUser.UserId));
+        SetActiveNavigation("Transactions");
     }
 
     private void ShowPlaceholder(string pageName)

@@ -140,6 +140,50 @@ public sealed class FleetScheduleRepository
         return schedules.ToList();
     }
 
+    public async Task<IReadOnlyList<FleetSchedule>> GetEligibleReservationsAsync(DateTime referenceDate)
+    {
+        const string sql = """
+            SELECT
+                schedules.ScheduleId,
+                schedules.CarId,
+                schedules.CustomerId,
+                cars.CarName,
+                cars.PlateNumber,
+                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                schedules.Title,
+                schedules.ScheduleType,
+                schedules.Status,
+                schedules.StartDate,
+                schedules.EndDate,
+                schedules.Notes,
+                schedules.CreatedByUserId,
+                schedules.CreatedAt,
+                schedules.UpdatedAt,
+                schedules.IsArchived
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
+            WHERE schedules.IsArchived = 0
+              AND schedules.ScheduleType = @ReservationType
+              AND schedules.Status IN @ReservationStatuses
+              AND schedules.EndDate >= @ReferenceDate
+            ORDER BY schedules.StartDate, schedules.ScheduleId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        IEnumerable<FleetSchedule> schedules = await connection.QueryAsync<FleetSchedule>(
+            sql,
+            new
+            {
+                ReferenceDate = referenceDate.Date,
+                ReservationType = FleetScheduleConstants.Type.Reservation,
+                ReservationStatuses = FleetScheduleConstants.Status.ReservationOptions
+                    .Where(status => status != FleetScheduleConstants.Status.Cancelled)
+                    .ToArray()
+            });
+        return schedules.ToList();
+    }
+
     public async Task<FleetSchedule?> GetByIdAsync(int scheduleId)
     {
         const string sql = """
