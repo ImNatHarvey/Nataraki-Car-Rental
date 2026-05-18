@@ -44,7 +44,7 @@ public static class FleetScheduleVisualHelper
     {
         if (status == FleetScheduleConstants.Status.Cancelled)
         {
-            return ThemeHelper.GrayIcon;
+            return ThemeHelper.Danger;
         }
 
         if (status == FleetScheduleConstants.Status.Completed)
