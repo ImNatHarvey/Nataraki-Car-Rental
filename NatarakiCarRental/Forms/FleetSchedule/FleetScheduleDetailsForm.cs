@@ -26,7 +26,6 @@ public sealed class FleetScheduleDetailsForm : Form
 
     private readonly ComboBox _carComboBox = CreateComboBox();
     private readonly ComboBox _customerComboBox = CreateComboBox();
-    private readonly TextBox _titleTextBox = ControlFactory.CreateTextBox(280);
     private readonly ComboBox _scheduleTypeComboBox = CreateComboBox();
     private readonly ComboBox _statusComboBox = CreateComboBox();
     private readonly DateTimePicker _startDatePicker = CreateDatePicker();
@@ -67,7 +66,7 @@ public sealed class FleetScheduleDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(720, 610);
+        ClientSize = new Size(720, 544);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -95,13 +94,12 @@ public sealed class FleetScheduleDetailsForm : Form
         TableLayoutPanel layout = new()
         {
             Location = new Point(32, 106),
-            Size = new Size(650, 400),
+            Size = new Size(650, 334),
             ColumnCount = 2,
-            RowCount = 5
+            RowCount = 4
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
@@ -109,27 +107,26 @@ public sealed class FleetScheduleDetailsForm : Form
 
         layout.Controls.Add(CreateInputPanel("Car *", _carComboBox), 0, 0);
         layout.Controls.Add(CreateInputPanel("Customer", _customerComboBox), 1, 0);
-        layout.Controls.Add(CreateInputPanel("Title *", _titleTextBox), 0, 1);
-        layout.Controls.Add(CreateInputPanel("Schedule Type *", _scheduleTypeComboBox), 1, 1);
-        layout.Controls.Add(CreateInputPanel("Status *", _statusComboBox), 0, 2);
-        layout.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 3);
-        layout.Controls.Add(CreateInputPanel("End Date *", _endDatePicker), 1, 3);
-        layout.Controls.Add(CreateInputPanel("Notes", _notesTextBox), 0, 4);
-        layout.SetColumnSpan(layout.GetControlFromPosition(0, 4)!, 2);
+        layout.Controls.Add(CreateInputPanel("Schedule Type *", _scheduleTypeComboBox), 0, 1);
+        layout.Controls.Add(CreateInputPanel("Status *", _statusComboBox), 1, 1);
+        layout.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 2);
+        layout.Controls.Add(CreateInputPanel("End Date *", _endDatePicker), 1, 2);
+        layout.Controls.Add(CreateInputPanel("Notes", _notesTextBox), 0, 3);
+        layout.SetColumnSpan(layout.GetControlFromPosition(0, 3)!, 2);
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(438, 538);
+        cancelButton.Location = new Point(438, 472);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Changes" : "Add Schedule", 134, 38);
-        saveButton.Location = new Point(558, 538);
+        saveButton.Location = new Point(558, 472);
         saveButton.Click += SaveButton_Click;
 
         Button? archiveButton = null;
         if (_mode == FleetScheduleFormMode.Edit)
         {
             archiveButton = CreateDangerButton("Archive", 110, 38);
-            archiveButton.Location = new Point(32, 538);
+            archiveButton.Location = new Point(32, 472);
             archiveButton.Click += ArchiveButton_Click;
         }
 
@@ -183,14 +180,13 @@ public sealed class FleetScheduleDetailsForm : Form
         _customerComboBox.SelectedIndex = 0;
 
         _scheduleTypeComboBox.Items.AddRange(FleetScheduleConstants.Type.All.Cast<object>().ToArray());
-        _statusComboBox.Items.AddRange(FleetScheduleVisualHelper.StatusOptions.Cast<object>().ToArray());
+        _scheduleTypeComboBox.SelectedIndexChanged += (_, _) => RefreshStatusOptions();
     }
 
     private void ApplyDefaults()
     {
         SelectLookup(_carComboBox, _prefilledCarId);
         _scheduleTypeComboBox.SelectedItem = FleetScheduleConstants.Type.Reservation;
-        SelectStatus(FleetScheduleConstants.Status.Pending);
         DateTime date = _prefilledDate?.Date ?? DateTime.Today;
         _startDatePicker.Value = date;
         _endDatePicker.Value = date;
@@ -200,7 +196,6 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         SelectLookup(_carComboBox, schedule.CarId);
         SelectLookup(_customerComboBox, schedule.CustomerId);
-        _titleTextBox.Text = schedule.Title;
         _scheduleTypeComboBox.SelectedItem = schedule.ScheduleType;
         SelectStatus(schedule.Status);
         _startDatePicker.Value = schedule.StartDate;
@@ -285,7 +280,6 @@ public sealed class FleetScheduleDetailsForm : Form
             ScheduleId = _sourceSchedule?.ScheduleId ?? 0,
             CarId = GetSelectedLookupId(_carComboBox) ?? 0,
             CustomerId = GetSelectedLookupId(_customerComboBox),
-            Title = _titleTextBox.Text,
             ScheduleType = _scheduleTypeComboBox.SelectedItem?.ToString() ?? string.Empty,
             Status = GetSelectedStatusValue(),
             StartDate = _startDatePicker.Value.Date,
@@ -327,7 +321,6 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             nameof(FleetScheduleModel.CarId) => _carComboBox,
             nameof(FleetScheduleModel.CustomerId) => _customerComboBox,
-            nameof(FleetScheduleModel.Title) => _titleTextBox,
             nameof(FleetScheduleModel.ScheduleType) => _scheduleTypeComboBox,
             nameof(FleetScheduleModel.Status) => _statusComboBox,
             nameof(FleetScheduleModel.StartDate) => _startDatePicker,
@@ -417,6 +410,23 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             _statusComboBox.SelectedItem = option;
         }
+    }
+
+    private void RefreshStatusOptions()
+    {
+        string scheduleType = _scheduleTypeComboBox.SelectedItem?.ToString() ?? string.Empty;
+        string currentStatus = GetSelectedStatusValue();
+        IReadOnlyList<FleetScheduleVisualHelper.StatusDisplayOption> options =
+            FleetScheduleVisualHelper.GetStatusOptionsForType(scheduleType);
+
+        _statusComboBox.Items.Clear();
+        _statusComboBox.Items.AddRange(options.Cast<object>().ToArray());
+
+        FleetScheduleVisualHelper.StatusDisplayOption? selectedOption = options
+            .FirstOrDefault(option => option.Value == currentStatus);
+
+        _statusComboBox.SelectedItem = selectedOption
+            ?? options.FirstOrDefault(option => option.Value == FleetScheduleVisualHelper.GetDefaultStatusForType(scheduleType));
     }
 
     private string GetSelectedStatusValue()

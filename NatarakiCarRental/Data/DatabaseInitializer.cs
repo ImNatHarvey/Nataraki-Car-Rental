@@ -307,6 +307,15 @@ public static class DatabaseInitializer
                 BEGIN
                     ALTER TABLE dbo.FleetSchedules ADD IsArchived bit NOT NULL CONSTRAINT DF_FleetSchedules_IsArchived DEFAULT 0;
                 END;
+
+                UPDATE dbo.FleetSchedules
+                SET Status = CASE
+                    WHEN ScheduleType = N'Maintenance' AND Status = N'Active' THEN N'Ongoing'
+                    WHEN Status = N'Confirmed' THEN N'Reserved'
+                    WHEN Status = N'Active' THEN N'Rented'
+                    ELSE Status
+                END
+                WHERE Status IN (N'Confirmed', N'Active');
             END;
             """);
 

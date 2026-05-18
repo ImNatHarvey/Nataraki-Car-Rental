@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using NatarakiCarRental.Data;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 
 namespace NatarakiCarRental.Repositories;
@@ -203,7 +204,7 @@ public sealed class FleetScheduleRepository
             FROM dbo.FleetSchedules
             WHERE CarId = @CarId
               AND IsArchived = 0
-              AND Status <> N'Cancelled'
+              AND Status IN @OperationalStatuses
               AND (@ExcludedScheduleId IS NULL OR ScheduleId <> @ExcludedScheduleId)
               AND StartDate <= @EndDate
               AND EndDate >= @StartDate;
@@ -217,7 +218,8 @@ public sealed class FleetScheduleRepository
                 CarId = carId,
                 StartDate = startDate.Date,
                 EndDate = endDate.Date,
-                ExcludedScheduleId = excludedScheduleId
+                ExcludedScheduleId = excludedScheduleId,
+                OperationalStatuses = FleetScheduleConstants.Status.Operational
             });
 
         return count > 0;
@@ -252,7 +254,7 @@ public sealed class FleetScheduleRepository
             LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
             WHERE schedules.CarId = @CarId
               AND schedules.IsArchived = 0
-              AND schedules.Status <> N'Cancelled'
+              AND schedules.Status IN @OperationalStatuses
               AND (@ExcludedScheduleId IS NULL OR schedules.ScheduleId <> @ExcludedScheduleId)
               AND schedules.StartDate <= @EndDate
               AND schedules.EndDate >= @StartDate
@@ -267,7 +269,49 @@ public sealed class FleetScheduleRepository
                 CarId = carId,
                 StartDate = startDate.Date,
                 EndDate = endDate.Date,
-                ExcludedScheduleId = excludedScheduleId
+                ExcludedScheduleId = excludedScheduleId,
+                OperationalStatuses = FleetScheduleConstants.Status.Operational
+            });
+    }
+
+    public async Task<FleetSchedule?> GetActiveOrUpcomingOperationalScheduleAsync(int carId, DateTime referenceDate)
+    {
+        const string sql = """
+            SELECT TOP (1)
+                schedules.ScheduleId,
+                schedules.CarId,
+                schedules.CustomerId,
+                cars.CarName,
+                cars.PlateNumber,
+                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                schedules.Title,
+                schedules.ScheduleType,
+                schedules.Status,
+                schedules.StartDate,
+                schedules.EndDate,
+                schedules.Notes,
+                schedules.CreatedByUserId,
+                schedules.CreatedAt,
+                schedules.UpdatedAt,
+                schedules.IsArchived
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
+            WHERE schedules.CarId = @CarId
+              AND schedules.IsArchived = 0
+              AND schedules.Status IN @OperationalStatuses
+              AND schedules.EndDate >= @ReferenceDate
+            ORDER BY schedules.StartDate, schedules.ScheduleId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<FleetSchedule>(
+            sql,
+            new
+            {
+                CarId = carId,
+                ReferenceDate = referenceDate.Date,
+                OperationalStatuses = FleetScheduleConstants.Status.Operational
             });
     }
 

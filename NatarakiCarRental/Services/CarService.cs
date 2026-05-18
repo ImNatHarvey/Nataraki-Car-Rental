@@ -13,6 +13,7 @@ namespace NatarakiCarRental.Services;
 public sealed class CarService
 {
     private readonly CarRepository _carRepository;
+    private readonly FleetScheduleRepository _fleetScheduleRepository;
     private readonly ActivityLogService _activityLogService;
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
@@ -28,22 +29,29 @@ public sealed class CarService
     }
 
     private CarService(DbConnectionFactory connectionFactory, int? currentUserId)
-        : this(new CarRepository(connectionFactory), new ActivityLogService(connectionFactory), connectionFactory, currentUserId)
+        : this(
+            new CarRepository(connectionFactory),
+            new FleetScheduleRepository(connectionFactory),
+            new ActivityLogService(connectionFactory),
+            connectionFactory,
+            currentUserId)
     {
     }
 
     public CarService(CarRepository carRepository, ActivityLogService activityLogService)
-        : this(carRepository, activityLogService, new DbConnectionFactory(), currentUserId: null)
+        : this(carRepository, new FleetScheduleRepository(), activityLogService, new DbConnectionFactory(), currentUserId: null)
     {
     }
 
     public CarService(
         CarRepository carRepository,
+        FleetScheduleRepository fleetScheduleRepository,
         ActivityLogService activityLogService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
         _carRepository = carRepository;
+        _fleetScheduleRepository = fleetScheduleRepository;
         _activityLogService = activityLogService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
@@ -173,6 +181,16 @@ public sealed class CarService
     public async Task ArchiveCarAsync(int carId)
     {
         Car? car = await _carRepository.GetCarByIdAsync(carId);
+        FleetSchedule? blockingSchedule = await _fleetScheduleRepository.GetActiveOrUpcomingOperationalScheduleAsync(carId, DateTime.Today);
+
+        if (blockingSchedule is not null)
+        {
+            throw new ValidationException(
+                [new ValidationFailure(
+                    nameof(Car.CarId),
+                    $"This car cannot be archived because it has an active or upcoming schedule: '{blockingSchedule.Title}' from {blockingSchedule.StartDate:MMM d, yyyy} to {blockingSchedule.EndDate:MMM d, yyyy}.")]);
+        }
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 

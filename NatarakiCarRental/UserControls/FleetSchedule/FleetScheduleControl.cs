@@ -1,5 +1,4 @@
 using System.Drawing.Drawing2D;
-using FontAwesome.Sharp;
 using NatarakiCarRental.Forms.FleetSchedule;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
@@ -11,7 +10,7 @@ public sealed class FleetScheduleControl : UserControl
 {
     private const int CarColumnWidth = 210;
     private const int HeaderHeight = 46;
-    private const int RowHeight = 52;
+    private const int MinimumRowHeight = 52;
     private const int DayWidth = 42;
     private readonly int _currentUserId;
     private readonly CarService _carService;
@@ -48,7 +47,7 @@ public sealed class FleetScheduleControl : UserControl
             RowCount = 3
         };
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 94F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
@@ -110,53 +109,62 @@ public sealed class FleetScheduleControl : UserControl
         addButton.Location = new Point(390, 9);
         addButton.Click += async (_, _) => await OpenAddFormAsync(null, null);
 
+        FlowLayoutPanel legendPanel = CreateLegendPanel();
+        panel.Resize += (_, _) =>
+        {
+            legendPanel.Width = Math.Max(panel.Width - legendPanel.Left, 280);
+            legendPanel.Height = panel.Height - legendPanel.Top;
+        };
+
         panel.Controls.Add(previousButton);
         panel.Controls.Add(_monthLabel);
         panel.Controls.Add(nextButton);
         panel.Controls.Add(todayButton);
         panel.Controls.Add(addButton);
-        panel.Controls.Add(CreateLegendPanel());
+        panel.Controls.Add(legendPanel);
         return panel;
     }
 
-    private Panel CreateLegendPanel()
+    private FlowLayoutPanel CreateLegendPanel()
     {
         FlowLayoutPanel panel = new()
         {
             Location = new Point(544, 8),
-            Size = new Size(510, 38),
+            Size = new Size(510, 76),
             BackColor = ThemeHelper.ContentBackground,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
+            WrapContents = true,
             Padding = new Padding(0, 7, 0, 0)
         };
 
         AddLegendItem(panel, "Pending", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Pending));
-        AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Confirmed));
-        AddLegendItem(panel, "Rented", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Active));
-        AddLegendItem(panel, "Maintenance", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Active, FleetScheduleConstants.Type.Maintenance));
+        AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Reserved));
+        AddLegendItem(panel, "Rented", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Rented));
+        AddLegendItem(panel, "Maintenance", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Type.Maintenance));
+        AddLegendItem(panel, "Completed", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Completed));
         AddLegendItem(panel, "Cancelled", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Cancelled));
         return panel;
     }
 
     private static void AddLegendItem(FlowLayoutPanel panel, string text, Color color)
     {
+        Size labelSize = TextRenderer.MeasureText(text, FontHelper.Regular(9F));
         Panel itemPanel = new()
         {
-            Size = new Size(text == "Maintenance" ? 112 : 88, 24),
-            Margin = new Padding(0, 0, 8, 0),
+            Size = new Size(28 + 8 + labelSize.Width + 4, 24),
+            Margin = new Padding(0, 0, 10, 0),
             BackColor = ThemeHelper.ContentBackground
         };
         RoundedLegendMarker swatch = new(color)
         {
             Location = new Point(0, 5),
-            Size = new Size(14, 14)
+            Size = new Size(28, 14)
         };
         Label label = new()
         {
             Text = text,
-            Location = new Point(22, 1),
-            Size = new Size(itemPanel.Width - 22, 22),
+            Location = new Point(36, 1),
+            Size = new Size(itemPanel.Width - 36, 22),
             Font = FontHelper.Regular(9F),
             ForeColor = ThemeHelper.TextSecondary
         };
@@ -239,8 +247,31 @@ public sealed class FleetScheduleControl : UserControl
                 _timelineCanvas,
                 schedule is null
                     ? null
-                    : $"{schedule.CarName} ({schedule.PlateNumber})\n{schedule.Title}\n{schedule.StartDate:MMM d} - {schedule.EndDate:MMM d}\n{FleetScheduleVisualHelper.GetDisplayStatus(schedule.Status, schedule.ScheduleType)}");
+                    : BuildToolTipText(schedule));
         }
+    }
+
+    private static string BuildToolTipText(Models.FleetSchedule schedule)
+    {
+        List<string> lines =
+        [
+            $"{schedule.CarName} ({schedule.PlateNumber})",
+            schedule.Title,
+            $"{schedule.StartDate:MMM d, yyyy} - {schedule.EndDate:MMM d, yyyy}",
+            FleetScheduleVisualHelper.GetDisplayStatus(schedule.Status, schedule.ScheduleType)
+        ];
+
+        if (!string.IsNullOrWhiteSpace(schedule.CustomerName))
+        {
+            lines.Add($"Customer: {schedule.CustomerName}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(schedule.Notes))
+        {
+            lines.Add($"Notes: {schedule.Notes}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private async void TimelineCanvas_MouseClick(object? sender, MouseEventArgs e)
@@ -277,8 +308,13 @@ public sealed class FleetScheduleControl : UserControl
 
     private sealed class TimelineCanvas : Panel
     {
+        private const int PillHeight = 30;
+        private const int RowTopPadding = 10;
+        private const int RowBottomPadding = 12;
+        private const int LaneSpacing = 8;
         private readonly FleetScheduleControl _owner;
         private readonly Dictionary<int, Rectangle> _scheduleBounds = [];
+        private IReadOnlyList<RowLayout> _rowLayouts = [];
 
         public TimelineCanvas(FleetScheduleControl owner)
         {
@@ -288,14 +324,20 @@ public sealed class FleetScheduleControl : UserControl
 
         public void UpdateVirtualSize()
         {
+            RebuildLayouts();
             int days = DateTime.DaysInMonth(_owner.SelectedMonth.Year, _owner.SelectedMonth.Month);
             int width = CarColumnWidth + days * DayWidth;
-            int height = HeaderHeight + Math.Max(_owner._cars.Count, 1) * RowHeight;
+            int height = HeaderHeight + (_rowLayouts.Count == 0 ? MinimumRowHeight : _rowLayouts.Sum(layout => layout.Height));
             AutoScrollMinSize = new Size(width, height);
         }
 
         public Models.FleetSchedule? GetScheduleAt(Point point)
         {
+            if (point.X < CarColumnWidth)
+            {
+                return null;
+            }
+
             Point translated = TranslatePoint(point);
             int? scheduleId = _scheduleBounds.FirstOrDefault(pair => pair.Value.Contains(translated)).Key;
             return scheduleId is null or 0
@@ -305,15 +347,22 @@ public sealed class FleetScheduleControl : UserControl
 
         public (Car? Car, DateTime? Date) GetCellAt(Point point)
         {
+            if (point.X < CarColumnWidth)
+            {
+                return (null, null);
+            }
+
             Point translated = TranslatePoint(point);
             if (translated.X < CarColumnWidth || translated.Y < HeaderHeight)
             {
                 return (null, null);
             }
 
-            int carIndex = (translated.Y - HeaderHeight) / RowHeight;
+            RowLayout? rowLayout = _rowLayouts.FirstOrDefault(layout =>
+                translated.Y >= layout.Top
+                && translated.Y < layout.Top + layout.Height);
             int dayIndex = (translated.X - CarColumnWidth) / DayWidth;
-            if (carIndex < 0 || carIndex >= _owner._cars.Count)
+            if (rowLayout is null)
             {
                 return (null, null);
             }
@@ -324,7 +373,7 @@ public sealed class FleetScheduleControl : UserControl
                 return (null, null);
             }
 
-            return (_owner._cars[carIndex], _owner.SelectedMonth.AddDays(dayIndex));
+            return (rowLayout.Car, _owner.SelectedMonth.AddDays(dayIndex));
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -379,41 +428,21 @@ public sealed class FleetScheduleControl : UserControl
                 return;
             }
 
-            for (int row = 0; row < _owner._cars.Count; row++)
+            foreach (RowLayout rowLayout in _rowLayouts)
             {
-                int y = HeaderHeight + row * RowHeight;
-                Car car = _owner._cars[row];
-                graphics.DrawLine(gridPen, 0, y, AutoScrollMinSize.Width, y);
-                graphics.DrawString(car.CarName, FontHelper.SemiBold(9F), textBrush, new PointF(14, y + 10));
-                graphics.DrawString(car.PlateNumber, FontHelper.Regular(8.5F), mutedBrush, new PointF(14, y + 28));
+                graphics.DrawLine(gridPen, 0, rowLayout.Top, AutoScrollMinSize.Width, rowLayout.Top);
             }
 
-            foreach (Models.FleetSchedule schedule in _owner._schedules)
+            foreach (ScheduleLayout layout in _rowLayouts.SelectMany(rowLayout => rowLayout.Schedules))
             {
-                int row = _owner._cars.ToList().FindIndex(car => car.CarId == schedule.CarId);
-                if (row < 0)
-                {
-                    continue;
-                }
+                Rectangle rect = layout.Bounds;
+                _scheduleBounds[layout.Schedule.ScheduleId] = rect;
 
-                DateTime visibleStart = schedule.StartDate < _owner.SelectedMonth ? _owner.SelectedMonth : schedule.StartDate;
-                DateTime monthEnd = _owner.SelectedMonth.AddMonths(1).AddDays(-1);
-                DateTime visibleEnd = schedule.EndDate > monthEnd ? monthEnd : schedule.EndDate;
-                int startDay = visibleStart.Day - 1;
-                int durationDays = (visibleEnd - visibleStart).Days + 1;
-                Rectangle rect = new(
-                    CarColumnWidth + startDay * DayWidth + 4,
-                    HeaderHeight + row * RowHeight + 10,
-                    Math.Max(durationDays * DayWidth - 8, 20),
-                    30);
-                _scheduleBounds[schedule.ScheduleId] = rect;
-
-                using GraphicsPath path = GetRoundedRect(rect, 12);
-                using SolidBrush fillBrush = new(FleetScheduleVisualHelper.GetColor(schedule.Status, schedule.ScheduleType));
+                using GraphicsPath path = FleetScheduleVisualHelper.CreateRoundedRectanglePath(rect, 12);
+                using SolidBrush fillBrush = new(FleetScheduleVisualHelper.GetColor(layout.Schedule.Status, layout.Schedule.ScheduleType));
                 graphics.FillPath(fillBrush, path);
 
-                string displayStatus = FleetScheduleVisualHelper.GetDisplayStatus(schedule.Status, schedule.ScheduleType);
-                string text = rect.Width >= 80 ? $"{schedule.Title} ({displayStatus})" : displayStatus;
+                string displayStatus = FleetScheduleVisualHelper.GetDisplayStatus(layout.Schedule.Status, layout.Schedule.ScheduleType);
                 using StringFormat format = new()
                 {
                     Alignment = StringAlignment.Near,
@@ -421,8 +450,10 @@ public sealed class FleetScheduleControl : UserControl
                     Trimming = StringTrimming.EllipsisCharacter,
                     FormatFlags = StringFormatFlags.NoWrap
                 };
-                graphics.DrawString(text, FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(rect.X + 8, rect.Y, rect.Width - 12, rect.Height), format);
+                graphics.DrawString(displayStatus, FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(rect.X + 8, rect.Y, rect.Width - 12, rect.Height), format);
             }
+
+            DrawStickyCarColumn(graphics, gridPen, headerBrush, textBrush, mutedBrush);
         }
 
         private Point TranslatePoint(Point point)
@@ -430,16 +461,111 @@ public sealed class FleetScheduleControl : UserControl
             return new Point(point.X - AutoScrollPosition.X, point.Y - AutoScrollPosition.Y);
         }
 
-        private static GraphicsPath GetRoundedRect(Rectangle rect, int radius)
+        private void DrawStickyCarColumn(
+            Graphics graphics,
+            Pen gridPen,
+            Brush headerBrush,
+            Brush textBrush,
+            Brush mutedBrush)
         {
-            GraphicsPath path = new();
-            int diameter = radius * 2;
-            path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
-            path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
-            path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
-            path.CloseFigure();
-            return path;
+            int stickyX = -AutoScrollPosition.X;
+            graphics.FillRectangle(headerBrush, stickyX, 0, CarColumnWidth, AutoScrollMinSize.Height);
+            graphics.DrawLine(gridPen, stickyX + CarColumnWidth, 0, stickyX + CarColumnWidth, AutoScrollMinSize.Height);
+            graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(stickyX + 14, 15));
+
+            for (int row = 0; row < _owner._cars.Count; row++)
+            {
+                RowLayout rowLayout = _rowLayouts[row];
+                float nameY = rowLayout.Top + Math.Max((rowLayout.Height - 34) / 2F, 8);
+                graphics.DrawLine(gridPen, stickyX, rowLayout.Top, stickyX + CarColumnWidth, rowLayout.Top);
+                graphics.DrawString(rowLayout.Car.CarName, FontHelper.SemiBold(9F), textBrush, new PointF(stickyX + 14, nameY));
+                graphics.DrawString(rowLayout.Car.PlateNumber, FontHelper.Regular(8.5F), mutedBrush, new PointF(stickyX + 14, nameY + 18));
+            }
+        }
+
+        private void RebuildLayouts()
+        {
+            DateTime monthStart = _owner.SelectedMonth;
+            DateTime monthEnd = monthStart.AddMonths(1).AddDays(-1);
+            List<RowLayout> rows = [];
+            int currentTop = HeaderHeight;
+
+            foreach (Car car in _owner._cars)
+            {
+                List<ScheduleSpan> spans = _owner._schedules
+                    .Where(schedule => schedule.CarId == car.CarId)
+                    .Select(schedule =>
+                    {
+                        DateTime visibleStart = schedule.StartDate < monthStart ? monthStart : schedule.StartDate;
+                        DateTime visibleEnd = schedule.EndDate > monthEnd ? monthEnd : schedule.EndDate;
+                        return new ScheduleSpan(schedule, visibleStart, visibleEnd);
+                    })
+                    .Where(span => span.VisibleEnd >= span.VisibleStart)
+                    .OrderBy(span => span.StartDay)
+                    .ThenBy(span => span.EndDay)
+                    .ThenBy(span => span.Schedule.ScheduleId)
+                    .ToList();
+
+                List<int> laneEndDays = [];
+                List<ScheduleLayout> scheduleLayouts = [];
+                foreach (ScheduleSpan span in spans)
+                {
+                    int lane = FindAvailableLane(laneEndDays, span.StartDay);
+                    if (lane == laneEndDays.Count)
+                    {
+                        laneEndDays.Add(span.EndDay);
+                    }
+                    else
+                    {
+                        laneEndDays[lane] = span.EndDay;
+                    }
+
+                    Rectangle bounds = CreateScheduleBounds(span, currentTop, lane);
+                    scheduleLayouts.Add(new ScheduleLayout(span.Schedule, bounds));
+                }
+
+                int laneCount = Math.Max(laneEndDays.Count, 1);
+                int rowHeight = Math.Max(
+                    MinimumRowHeight,
+                    RowTopPadding + laneCount * PillHeight + Math.Max(laneCount - 1, 0) * LaneSpacing + RowBottomPadding);
+                rows.Add(new RowLayout(car, currentTop, rowHeight, scheduleLayouts));
+                currentTop += rowHeight;
+            }
+
+            _rowLayouts = rows;
+        }
+
+        private static int FindAvailableLane(IReadOnlyList<int> laneEndDays, int startDay)
+        {
+            for (int lane = 0; lane < laneEndDays.Count; lane++)
+            {
+                if (laneEndDays[lane] < startDay)
+                {
+                    return lane;
+                }
+            }
+
+            return laneEndDays.Count;
+        }
+
+        private static Rectangle CreateScheduleBounds(ScheduleSpan span, int rowTop, int lane)
+        {
+            int durationDays = span.EndDay - span.StartDay + 1;
+            return new Rectangle(
+                CarColumnWidth + span.StartDay * DayWidth + 4,
+                rowTop + RowTopPadding + lane * (PillHeight + LaneSpacing),
+                Math.Max(durationDays * DayWidth - 8, 20),
+                PillHeight);
+        }
+
+        private sealed record RowLayout(Car Car, int Top, int Height, IReadOnlyList<ScheduleLayout> Schedules);
+
+        private sealed record ScheduleLayout(Models.FleetSchedule Schedule, Rectangle Bounds);
+
+        private sealed record ScheduleSpan(Models.FleetSchedule Schedule, DateTime VisibleStart, DateTime VisibleEnd)
+        {
+            public int StartDay => VisibleStart.Day - 1;
+            public int EndDay => VisibleEnd.Day - 1;
         }
     }
 
@@ -457,12 +583,8 @@ public sealed class FleetScheduleControl : UserControl
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using GraphicsPath path = new();
-            path.AddArc(0, 0, Width, Height, 180, 90);
-            path.AddArc(Width - Height, 0, Height, Height, 270, 90);
-            path.AddArc(Width - Height, Height - Height, Height, Height, 0, 90);
-            path.AddArc(0, Height - Height, Height, Height, 90, 90);
-            path.CloseFigure();
+            Rectangle bounds = new(0, 0, Width - 1, Height - 1);
+            using GraphicsPath path = FleetScheduleVisualHelper.CreateRoundedRectanglePath(bounds, Height / 2);
             using SolidBrush brush = new(_fillColor);
             e.Graphics.FillPath(brush, path);
         }

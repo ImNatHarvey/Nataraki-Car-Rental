@@ -64,6 +64,7 @@ public sealed class FleetScheduleService
     {
         Normalize(schedule);
         await ValidateAsync(schedule);
+        GenerateTitle(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
@@ -93,6 +94,7 @@ public sealed class FleetScheduleService
     {
         Normalize(schedule);
         await ValidateAsync(schedule, excludedScheduleId: schedule.ScheduleId);
+        GenerateTitle(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
@@ -162,11 +164,6 @@ public sealed class FleetScheduleService
             failures.Add(new ValidationFailure(nameof(FleetSchedule.CarId), "Car is required."));
         }
 
-        if (string.IsNullOrWhiteSpace(schedule.Title))
-        {
-            failures.Add(new ValidationFailure(nameof(FleetSchedule.Title), "Title is required."));
-        }
-
         if (!FleetScheduleConstants.Type.All.Contains(schedule.ScheduleType))
         {
             failures.Add(new ValidationFailure(nameof(FleetSchedule.ScheduleType), "Schedule type is invalid."));
@@ -175,6 +172,11 @@ public sealed class FleetScheduleService
         if (!FleetScheduleConstants.Status.All.Contains(schedule.Status))
         {
             failures.Add(new ValidationFailure(nameof(FleetSchedule.Status), "Status is invalid."));
+        }
+
+        if (!IsStatusAllowedForType(schedule.ScheduleType, schedule.Status))
+        {
+            failures.Add(new ValidationFailure(nameof(FleetSchedule.Status), "Status is invalid for the selected schedule type."));
         }
 
         if (schedule.StartDate.Date > schedule.EndDate.Date)
@@ -206,7 +208,7 @@ public sealed class FleetScheduleService
             }
         }
 
-        FleetSchedule? conflict = schedule.Status == FleetScheduleConstants.Status.Cancelled
+        FleetSchedule? conflict = !FleetScheduleConstants.Status.Operational.Contains(schedule.Status)
             ? null
             : await _scheduleRepository.GetConflictingScheduleAsync(
                 schedule.CarId,
@@ -231,6 +233,26 @@ public sealed class FleetScheduleService
         schedule.StartDate = schedule.StartDate.Date;
         schedule.EndDate = schedule.EndDate.Date;
         schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) ? null : schedule.Notes.Trim();
+    }
+
+    private static void GenerateTitle(FleetSchedule schedule)
+    {
+        int days = (schedule.EndDate.Date - schedule.StartDate.Date).Days + 1;
+        string dayLabel = days == 1 ? "1 Day" : $"{days} Days";
+        schedule.Title = $"{schedule.ScheduleType} ({schedule.Status}) - {dayLabel}";
+    }
+
+    private static bool IsStatusAllowedForType(string scheduleType, string status)
+    {
+        string[] allowedStatuses = scheduleType switch
+        {
+            FleetScheduleConstants.Type.Reservation => FleetScheduleConstants.Status.ReservationOptions,
+            FleetScheduleConstants.Type.Rental => FleetScheduleConstants.Status.RentalOptions,
+            FleetScheduleConstants.Type.Maintenance => FleetScheduleConstants.Status.MaintenanceOptions,
+            _ => []
+        };
+
+        return allowedStatuses.Contains(status);
     }
 
     private static void RollbackQuietly(SqlTransaction transaction)

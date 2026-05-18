@@ -696,8 +696,15 @@ public sealed class CarGarageControl : UserControl
             return;
         }
 
-        await _carService.ArchiveCarAsync(carId);
-        await LoadCarsAsync();
+        try
+        {
+            await _carService.ArchiveCarAsync(carId);
+            await LoadCarsAsync();
+        }
+        catch (FluentValidation.ValidationException exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Archive Car");
+        }
     }
 
     private async Task RestoreCarAsync(int carId)
