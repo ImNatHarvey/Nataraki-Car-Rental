@@ -132,7 +132,11 @@ public sealed class OverviewControl : UserControl
         int row)
     {
         card.Dock = DockStyle.Fill;
-        card.Margin = new Padding(0, 0, column == 3 ? 0 : 14, row == 0 ? 14 : 0);
+        card.Margin = new Padding(
+            0,
+            row == 0 ? 0 : 7,
+            column == 3 ? 0 : 14,
+            row == 0 ? 7 : 0);
         card.SetMetric(icon, title, value, helperText, iconColor);
         grid.Controls.Add(card, column, row);
     }
