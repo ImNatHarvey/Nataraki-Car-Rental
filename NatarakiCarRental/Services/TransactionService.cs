@@ -11,6 +11,7 @@ namespace NatarakiCarRental.Services;
 
 public sealed class TransactionService
 {
+    private const int MaxTransactionCodeCreateAttempts = 3;
     private readonly TransactionRepository _transactionRepository;
     private readonly FleetScheduleRepository _scheduleRepository;
     private readonly FleetScheduleService _scheduleService;
@@ -126,7 +127,6 @@ public sealed class TransactionService
 
         try
         {
-            transaction.TransactionCode = await GenerateTransactionCodeAsync(dbTransaction);
             int affectedRows = await _scheduleRepository.UpdateAsync(rentalSchedule, dbTransaction);
 
             if (affectedRows == 0)
@@ -134,7 +134,7 @@ public sealed class TransactionService
                 throw new RecordNotFoundException($"Reservation schedule #{reservation.ScheduleId} was not found or is archived.");
             }
 
-            int transactionId = await _transactionRepository.CreateAsync(transaction, dbTransaction);
+            int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
             await _activityLogService.LogAsync(
                 "Create transaction",
                 "Transaction",
@@ -194,9 +194,7 @@ public sealed class TransactionService
                 request.ModeOfPayment,
                 request.PaymentStatus,
                 request.Notes);
-            transaction.TransactionCode = await GenerateTransactionCodeAsync(dbTransaction);
-
-            int transactionId = await _transactionRepository.CreateAsync(transaction, dbTransaction);
+            int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
             await _activityLogService.LogAsync(
                 "Create walk-in transaction",
                 "Transaction",
@@ -439,6 +437,30 @@ public sealed class TransactionService
         int year = DateTime.Today.Year;
         int sequence = await _transactionRepository.GetNextSequenceForYearAsync(year, dbTransaction);
         return $"TXN-{year}-{sequence:000000}";
+    }
+
+    private async Task<int> CreateWithUniqueCodeAsync(Transaction transaction, SqlTransaction dbTransaction)
+    {
+        for (int attempt = 1; attempt <= MaxTransactionCodeCreateAttempts; attempt++)
+        {
+            transaction.TransactionCode = await GenerateTransactionCodeAsync(dbTransaction);
+
+            try
+            {
+                return await _transactionRepository.CreateAsync(transaction, dbTransaction);
+            }
+            catch (SqlException exception) when (IsUniqueConstraintViolation(exception) && attempt < MaxTransactionCodeCreateAttempts)
+            {
+                // Retry after the database unique constraint rejects an unexpected collision.
+            }
+        }
+
+        throw Validation(nameof(Transaction.TransactionCode), "A unique transaction code could not be generated. Please try again.");
+    }
+
+    private static bool IsUniqueConstraintViolation(SqlException exception)
+    {
+        return exception.Number is 2601 or 2627;
     }
 
     private static ValidationException Validation(string propertyName, string message)

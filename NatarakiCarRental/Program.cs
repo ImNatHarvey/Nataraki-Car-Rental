@@ -40,6 +40,31 @@ internal static class Program
             return;
         }
 
+#if DEBUG
+        if (TransactionWorkflowDebugRunner.ShouldRun)
+        {
+            try
+            {
+                TransactionWorkflowDebugRunner.RunAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    exception.ToString(),
+                    "Transaction Debug Harness Failed",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+
+                return;
+            }
+
+            if (TransactionWorkflowDebugRunner.ShouldExitAfterRun)
+            {
+                return;
+            }
+        }
+#endif
+
         Application.Run(new LoginForm());
     }
 
