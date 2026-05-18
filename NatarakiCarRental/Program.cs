@@ -32,6 +32,7 @@ internal static class Program
 
         try
         {
+            DatabaseInitializer.ResetApplicationDataIfRequested();
             DatabaseInitializer.Initialize();
         }
         catch (Exception exception)

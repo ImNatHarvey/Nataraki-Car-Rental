@@ -33,6 +33,8 @@ public sealed class TransactionRepository
                 DailyRate,
                 TotalDays,
                 TotalAmount,
+                AmountPaid,
+                BalanceAmount,
                 ModeOfPayment,
                 PaymentStatus,
                 TransactionStatus,
@@ -51,6 +53,8 @@ public sealed class TransactionRepository
                 @DailyRate,
                 @TotalDays,
                 @TotalAmount,
+                @AmountPaid,
+                @BalanceAmount,
                 @ModeOfPayment,
                 @PaymentStatus,
                 @TransactionStatus,
@@ -91,6 +95,8 @@ public sealed class TransactionRepository
                 transactions.DailyRate,
                 transactions.TotalDays,
                 transactions.TotalAmount,
+                transactions.AmountPaid,
+                transactions.BalanceAmount,
                 transactions.ModeOfPayment,
                 transactions.PaymentStatus,
                 transactions.TransactionStatus,
@@ -138,6 +144,8 @@ public sealed class TransactionRepository
                 transactions.DailyRate,
                 transactions.TotalDays,
                 transactions.TotalAmount,
+                transactions.AmountPaid,
+                transactions.BalanceAmount,
                 transactions.ModeOfPayment,
                 transactions.PaymentStatus,
                 transactions.TransactionStatus,
@@ -177,6 +185,8 @@ public sealed class TransactionRepository
                 transactions.StartDate,
                 transactions.EndDate,
                 transactions.TotalAmount,
+                transactions.AmountPaid,
+                transactions.BalanceAmount,
                 transactions.PaymentStatus,
                 transactions.TransactionStatus,
                 transactions.IsArchived
@@ -235,6 +245,37 @@ public sealed class TransactionRepository
         return metrics ?? new TransactionMetrics();
     }
 
+    public async Task<IReadOnlyList<TransactionListItem>> GetRecentAsync(int take)
+    {
+        const string sql = """
+            SELECT TOP (@Take)
+                transactions.TransactionId,
+                transactions.TransactionCode,
+                transactions.FleetScheduleId,
+                transactions.CustomerId,
+                transactions.CarId,
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                cars.CarName,
+                cars.PlateNumber,
+                transactions.StartDate,
+                transactions.EndDate,
+                transactions.TotalAmount,
+                transactions.AmountPaid,
+                transactions.BalanceAmount,
+                transactions.PaymentStatus,
+                transactions.TransactionStatus,
+                transactions.IsArchived
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE transactions.IsArchived = 0
+            ORDER BY transactions.CreatedAt DESC, transactions.TransactionId DESC;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        IEnumerable<TransactionListItem> rows = await connection.QueryAsync<TransactionListItem>(sql, new { Take = take });
+        return rows.ToList();
+    }
+
     public async Task<int> UpdateStatusAsync(int transactionId, string status, IDbTransaction? dbTransaction = null)
     {
         const string sql = """
@@ -250,6 +291,43 @@ public sealed class TransactionRepository
         try
         {
             return await connection.ExecuteAsync(sql, new { TransactionId = transactionId, Status = status }, dbTransaction);
+        }
+        finally
+        {
+            if (dbTransaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
+    public async Task<int> UpdatePaymentAsync(
+        int transactionId,
+        decimal amountPaid,
+        decimal balanceAmount,
+        string modeOfPayment,
+        string paymentStatus,
+        string? notes,
+        IDbTransaction? dbTransaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.Transactions
+            SET AmountPaid = @AmountPaid,
+                BalanceAmount = @BalanceAmount,
+                ModeOfPayment = @ModeOfPayment,
+                PaymentStatus = @PaymentStatus,
+                Notes = @Notes,
+                UpdatedAt = sysdatetime()
+            WHERE TransactionId = @TransactionId
+              AND IsArchived = 0;
+            """;
+        IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();
+        try
+        {
+            return await connection.ExecuteAsync(
+                sql,
+                new { TransactionId = transactionId, AmountPaid = amountPaid, BalanceAmount = balanceAmount, ModeOfPayment = modeOfPayment, PaymentStatus = paymentStatus, Notes = notes },
+                dbTransaction);
         }
         finally
         {

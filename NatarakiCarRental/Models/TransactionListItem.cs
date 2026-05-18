@@ -13,6 +13,8 @@ public sealed class TransactionListItem
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal BalanceAmount { get; set; }
     public string PaymentStatus { get; set; } = string.Empty;
     public string TransactionStatus { get; set; } = string.Empty;
     public bool IsArchived { get; set; }

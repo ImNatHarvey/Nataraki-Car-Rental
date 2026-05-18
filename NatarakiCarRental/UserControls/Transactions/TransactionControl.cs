@@ -151,7 +151,7 @@ public sealed class TransactionControl : UserControl
         searchContainer.Controls.Add(_searchTextBox);
         searchContainer.Click += (_, _) => _searchTextBox.Focus();
 
-        ConfigureFilter(_statusFilterComboBox, new Point(356, 8), ["All Status", .. TransactionConstants.Status.All]);
+        ConfigureFilter(_statusFilterComboBox, new Point(356, 8), ["All Status", TransactionConstants.Status.Active, TransactionConstants.Status.Completed, TransactionConstants.Status.Cancelled]);
         ConfigureFilter(_paymentFilterComboBox, new Point(536, 8), ["All Payment", .. TransactionConstants.PaymentStatus.All]);
         _statusFilterComboBox.SelectedIndexChanged += async (_, _) => await LoadTransactionsAsync();
         _paymentFilterComboBox.SelectedIndexChanged += async (_, _) => await LoadTransactionsAsync();
@@ -231,9 +231,11 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.Columns.Add("CarPlate", "Car / Plate");
         _transactionsGrid.Columns.Add("Dates", "Dates");
         _transactionsGrid.Columns.Add("TotalAmount", "Total Amount");
+        _transactionsGrid.Columns.Add("Balance", "Balance");
         _transactionsGrid.Columns.Add("Payment", "Payment");
         _transactionsGrid.Columns.Add("Status", "Status");
         AddActionColumn("ViewAction", "Actions", "View");
+        AddActionColumn("EditAction", "", "Edit");
         AddActionColumn("CompleteAction", "", "Complete");
         AddActionColumn("CancelAction", "", "Cancel");
         AddActionColumn("ArchiveAction", "", "Archive");
@@ -243,9 +245,11 @@ public sealed class TransactionControl : UserControl
         SetFillWeight("CarPlate", 100);
         SetFillWeight("Dates", 95);
         SetFillWeight("TotalAmount", 80);
+        SetFillWeight("Balance", 76);
         SetFillWeight("Payment", 74);
         SetFillWeight("Status", 74);
         SetFillWeight("ViewAction", 58);
+        SetFillWeight("EditAction", 58);
         SetFillWeight("CompleteAction", 72);
         SetFillWeight("CancelAction", 62);
         SetFillWeight("ArchiveAction", 62);
@@ -258,7 +262,7 @@ public sealed class TransactionControl : UserControl
             Name = name,
             HeaderText = headerText,
             Text = buttonText,
-            UseColumnTextForButtonValue = true,
+            UseColumnTextForButtonValue = false,
             FlatStyle = FlatStyle.Flat
         };
         column.DefaultCellStyle.BackColor = ThemeHelper.Surface;
@@ -318,8 +322,14 @@ public sealed class TransactionControl : UserControl
                 $"{transaction.CarName} ({transaction.PlateNumber})",
                 $"{transaction.StartDate:MMM d} - {transaction.EndDate:MMM d}",
                 transaction.TotalAmount.ToString("C", PhilippineCulture),
+                transaction.BalanceAmount.ToString("C", PhilippineCulture),
                 transaction.PaymentStatus,
-                transaction.TransactionStatus);
+                transaction.TransactionStatus,
+                "View",
+                transaction.TransactionStatus == TransactionConstants.Status.Active ? "Edit" : string.Empty,
+                transaction.TransactionStatus == TransactionConstants.Status.Active ? "Complete" : string.Empty,
+                transaction.TransactionStatus == TransactionConstants.Status.Active ? "Cancel" : string.Empty,
+                transaction.TransactionStatus is TransactionConstants.Status.Completed or TransactionConstants.Status.Cancelled ? "Archive" : string.Empty);
         }
         _emptyStateLabel.Visible = transactions.Count == 0;
     }
@@ -388,6 +398,7 @@ public sealed class TransactionControl : UserControl
                 _ => ThemeHelper.Warning
             },
             "ViewAction" => ThemeHelper.Primary,
+            "EditAction" => ThemeHelper.Primary,
             "CompleteAction" => ThemeHelper.Success,
             "CancelAction" => ThemeHelper.Danger,
             "ArchiveAction" => ThemeHelper.GrayIcon,
@@ -431,11 +442,18 @@ public sealed class TransactionControl : UserControl
         {
             return;
         }
+        if (string.IsNullOrWhiteSpace(_transactionsGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString()))
+        {
+            return;
+        }
         int transactionId = Convert.ToInt32(_transactionsGrid.Rows[e.RowIndex].Cells["TransactionId"].Value);
         switch (columnName)
         {
             case "ViewAction":
                 await ViewTransactionAsync(transactionId);
+                break;
+            case "EditAction":
+                await EditTransactionAsync(transactionId);
                 break;
             case "CompleteAction":
                 await CompleteTransactionAsync(transactionId);
@@ -480,6 +498,20 @@ public sealed class TransactionControl : UserControl
         catch (ValidationException exception)
         {
             MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Complete Transaction");
+        }
+    }
+
+    private async Task EditTransactionAsync(int transactionId)
+    {
+        Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
+        if (transaction is null || transaction.TransactionStatus != TransactionConstants.Status.Active)
+        {
+            return;
+        }
+        using TransactionDetailsForm form = new(transaction, _currentUserId);
+        if (form.ShowDialog(this) == DialogResult.OK)
+        {
+            await LoadTransactionsAsync();
         }
     }
 

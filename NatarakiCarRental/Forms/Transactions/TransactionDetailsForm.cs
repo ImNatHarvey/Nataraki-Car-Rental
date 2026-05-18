@@ -10,6 +10,7 @@ namespace NatarakiCarRental.Forms.Transactions;
 public enum TransactionFormMode
 {
     Add,
+    Edit,
     View
 }
 
@@ -33,8 +34,12 @@ public sealed class TransactionDetailsForm : Form
     private readonly DateTimePicker _walkInEndDatePicker = CreateDatePicker();
     private readonly NumericUpDown _walkInDailyRateInput = CreateMoneyInput();
     private readonly Label _walkInTotalLabel = CreateSummaryLabel();
+    private readonly NumericUpDown _amountPaidInput = CreateMoneyInput();
+    private readonly Label _balanceLabel = CreateSummaryLabel();
+    private readonly CheckBox _useWalkInCustomerCheckBox = new() { Text = "Use Walk-In Customer", AutoSize = true };
+    private readonly TextBox _walkInFirstNameTextBox = ControlFactory.CreateTextBox();
+    private readonly TextBox _walkInLastNameTextBox = ControlFactory.CreateTextBox();
     private readonly ComboBox _modeOfPaymentComboBox = CreateComboBox();
-    private readonly ComboBox _paymentStatusComboBox = CreateComboBox();
     private readonly TextBox _notesTextBox = new()
     {
         Width = 610,
@@ -68,9 +73,25 @@ public sealed class TransactionDetailsForm : Form
         LoadViewTransaction(transaction);
     }
 
+    public TransactionDetailsForm(Transaction transaction, int currentUserId)
+    {
+        _mode = TransactionFormMode.Edit;
+        _transaction = transaction;
+        _currentUserId = currentUserId;
+        _transactionService = new TransactionService(currentUserId);
+        _scheduleService = new FleetScheduleService(currentUserId);
+        InitializeForm();
+        LoadEditTransaction(transaction);
+    }
+
     private void InitializeForm()
     {
-        Text = _mode == TransactionFormMode.View ? "View Transaction" : "Add Transaction";
+        Text = _mode switch
+        {
+            TransactionFormMode.View => "View Transaction",
+            TransactionFormMode.Edit => "Edit Transaction",
+            _ => "Add Transaction"
+        };
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -107,6 +128,12 @@ public sealed class TransactionDetailsForm : Form
             return;
         }
 
+        if (_mode == TransactionFormMode.Edit)
+        {
+            CreateEditLayout();
+            return;
+        }
+
         CreateAddLayout();
     }
 
@@ -120,13 +147,10 @@ public sealed class TransactionDetailsForm : Form
 
         _modeOfPaymentComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All.Cast<object>().ToArray());
         _modeOfPaymentComboBox.SelectedItem = TransactionConstants.ModeOfPayment.Cash;
-        _paymentStatusComboBox.Items.AddRange(TransactionConstants.PaymentStatus.All.Cast<object>().ToArray());
-        _paymentStatusComboBox.SelectedItem = TransactionConstants.PaymentStatus.Unpaid;
-
         TableLayoutPanel footerLayout = new()
         {
             Location = new Point(32, 464),
-            Size = new Size(696, 112),
+            Size = new Size(696, 120),
             ColumnCount = 2,
             RowCount = 2
         };
@@ -135,16 +159,16 @@ public sealed class TransactionDetailsForm : Form
         footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
         footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
         footerLayout.Controls.Add(CreateInputPanel("Mode of Payment *", _modeOfPaymentComboBox), 0, 0);
-        footerLayout.Controls.Add(CreateInputPanel("Payment Status *", _paymentStatusComboBox), 1, 0);
+        footerLayout.Controls.Add(CreateInputPanel("Amount Paid *", _amountPaidInput), 1, 0);
         footerLayout.Controls.Add(CreateInputPanel("Notes", _notesTextBox), 0, 1);
         footerLayout.SetColumnSpan(footerLayout.GetControlFromPosition(0, 1)!, 2);
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(484, 590);
+        cancelButton.Location = new Point(474, 594);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton("Create Transaction", 134, 38);
-        saveButton.Location = new Point(594, 590);
+        saveButton.Location = new Point(594, 594);
         saveButton.Click += SaveButton_Click;
 
         Controls.Add(_flowTabs);
@@ -190,13 +214,58 @@ public sealed class TransactionDetailsForm : Form
         layout.Controls.Add(CreateInputPanel("End Date *", _walkInEndDatePicker), 1, 1);
         layout.Controls.Add(CreateInputPanel("Daily Rate *", _walkInDailyRateInput), 0, 2);
         layout.Controls.Add(CreateInputPanel("Calculated Total", _walkInTotalLabel), 1, 2);
+        Panel walkInNamePanel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        _useWalkInCustomerCheckBox.Location = new Point(0, 0);
+        _walkInFirstNameTextBox.Location = new Point(0, 24);
+        _walkInFirstNameTextBox.PlaceholderText = "First name";
+        _walkInLastNameTextBox.Location = new Point(290, 24);
+        _walkInLastNameTextBox.PlaceholderText = "Last name";
+        walkInNamePanel.Controls.Add(_useWalkInCustomerCheckBox);
+        walkInNamePanel.Controls.Add(_walkInFirstNameTextBox);
+        walkInNamePanel.Controls.Add(_walkInLastNameTextBox);
+        layout.Controls.Add(walkInNamePanel, 0, 3);
+        layout.SetColumnSpan(walkInNamePanel, 2);
         tab.Controls.Add(layout);
 
         _walkInCarComboBox.SelectedIndexChanged += (_, _) => ApplySelectedCarRate();
         _walkInStartDatePicker.ValueChanged += (_, _) => UpdateWalkInTotal();
         _walkInEndDatePicker.ValueChanged += (_, _) => UpdateWalkInTotal();
         _walkInDailyRateInput.ValueChanged += (_, _) => UpdateWalkInTotal();
+        _useWalkInCustomerCheckBox.CheckedChanged += (_, _) => UpdateWalkInInputs();
+        UpdateWalkInInputs();
         return tab;
+    }
+
+    private void CreateEditLayout()
+    {
+        _modeOfPaymentComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All.Cast<object>().ToArray());
+        TableLayoutPanel layout = new()
+        {
+            Location = new Point(32, 104),
+            Size = new Size(696, 250),
+            ColumnCount = 2,
+            RowCount = 4
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        for (int row = 0; row < 4; row++) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
+        layout.Controls.Add(CreateInputPanel("Mode of Payment *", _modeOfPaymentComboBox), 0, 0);
+        layout.Controls.Add(CreateInputPanel("Amount Paid *", _amountPaidInput), 1, 0);
+        layout.Controls.Add(CreateInputPanel("Remaining Balance", _balanceLabel), 0, 1);
+        layout.Controls.Add(CreateInputPanel("Notes", _notesTextBox), 0, 2);
+        layout.SetColumnSpan(layout.GetControlFromPosition(0, 2)!, 2);
+        Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
+        cancelButton.Location = new Point(474, 382);
+        cancelButton.DialogResult = DialogResult.Cancel;
+        Button saveButton = ControlFactory.CreatePrimaryButton("Save Changes", 134, 38);
+        saveButton.Location = new Point(594, 382);
+        saveButton.Click += SaveEditButton_Click;
+        Controls.Add(layout);
+        Controls.Add(cancelButton);
+        Controls.Add(saveButton);
+        AcceptButton = saveButton;
+        CancelButton = cancelButton;
+        _amountPaidInput.ValueChanged += (_, _) => UpdateBalanceLabel();
     }
 
     private void CreateViewLayout()
@@ -251,12 +320,11 @@ public sealed class TransactionDetailsForm : Form
         _reservationComboBox.SelectedIndex = 0;
 
         _walkInCustomerComboBox.Items.Clear();
-        _walkInCustomerComboBox.Items.Add(new LookupOption(null, "Use Walk-In Customer"));
         _walkInCustomerComboBox.Items.AddRange(_customers
             .Select(customer => new LookupOption(customer.CustomerId, $"{customer.FirstName} {customer.LastName}".Trim()))
             .Cast<object>()
             .ToArray());
-        _walkInCustomerComboBox.SelectedIndex = 0;
+        if (_walkInCustomerComboBox.Items.Count > 0) _walkInCustomerComboBox.SelectedIndex = 0;
 
         _walkInCarComboBox.Items.Clear();
         _walkInCarComboBox.Items.Add(new LookupOption(null, "Select a car"));
@@ -287,6 +355,8 @@ public sealed class TransactionDetailsForm : Form
             $"Daily Rate: {rate:C}{Environment.NewLine}" +
             $"Total Days: {totalDays}{Environment.NewLine}" +
             $"Total Amount: {total:C}";
+        _amountPaidInput.Maximum = total;
+        UpdateBalanceLabel();
     }
 
     private void ApplySelectedCarRate()
@@ -304,6 +374,8 @@ public sealed class TransactionDetailsForm : Form
         int days = Math.Max((_walkInEndDatePicker.Value.Date - _walkInStartDatePicker.Value.Date).Days + 1, 0);
         decimal total = days * _walkInDailyRateInput.Value;
         _walkInTotalLabel.Text = days == 0 ? "-" : $"{days} day(s) / {total:C}";
+        _amountPaidInput.Maximum = Math.Max(total, 0);
+        UpdateBalanceLabel();
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)
@@ -331,7 +403,7 @@ public sealed class TransactionDetailsForm : Form
                     {
                         FleetScheduleId = reservation.ScheduleId,
                         ModeOfPayment = GetSelectedText(_modeOfPaymentComboBox),
-                        PaymentStatus = GetSelectedText(_paymentStatusComboBox),
+                        AmountPaid = _amountPaidInput.Value,
                         Notes = _notesTextBox.Text
                     });
             }
@@ -340,13 +412,15 @@ public sealed class TransactionDetailsForm : Form
                 await _transactionService.CreateWalkInTransactionAsync(
                     new CreateWalkInTransactionRequest
                     {
-                        CustomerId = GetSelectedLookupId(_walkInCustomerComboBox),
+                        CustomerId = _useWalkInCustomerCheckBox.Checked ? null : GetSelectedLookupId(_walkInCustomerComboBox),
                         CarId = GetSelectedLookupId(_walkInCarComboBox) ?? 0,
                         StartDate = _walkInStartDatePicker.Value.Date,
                         EndDate = _walkInEndDatePicker.Value.Date,
                         DailyRate = _walkInDailyRateInput.Value,
+                        AmountPaid = _amountPaidInput.Value,
                         ModeOfPayment = GetSelectedText(_modeOfPaymentComboBox),
-                        PaymentStatus = GetSelectedText(_paymentStatusComboBox),
+                        WalkInFirstName = _useWalkInCustomerCheckBox.Checked ? _walkInFirstNameTextBox.Text : null,
+                        WalkInLastName = _useWalkInCustomerCheckBox.Checked ? _walkInLastNameTextBox.Text : null,
                         Notes = _notesTextBox.Text
                     });
             }
@@ -376,8 +450,8 @@ public sealed class TransactionDetailsForm : Form
         AddViewRow(2, "Date Range", $"{transaction.StartDate:MMM d, yyyy} - {transaction.EndDate:MMM d, yyyy}", "Created", transaction.CreatedAt.ToString("MMM d, yyyy h:mm tt"));
         AddViewRow(3, "Daily Rate", transaction.DailyRate.ToString("C"), "Total Days", transaction.TotalDays.ToString());
         AddViewRow(4, "Total Amount", transaction.TotalAmount.ToString("C"), "Mode of Payment", transaction.ModeOfPayment);
-        AddViewRow(5, "Payment Status", transaction.PaymentStatus, "Transaction Status", transaction.TransactionStatus);
-        AddViewRow(6, "Notes", string.IsNullOrWhiteSpace(transaction.Notes) ? "-" : transaction.Notes, string.Empty, string.Empty);
+        AddViewRow(5, "Amount Paid", transaction.AmountPaid.ToString("C"), "Balance", transaction.BalanceAmount.ToString("C"));
+        AddViewRow(6, "Payment Status", transaction.PaymentStatus, "Transaction Status", transaction.TransactionStatus);
     }
 
     private void AddViewRow(int row, string leftLabel, string leftValue, string rightLabel, string rightValue)
@@ -410,7 +484,7 @@ public sealed class TransactionDetailsForm : Form
                 nameof(Transaction.EndDate) => _walkInEndDatePicker,
                 nameof(Transaction.DailyRate) => _walkInDailyRateInput,
                 nameof(Transaction.ModeOfPayment) => _modeOfPaymentComboBox,
-                nameof(Transaction.PaymentStatus) => _paymentStatusComboBox,
+                nameof(Transaction.AmountPaid) => _amountPaidInput,
                 _ => null
             };
             if (control is not null)
@@ -439,6 +513,66 @@ public sealed class TransactionDetailsForm : Form
     {
         int? carId = GetSelectedLookupId(_walkInCarComboBox);
         return carId.HasValue ? _cars.FirstOrDefault(car => car.CarId == carId.Value) : null;
+    }
+
+    private void LoadEditTransaction(Transaction transaction)
+    {
+        _modeOfPaymentComboBox.SelectedItem = transaction.ModeOfPayment;
+        _amountPaidInput.Maximum = transaction.TotalAmount;
+        _amountPaidInput.Value = transaction.AmountPaid;
+        _notesTextBox.Text = transaction.Notes ?? string.Empty;
+        UpdateBalanceLabel();
+    }
+
+    private async void SaveEditButton_Click(object? sender, EventArgs e)
+    {
+        if (_transaction is null || sender is not Button saveButton) return;
+        try
+        {
+            saveButton.Enabled = false;
+            ClearValidationState();
+            await _transactionService.UpdatePaymentAsync(new UpdateTransactionPaymentRequest
+            {
+                TransactionId = _transaction.TransactionId,
+                AmountPaid = _amountPaidInput.Value,
+                ModeOfPayment = GetSelectedText(_modeOfPaymentComboBox),
+                Notes = _notesTextBox.Text
+            }, _currentUserId);
+            MessageBoxHelper.ShowSuccess("Transaction updated successfully.");
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+        catch (ValidationException exception)
+        {
+            ShowValidationErrors(exception.Errors.ToList(), exception.Message);
+        }
+        finally
+        {
+            saveButton.Enabled = true;
+        }
+    }
+
+    private void UpdateWalkInInputs()
+    {
+        _walkInCustomerComboBox.Enabled = !_useWalkInCustomerCheckBox.Checked;
+        _walkInFirstNameTextBox.Enabled = _useWalkInCustomerCheckBox.Checked;
+        _walkInLastNameTextBox.Enabled = _useWalkInCustomerCheckBox.Checked;
+    }
+
+    private void UpdateBalanceLabel()
+    {
+        decimal total = _flowTabs.SelectedIndex == 0
+            ? GetSelectedReservationTotal()
+            : Math.Max((_walkInEndDatePicker.Value.Date - _walkInStartDatePicker.Value.Date).Days + 1, 0) * _walkInDailyRateInput.Value;
+        if (_transaction is not null) total = _transaction.TotalAmount;
+        _balanceLabel.Text = Math.Max(total - _amountPaidInput.Value, 0).ToString("C");
+    }
+
+    private decimal GetSelectedReservationTotal()
+    {
+        FleetScheduleModel? schedule = GetSelectedReservation();
+        Car? car = schedule is null ? null : _cars.FirstOrDefault(item => item.CarId == schedule.CarId);
+        return schedule is null || car is null ? 0 : ((schedule.EndDate.Date - schedule.StartDate.Date).Days + 1) * car.RatePerDay;
     }
 
     private static Panel CreateInputPanel(string labelText, Control inputControl, Point? location = null)

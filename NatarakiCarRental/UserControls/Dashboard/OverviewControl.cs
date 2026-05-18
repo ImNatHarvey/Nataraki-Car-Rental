@@ -24,9 +24,10 @@ public sealed class OverviewControl : UserControl
     private readonly MetricCardControl _activeMaintenanceCard = new();
     private readonly DataGridView _recentCustomersGrid = CreateOverviewGrid();
     private readonly DataGridView _recentSchedulesGrid = CreateOverviewGrid();
+    private readonly DataGridView _recentTransactionsGrid = CreateOverviewGrid();
     private readonly Label _recentCustomersEmptyLabel = CreateEmptyLabel("No recent customers yet.");
     private readonly Label _recentSchedulesEmptyLabel = CreateEmptyLabel("No upcoming schedules yet.");
-    private readonly Label _transactionSummaryLabel = new();
+    private readonly Label _recentTransactionsEmptyLabel = CreateEmptyLabel("No recent transactions yet.");
 
     public OverviewControl()
     {
@@ -187,28 +188,20 @@ public sealed class OverviewControl : UserControl
 
     private Panel CreateTransactionSummaryPanel()
     {
-        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 86));
+        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 220));
         panel.Dock = DockStyle.Top;
         panel.Margin = new Padding(0, 18, 0, 0);
-        panel.Padding = new Padding(20);
-
-        Label titleLabel = new()
+        panel.Padding = new Padding(18);
+        panel.Controls.Add(_recentTransactionsGrid);
+        panel.Controls.Add(_recentTransactionsEmptyLabel);
+        panel.Controls.Add(new Label
         {
-            Text = "Transaction Summary",
+            Text = "Recent Transactions",
             Dock = DockStyle.Top,
-            Height = 24,
+            Height = 30,
             Font = FontHelper.Title(12F),
             ForeColor = ThemeHelper.TextPrimary
-        };
-
-        _transactionSummaryLabel.Dock = DockStyle.Fill;
-        _transactionSummaryLabel.Text = "Loading transaction metrics...";
-        _transactionSummaryLabel.Font = FontHelper.Regular(10F);
-        _transactionSummaryLabel.ForeColor = ThemeHelper.TextSecondary;
-        _transactionSummaryLabel.TextAlign = ContentAlignment.MiddleLeft;
-
-        panel.Controls.Add(_transactionSummaryLabel);
-        panel.Controls.Add(titleLabel);
+        });
         return panel;
     }
 
@@ -268,28 +261,19 @@ public sealed class OverviewControl : UserControl
             CarCounts carCounts = await _carService.GetCarCountsAsync();
             CustomerCounts customerCounts = await _customerService.GetCustomerCountsAsync();
             FleetScheduleOverviewCounts scheduleCounts = await _scheduleService.GetOverviewCountsAsync(DateTime.Today);
-            TransactionMetrics transactionMetrics = await _transactionService.GetMetricsAsync(DateTime.Today);
             IReadOnlyList<Customer> recentCustomers = await _customerService.GetRecentCustomersAsync(RecentItemLimit);
             IReadOnlyList<FleetScheduleModel> recentSchedules = await _scheduleService.GetRecentUpcomingSchedulesAsync(DateTime.Today, RecentItemLimit);
+            IReadOnlyList<TransactionListItem> recentTransactions = await _transactionService.GetRecentTransactionsAsync(RecentItemLimit);
 
             UpdateMetricCards(carCounts, customerCounts, scheduleCounts);
-            UpdateTransactionSummary(transactionMetrics);
             PopulateRecentCustomers(recentCustomers);
             PopulateRecentSchedules(recentSchedules);
+            PopulateRecentTransactions(recentTransactions);
         }
         catch (Exception exception)
         {
             MessageBoxHelper.ShowWarning($"Unable to load overview data.\n\n{exception.Message}", "Overview");
         }
-    }
-
-    private void UpdateTransactionSummary(TransactionMetrics metrics)
-    {
-        _transactionSummaryLabel.Text =
-            $"Total Transactions: {metrics.TotalTransactions}    " +
-            $"Active Rentals: {metrics.ActiveTransactions}    " +
-            $"Unpaid: {metrics.UnpaidTransactions}    " +
-            $"Completed This Month: {metrics.CompletedTransactions}";
     }
 
     private void UpdateMetricCards(CarCounts carCounts, CustomerCounts customerCounts, FleetScheduleOverviewCounts scheduleCounts)
@@ -340,5 +324,28 @@ public sealed class OverviewControl : UserControl
         }
 
         _recentSchedulesEmptyLabel.Visible = schedules.Count == 0;
+    }
+
+    private void PopulateRecentTransactions(IReadOnlyList<TransactionListItem> transactions)
+    {
+        _recentTransactionsGrid.Columns.Clear();
+        _recentTransactionsGrid.Rows.Clear();
+        _recentTransactionsGrid.Columns.Add("Code", "Transaction Code");
+        _recentTransactionsGrid.Columns.Add("Customer", "Customer");
+        _recentTransactionsGrid.Columns.Add("Car", "Car / Plate");
+        _recentTransactionsGrid.Columns.Add("Amount", "Amount");
+        _recentTransactionsGrid.Columns.Add("Status", "Status");
+
+        foreach (TransactionListItem transaction in transactions)
+        {
+            _recentTransactionsGrid.Rows.Add(
+                transaction.TransactionCode,
+                transaction.CustomerName,
+                $"{transaction.CarName} ({transaction.PlateNumber})",
+                transaction.TotalAmount.ToString("C"),
+                transaction.TransactionStatus);
+        }
+
+        _recentTransactionsEmptyLabel.Visible = transactions.Count == 0;
     }
 }

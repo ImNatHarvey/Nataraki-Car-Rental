@@ -18,6 +18,25 @@ public static class DatabaseInitializer
         SeedDefaultDemoOwner();
     }
 
+    public static void ResetApplicationDataIfRequested()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("NATARAKI_RESET_DATABASE"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        CreateDatabaseIfMissing();
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL DELETE FROM dbo.Transactions;
+            IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL DELETE FROM dbo.FleetSchedules;
+            IF OBJECT_ID(N'dbo.ActivityLogs', N'U') IS NOT NULL DELETE FROM dbo.ActivityLogs;
+            IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL DELETE FROM dbo.Cars;
+            IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL DELETE FROM dbo.Customers;
+            IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL DELETE FROM dbo.Users;
+            IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL DELETE FROM dbo.Roles;
+            """);
+    }
+
     private static void CreateDatabaseIfMissing()
     {
         const string sql = """
@@ -396,6 +415,8 @@ public static class DatabaseInitializer
                     DailyRate decimal(18,2) NOT NULL,
                     TotalDays int NOT NULL,
                     TotalAmount decimal(18,2) NOT NULL,
+                    AmountPaid decimal(18,2) NOT NULL DEFAULT 0,
+                    BalanceAmount decimal(18,2) NOT NULL DEFAULT 0,
                     ModeOfPayment nvarchar(30) NOT NULL,
                     PaymentStatus nvarchar(30) NOT NULL,
                     TransactionStatus nvarchar(30) NOT NULL,
@@ -414,10 +435,49 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Transactions_DailyRate_Positive CHECK (DailyRate > 0),
                     CONSTRAINT CK_Transactions_TotalDays_Positive CHECK (TotalDays > 0),
                     CONSTRAINT CK_Transactions_TotalAmount_NonNegative CHECK (TotalAmount >= 0),
+                    CONSTRAINT CK_Transactions_AmountPaid_Valid CHECK (AmountPaid >= 0 AND AmountPaid <= TotalAmount),
+                    CONSTRAINT CK_Transactions_BalanceAmount_Valid CHECK (BalanceAmount >= 0 AND BalanceAmount = TotalAmount - AmountPaid),
                     CONSTRAINT CK_Transactions_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')),
                     CONSTRAINT CK_Transactions_PaymentStatus_Valid CHECK (PaymentStatus IN (N'Unpaid', N'Partial', N'Paid')),
                     CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Active', N'Completed', N'Cancelled'))
                 );
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Transactions', N'AmountPaid') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD AmountPaid decimal(18,2) NOT NULL CONSTRAINT DF_Transactions_AmountPaid DEFAULT 0;
+                END;
+
+                IF COL_LENGTH(N'dbo.Transactions', N'BalanceAmount') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD BalanceAmount decimal(18,2) NOT NULL CONSTRAINT DF_Transactions_BalanceAmount DEFAULT 0;
+                END;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Transactions', N'AmountPaid') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Transactions', N'BalanceAmount') IS NOT NULL
+            BEGIN
+                UPDATE dbo.Transactions
+                SET AmountPaid = CASE
+                        WHEN PaymentStatus = N'Paid' THEN TotalAmount
+                        ELSE ISNULL(AmountPaid, 0)
+                    END,
+                    BalanceAmount = TotalAmount - CASE
+                        WHEN PaymentStatus = N'Paid' THEN TotalAmount
+                        ELSE ISNULL(AmountPaid, 0)
+                    END,
+                    PaymentStatus = CASE
+                        WHEN CASE WHEN PaymentStatus = N'Paid' THEN TotalAmount ELSE ISNULL(AmountPaid, 0) END <= 0 THEN N'Unpaid'
+                        WHEN CASE WHEN PaymentStatus = N'Paid' THEN TotalAmount ELSE ISNULL(AmountPaid, 0) END < TotalAmount THEN N'Partial'
+                        ELSE N'Paid'
+                    END;
             END;
             """);
 
@@ -462,6 +522,22 @@ public static class DatabaseInitializer
                 BEGIN
                     ALTER TABLE dbo.Transactions WITH CHECK
                     ADD CONSTRAINT CK_Transactions_TotalAmount_NonNegative CHECK (TotalAmount >= 0);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_AmountPaid_Valid', N'C') IS NULL
+                   AND COL_LENGTH(N'dbo.Transactions', N'AmountPaid') IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.Transactions WHERE AmountPaid < 0 OR AmountPaid > TotalAmount)
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_AmountPaid_Valid CHECK (AmountPaid >= 0 AND AmountPaid <= TotalAmount);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_Transactions_BalanceAmount_Valid', N'C') IS NULL
+                   AND COL_LENGTH(N'dbo.Transactions', N'BalanceAmount') IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.Transactions WHERE BalanceAmount < 0 OR BalanceAmount <> TotalAmount - AmountPaid)
+                BEGIN
+                    ALTER TABLE dbo.Transactions WITH CHECK
+                    ADD CONSTRAINT CK_Transactions_BalanceAmount_Valid CHECK (BalanceAmount >= 0 AND BalanceAmount = TotalAmount - AmountPaid);
                 END;
 
                 IF OBJECT_ID(N'dbo.CK_Transactions_ModeOfPayment_Valid', N'C') IS NULL

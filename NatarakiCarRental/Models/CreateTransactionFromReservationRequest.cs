@@ -6,7 +6,7 @@ public sealed class CreateTransactionFromReservationRequest
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public decimal? DailyRate { get; set; }
+    public decimal AmountPaid { get; set; }
     public string ModeOfPayment { get; set; } = string.Empty;
-    public string PaymentStatus { get; set; } = string.Empty;
     public string? Notes { get; set; }
 }

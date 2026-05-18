@@ -15,6 +15,8 @@ public sealed class Transaction
     public decimal DailyRate { get; set; }
     public int TotalDays { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal BalanceAmount { get; set; }
     public string ModeOfPayment { get; set; } = string.Empty;
     public string PaymentStatus { get; set; } = string.Empty;
     public string TransactionStatus { get; set; } = string.Empty;

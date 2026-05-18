@@ -473,7 +473,8 @@ public sealed class FleetScheduleControl : UserControl
             graphics.DrawLine(gridPen, stickyX + CarColumnWidth, 0, stickyX + CarColumnWidth, AutoScrollMinSize.Height);
             graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(stickyX + 14, 15));
 
-            for (int row = 0; row < _owner._cars.Count; row++)
+            int drawableRows = Math.Min(_owner._cars.Count, _rowLayouts.Count);
+            for (int row = 0; row < drawableRows; row++)
             {
                 RowLayout rowLayout = _rowLayouts[row];
                 float nameY = rowLayout.Top + Math.Max((rowLayout.Height - 34) / 2F, 8);

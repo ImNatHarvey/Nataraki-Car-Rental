@@ -84,6 +84,11 @@ public sealed class TransactionService
         return _transactionRepository.GetMetricsAsync(referenceDate);
     }
 
+    public Task<IReadOnlyList<TransactionListItem>> GetRecentTransactionsAsync(int take)
+    {
+        return _transactionRepository.GetRecentAsync(take);
+    }
+
     public async Task<int> CreateFromReservationAsync(CreateTransactionFromReservationRequest request)
     {
         FleetSchedule? reservation = await _scheduleRepository.GetByIdAsync(request.FleetScheduleId);
@@ -109,7 +114,7 @@ public sealed class TransactionService
         DateTime startDate = request.StartDate?.Date ?? reservation.StartDate.Date;
         DateTime endDate = request.EndDate?.Date ?? reservation.EndDate.Date;
         decimal dailyRate = request.DailyRate ?? car.RatePerDay;
-        ValidateCommercialInputs(startDate, endDate, dailyRate, request.ModeOfPayment, request.PaymentStatus);
+        ValidateCommercialInputs(startDate, endDate, dailyRate, request.AmountPaid, request.ModeOfPayment);
 
         FleetSchedule rentalSchedule = CreateRentalSchedule(
             reservation.ScheduleId,
@@ -128,7 +133,7 @@ public sealed class TransactionService
             endDate,
             dailyRate,
             request.ModeOfPayment,
-            request.PaymentStatus,
+            request.AmountPaid,
             request.Notes);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
@@ -172,10 +177,10 @@ public sealed class TransactionService
     {
         Customer customer = request.CustomerId.HasValue
             ? await GetEligibleCustomerAsync(request.CustomerId.Value)
-            : await _customerRepository.GetOrCreateWalkInCustomerAsync();
+            : await GetWalkInCustomerAsync(request.WalkInFirstName, request.WalkInLastName);
         Car car = await GetEligibleCarAsync(request.CarId);
         decimal dailyRate = request.DailyRate ?? car.RatePerDay;
-        ValidateCommercialInputs(request.StartDate.Date, request.EndDate.Date, dailyRate, request.ModeOfPayment, request.PaymentStatus);
+        ValidateCommercialInputs(request.StartDate.Date, request.EndDate.Date, dailyRate, request.AmountPaid, request.ModeOfPayment);
 
         FleetSchedule rentalSchedule = CreateRentalSchedule(
             scheduleId: 0,
@@ -201,7 +206,7 @@ public sealed class TransactionService
                 request.EndDate.Date,
                 dailyRate,
                 request.ModeOfPayment,
-                request.PaymentStatus,
+                request.AmountPaid,
                 request.Notes);
             int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
             await _activityLogService.LogAsync(
@@ -223,7 +228,7 @@ public sealed class TransactionService
 
     public Task CompleteTransactionAsync(int transactionId, int currentUserId)
     {
-        return ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Completed, FleetScheduleConstants.Status.Completed, "Complete transaction");
+        return CompletePaidTransactionAsync(transactionId, currentUserId);
     }
 
     public Task CancelTransactionAsync(int transactionId, int currentUserId, string? reason = null)
@@ -262,6 +267,55 @@ public sealed class TransactionService
             RollbackQuietly(dbTransaction);
             throw;
         }
+    }
+
+    public async Task UpdatePaymentAsync(UpdateTransactionPaymentRequest request, int currentUserId)
+    {
+        Transaction transaction = await GetActiveTransactionAsync(request.TransactionId);
+        if (transaction.TransactionStatus is TransactionConstants.Status.Completed or TransactionConstants.Status.Cancelled)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Completed or cancelled transactions are read-only.");
+        }
+
+        ValidatePaymentInputs(transaction.TotalAmount, request.AmountPaid, request.ModeOfPayment);
+        string paymentStatus = GetPaymentStatus(request.AmountPaid, transaction.TotalAmount);
+        decimal balanceAmount = transaction.TotalAmount - request.AmountPaid;
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+        try
+        {
+            await _transactionRepository.UpdatePaymentAsync(
+                request.TransactionId,
+                request.AmountPaid,
+                balanceAmount,
+                request.ModeOfPayment.Trim(),
+                paymentStatus,
+                string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+                dbTransaction);
+            await _activityLogService.LogAsync(
+                "Update transaction payment",
+                "Transaction",
+                request.TransactionId,
+                $"Updated payment for {transaction.TransactionCode}. Amount paid: {request.AmountPaid:C}.",
+                currentUserId,
+                dbTransaction);
+            dbTransaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    private async Task CompletePaidTransactionAsync(int transactionId, int currentUserId)
+    {
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+        if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid)
+        {
+            throw Validation(nameof(Transaction.PaymentStatus), "This transaction cannot be completed until the payment is fully paid.");
+        }
+        await ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Completed, FleetScheduleConstants.Status.Completed, "Complete transaction");
     }
 
     private async Task ChangeStatusAsync(
@@ -355,6 +409,36 @@ public sealed class TransactionService
         return customer;
     }
 
+    private async Task<Customer> GetWalkInCustomerAsync(string? firstName, string? lastName)
+    {
+        if (string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName))
+        {
+            return await _customerRepository.GetOrCreateWalkInCustomerAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+        {
+            throw Validation(nameof(CreateWalkInTransactionRequest.WalkInFirstName), "First name and last name are required for a named walk-in customer.");
+        }
+
+        string phoneNumber;
+        do
+        {
+            phoneNumber = $"09{Random.Shared.Next(0, 1_000_000_000):000000000}";
+        }
+        while (await _customerRepository.PhoneNumberExistsAsync(phoneNumber));
+
+        Customer customer = new()
+        {
+            FirstName = firstName.Trim(),
+            LastName = lastName.Trim(),
+            PhoneNumber = phoneNumber
+        };
+        int customerId = await new CustomerService(_currentUserId).AddCustomerAsync(customer);
+        return await _customerRepository.GetCustomerByIdAsync(customerId)
+            ?? throw new InvalidOperationException("Named walk-in customer could not be loaded after creation.");
+    }
+
     private static FleetSchedule CreateRentalSchedule(
         int scheduleId,
         int carId,
@@ -384,10 +468,11 @@ public sealed class TransactionService
         DateTime endDate,
         decimal dailyRate,
         string modeOfPayment,
-        string paymentStatus,
+        decimal amountPaid,
         string? notes)
     {
         int totalDays = (endDate.Date - startDate.Date).Days + 1;
+        decimal totalAmount = dailyRate * totalDays;
         return new Transaction
         {
             FleetScheduleId = scheduleId,
@@ -397,9 +482,11 @@ public sealed class TransactionService
             EndDate = endDate.Date,
             DailyRate = dailyRate,
             TotalDays = totalDays,
-            TotalAmount = dailyRate * totalDays,
+            TotalAmount = totalAmount,
+            AmountPaid = amountPaid,
+            BalanceAmount = totalAmount - amountPaid,
             ModeOfPayment = modeOfPayment.Trim(),
-            PaymentStatus = paymentStatus.Trim(),
+            PaymentStatus = GetPaymentStatus(amountPaid, totalAmount),
             TransactionStatus = TransactionConstants.Status.Active,
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             CreatedByUserId = _currentUserId
@@ -410,8 +497,8 @@ public sealed class TransactionService
         DateTime startDate,
         DateTime endDate,
         decimal dailyRate,
-        string modeOfPayment,
-        string paymentStatus)
+        decimal amountPaid,
+        string modeOfPayment)
     {
         List<ValidationFailure> failures = [];
 
@@ -425,20 +512,42 @@ public sealed class TransactionService
             failures.Add(new ValidationFailure(nameof(Transaction.DailyRate), "Daily rate must be greater than 0."));
         }
 
-        if (!TransactionConstants.ModeOfPayment.All.Contains(modeOfPayment))
-        {
-            failures.Add(new ValidationFailure(nameof(Transaction.ModeOfPayment), "Mode of payment is invalid."));
-        }
-
-        if (!TransactionConstants.PaymentStatus.All.Contains(paymentStatus))
-        {
-            failures.Add(new ValidationFailure(nameof(Transaction.PaymentStatus), "Payment status is invalid."));
-        }
+        ValidatePaymentInputs(dailyRate * ((endDate.Date - startDate.Date).Days + 1), amountPaid, modeOfPayment, failures);
 
         if (failures.Count > 0)
         {
             throw new ValidationException(failures);
         }
+    }
+
+    private static void ValidatePaymentInputs(decimal totalAmount, decimal amountPaid, string modeOfPayment, List<ValidationFailure>? failures = null)
+    {
+        failures ??= [];
+        if (amountPaid < 0)
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.AmountPaid), "Amount paid cannot be negative."));
+        }
+        if (amountPaid > totalAmount)
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.AmountPaid), "Amount paid cannot exceed total amount."));
+        }
+        if (!TransactionConstants.ModeOfPayment.All.Contains(modeOfPayment))
+        {
+            failures.Add(new ValidationFailure(nameof(Transaction.ModeOfPayment), "Mode of payment is invalid."));
+        }
+        if (failures.Count > 0)
+        {
+            throw new ValidationException(failures);
+        }
+    }
+
+    private static string GetPaymentStatus(decimal amountPaid, decimal totalAmount)
+    {
+        return amountPaid <= 0
+            ? TransactionConstants.PaymentStatus.Unpaid
+            : amountPaid < totalAmount
+                ? TransactionConstants.PaymentStatus.Partial
+                : TransactionConstants.PaymentStatus.Paid;
     }
 
     private async Task<string> GenerateTransactionCodeAsync(SqlTransaction dbTransaction)
