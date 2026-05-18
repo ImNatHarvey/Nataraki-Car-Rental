@@ -206,6 +206,12 @@ public sealed class FleetScheduleService
                 throw new ValidationException(
                     [new ValidationFailure(nameof(FleetSchedule.CustomerId), "Selected customer was not found or is archived.")]);
             }
+
+            if (excludedScheduleId is null && customer.IsBlacklisted)
+            {
+                throw new ValidationException(
+                    [new ValidationFailure(nameof(FleetSchedule.CustomerId), "This customer is blacklisted and cannot be assigned to a new schedule.")]);
+            }
         }
 
         FleetSchedule? conflict = !FleetScheduleConstants.Status.Operational.Contains(schedule.Status)

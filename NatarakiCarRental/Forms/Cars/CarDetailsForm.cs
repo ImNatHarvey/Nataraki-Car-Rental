@@ -17,7 +17,7 @@ public enum CarFormMode
 public sealed class CarDetailsForm : Form
 {
     // Removed blank "" options
-    private static readonly string[] StatusOptions = ["Available", "Rented", "Maintenance"];
+    private static readonly string[] StatusOptions = CarConstants.Status.ManualSelectable;
     private static readonly string[] TransmissionOptions = ["Automatic", "Manual", "CVT"];
     private static readonly string[] FuelTypeOptions = ["Gasoline", "Diesel", "Hybrid", "Electric"];
     private static readonly string[] CodingDayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "None / Not Applicable"];
@@ -399,7 +399,12 @@ public sealed class CarDetailsForm : Form
         _modelTextBox.Text = car.Model;
         _plateNumberTextBox.Text = car.PlateNumber;
         _ratePerDayTextBox.Text = car.RatePerDay.ToString("0.##");
-        _statusComboBox.SelectedItem = StatusOptions.Contains(car.Status) ? car.Status : "Available";
+        if (IsViewMode && !StatusOptions.Contains(car.Status))
+        {
+            _statusComboBox.Items.Add(car.Status);
+        }
+
+        _statusComboBox.SelectedItem = _statusComboBox.Items.Contains(car.Status) ? car.Status : CarConstants.Status.Available;
         _brandTextBox.Text = car.Brand;
         _yearTextBox.Text = car.Year?.ToString() ?? string.Empty;
         _colorTextBox.Text = car.Color ?? string.Empty;

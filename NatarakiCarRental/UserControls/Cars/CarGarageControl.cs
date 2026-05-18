@@ -225,7 +225,7 @@ public sealed class CarGarageControl : UserControl
         _filterComboBox.ForeColor = ThemeHelper.TextPrimary;
         _filterComboBox.Size = new Size(180, 30);
         _filterComboBox.Location = new Point(256, 8);
-        _filterComboBox.Items.AddRange(["All Status", "Available", "Rented", "Maintenance"]);
+        _filterComboBox.Items.AddRange(["All Status", "Available", "Maintenance"]);
         _filterComboBox.SelectedIndex = 0;
         _filterComboBox.SelectedIndexChanged += async (_, _) => await LoadCarsAsync();
 
@@ -488,7 +488,7 @@ public sealed class CarGarageControl : UserControl
                         backColor = ThemeHelper.Success;
                         break;
                     case "Rented":
-                        backColor = ThemeHelper.Warning;
+                        backColor = ThemeHelper.Success;
                         break;
                     case "Maintenance":
                         backColor = ThemeHelper.Danger;

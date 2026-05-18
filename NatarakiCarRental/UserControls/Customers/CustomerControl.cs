@@ -692,8 +692,15 @@ public sealed class CustomerControl : UserControl
             return;
         }
 
-        await _customerService.ArchiveCustomerAsync(customerId);
-        await LoadCustomersAsync();
+        try
+        {
+            await _customerService.ArchiveCustomerAsync(customerId);
+            await LoadCustomersAsync();
+        }
+        catch (FluentValidation.ValidationException exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Archive Customer");
+        }
     }
 
     private async Task RestoreCustomerAsync(int customerId)

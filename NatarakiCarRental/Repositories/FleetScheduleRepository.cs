@@ -315,6 +315,47 @@ public sealed class FleetScheduleRepository
             });
     }
 
+    public async Task<FleetSchedule?> GetActiveOrUpcomingOperationalScheduleForCustomerAsync(int customerId, DateTime referenceDate)
+    {
+        const string sql = """
+            SELECT TOP (1)
+                schedules.ScheduleId,
+                schedules.CarId,
+                schedules.CustomerId,
+                cars.CarName,
+                cars.PlateNumber,
+                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                schedules.Title,
+                schedules.ScheduleType,
+                schedules.Status,
+                schedules.StartDate,
+                schedules.EndDate,
+                schedules.Notes,
+                schedules.CreatedByUserId,
+                schedules.CreatedAt,
+                schedules.UpdatedAt,
+                schedules.IsArchived
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
+            WHERE schedules.CustomerId = @CustomerId
+              AND schedules.IsArchived = 0
+              AND schedules.Status IN @OperationalStatuses
+              AND schedules.EndDate >= @ReferenceDate
+            ORDER BY schedules.StartDate, schedules.ScheduleId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<FleetSchedule>(
+            sql,
+            new
+            {
+                CustomerId = customerId,
+                ReferenceDate = referenceDate.Date,
+                OperationalStatuses = FleetScheduleConstants.Status.Operational
+            });
+    }
+
     private async Task<IReadOnlyList<FleetSchedule>> GetSchedulesInRangeAsync(DateTime startDate, DateTime endDate)
     {
         const string sql = """

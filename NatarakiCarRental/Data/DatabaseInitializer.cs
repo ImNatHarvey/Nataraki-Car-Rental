@@ -319,6 +319,67 @@ public static class DatabaseInitializer
             END;
             """);
 
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL
+            BEGIN
+                IF OBJECT_ID(N'dbo.CK_FleetSchedules_DateRange_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.FleetSchedules
+                        WHERE StartDate > EndDate
+                   )
+                BEGIN
+                    ALTER TABLE dbo.FleetSchedules WITH CHECK
+                    ADD CONSTRAINT CK_FleetSchedules_DateRange_Valid CHECK (StartDate <= EndDate);
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_FleetSchedules_ScheduleType_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.FleetSchedules
+                        WHERE ScheduleType NOT IN (N'Reservation', N'Rental', N'Maintenance')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.FleetSchedules WITH CHECK
+                    ADD CONSTRAINT CK_FleetSchedules_ScheduleType_Valid CHECK (
+                        ScheduleType IN (N'Reservation', N'Rental', N'Maintenance')
+                    );
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_FleetSchedules_Status_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.FleetSchedules
+                        WHERE Status NOT IN (N'Pending', N'Reserved', N'Rented', N'Ongoing', N'Completed', N'Cancelled')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.FleetSchedules WITH CHECK
+                    ADD CONSTRAINT CK_FleetSchedules_Status_Valid CHECK (
+                        Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing', N'Completed', N'Cancelled')
+                    );
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_FleetSchedules_TypeStatus_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.FleetSchedules
+                        WHERE NOT (
+                            (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Reserved', N'Cancelled'))
+                            OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
+                            OR (ScheduleType = N'Maintenance' AND Status IN (N'Ongoing', N'Completed', N'Cancelled'))
+                        )
+                   )
+                BEGIN
+                    ALTER TABLE dbo.FleetSchedules WITH CHECK
+                    ADD CONSTRAINT CK_FleetSchedules_TypeStatus_Valid CHECK (
+                        (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Reserved', N'Cancelled'))
+                        OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
+                        OR (ScheduleType = N'Maintenance' AND Status IN (N'Ongoing', N'Completed', N'Cancelled'))
+                    );
+                END;
+            END;
+            """);
+
         // 7. Customers Schema Updates
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL

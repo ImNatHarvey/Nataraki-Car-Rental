@@ -8,6 +8,7 @@ public static class CarConstants
         public const string Rented = "Rented";
         public const string Maintenance = "Maintenance";
 
+        public static readonly string[] ManualSelectable = [Available, Maintenance];
         public static readonly string[] All = [Available, Rented, Maintenance];
     }
 

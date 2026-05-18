@@ -12,6 +12,7 @@ namespace NatarakiCarRental.Services;
 public sealed class CustomerService
 {
     private readonly CustomerRepository _customerRepository;
+    private readonly FleetScheduleRepository _fleetScheduleRepository;
     private readonly ActivityLogService _activityLogService;
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
@@ -27,22 +28,29 @@ public sealed class CustomerService
     }
 
     private CustomerService(DbConnectionFactory connectionFactory, int? currentUserId)
-        : this(new CustomerRepository(connectionFactory), new ActivityLogService(connectionFactory), connectionFactory, currentUserId)
+        : this(
+            new CustomerRepository(connectionFactory),
+            new FleetScheduleRepository(connectionFactory),
+            new ActivityLogService(connectionFactory),
+            connectionFactory,
+            currentUserId)
     {
     }
 
     public CustomerService(CustomerRepository customerRepository, ActivityLogService activityLogService)
-        : this(customerRepository, activityLogService, new DbConnectionFactory(), currentUserId: null)
+        : this(customerRepository, new FleetScheduleRepository(), activityLogService, new DbConnectionFactory(), currentUserId: null)
     {
     }
 
     public CustomerService(
         CustomerRepository customerRepository,
+        FleetScheduleRepository fleetScheduleRepository,
         ActivityLogService activityLogService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
         _customerRepository = customerRepository;
+        _fleetScheduleRepository = fleetScheduleRepository;
         _activityLogService = activityLogService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
@@ -158,6 +166,16 @@ public sealed class CustomerService
     public async Task ArchiveCustomerAsync(int customerId)
     {
         Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+        FleetSchedule? blockingSchedule = await _fleetScheduleRepository.GetActiveOrUpcomingOperationalScheduleForCustomerAsync(customerId, DateTime.Today);
+
+        if (blockingSchedule is not null)
+        {
+            throw new ValidationException(
+                [new ValidationFailure(
+                    nameof(Customer.CustomerId),
+                    $"This customer cannot be archived because they have an active or upcoming schedule: '{blockingSchedule.Title}' from {blockingSchedule.StartDate:MMM d, yyyy} to {blockingSchedule.EndDate:MMM d, yyyy}.")]);
+        }
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
@@ -167,7 +185,7 @@ public sealed class CustomerService
 
             if (affectedRows == 0)
             {
-            throw new RecordNotFoundException($"Customer record #{customerId} was not found or is already archived.");
+                throw new RecordNotFoundException($"Customer record #{customerId} was not found or is already archived.");
             }
 
             await _activityLogService.LogAsync(
