@@ -26,6 +26,7 @@ public sealed class CarGarageControl : UserControl
     private readonly IconButton _archivedCarsButton = new();
     private readonly DataGridView _carsGrid = new();
     private readonly Label _emptyStateLabel = new();
+    private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
 
     private bool _showArchived;
 
@@ -214,7 +215,11 @@ public sealed class CarGarageControl : UserControl
         _searchTextBox.ForeColor = ThemeHelper.TextPrimary;
         _searchTextBox.Location = new Point(34, 7);
         _searchTextBox.Width = 196;
-        _searchTextBox.TextChanged += async (_, _) => await LoadCarsAsync();
+        _searchTextBox.TextChanged += (_, _) =>
+        {
+            _searchTimer.Stop();
+            _searchTimer.Start();
+        };
 
         searchContainer.Controls.Add(searchIcon);
         searchContainer.Controls.Add(_searchTextBox);
@@ -228,6 +233,11 @@ public sealed class CarGarageControl : UserControl
         _filterComboBox.Items.AddRange(["All Status", "Available", "Maintenance"]);
         _filterComboBox.SelectedIndex = 0;
         _filterComboBox.SelectedIndexChanged += async (_, _) => await LoadCarsAsync();
+        _searchTimer.Tick += async (_, _) =>
+        {
+            _searchTimer.Stop();
+            await LoadCarsAsync();
+        };
 
         panel.Controls.Add(searchContainer);
         panel.Controls.Add(_filterComboBox);

@@ -60,6 +60,16 @@ public sealed class FleetScheduleService
         return _scheduleRepository.GetByIdAsync(scheduleId);
     }
 
+    public Task<FleetScheduleOverviewCounts> GetOverviewCountsAsync(DateTime referenceDate)
+    {
+        return _scheduleRepository.GetOverviewCountsAsync(referenceDate);
+    }
+
+    public Task<IReadOnlyList<FleetSchedule>> GetRecentUpcomingSchedulesAsync(DateTime referenceDate, int take)
+    {
+        return _scheduleRepository.GetRecentUpcomingSchedulesAsync(referenceDate, take);
+    }
+
     public async Task<int> CreateAsync(FleetSchedule schedule)
     {
         Normalize(schedule);

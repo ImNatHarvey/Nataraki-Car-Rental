@@ -27,6 +27,86 @@ public sealed class FleetScheduleRepository
         return GetSchedulesInRangeAsync(firstDay, lastDay);
     }
 
+    public async Task<FleetScheduleOverviewCounts> GetOverviewCountsAsync(DateTime referenceDate)
+    {
+        const string sql = """
+            SELECT
+                TodaysSchedules = COUNT(CASE
+                    WHEN IsArchived = 0
+                     AND StartDate <= @ReferenceDate
+                     AND EndDate >= @ReferenceDate
+                    THEN 1 END),
+                UpcomingSchedules = COUNT(CASE
+                    WHEN IsArchived = 0
+                     AND Status IN @OperationalStatuses
+                     AND StartDate > @ReferenceDate
+                    THEN 1 END),
+                ActiveMaintenanceSchedules = COUNT(CASE
+                    WHEN IsArchived = 0
+                     AND ScheduleType = @MaintenanceType
+                     AND Status = @OngoingStatus
+                     AND StartDate <= @ReferenceDate
+                     AND EndDate >= @ReferenceDate
+                    THEN 1 END)
+            FROM dbo.FleetSchedules;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        FleetScheduleOverviewCounts? counts = await connection.QuerySingleOrDefaultAsync<FleetScheduleOverviewCounts>(
+            sql,
+            new
+            {
+                ReferenceDate = referenceDate.Date,
+                MaintenanceType = FleetScheduleConstants.Type.Maintenance,
+                OngoingStatus = FleetScheduleConstants.Status.Ongoing,
+                OperationalStatuses = FleetScheduleConstants.Status.Operational
+            });
+
+        return counts ?? new FleetScheduleOverviewCounts();
+    }
+
+    public async Task<IReadOnlyList<FleetSchedule>> GetRecentUpcomingSchedulesAsync(DateTime referenceDate, int take)
+    {
+        const string sql = """
+            SELECT TOP (@Take)
+                schedules.ScheduleId,
+                schedules.CarId,
+                schedules.CustomerId,
+                cars.CarName,
+                cars.PlateNumber,
+                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                schedules.Title,
+                schedules.ScheduleType,
+                schedules.Status,
+                schedules.StartDate,
+                schedules.EndDate,
+                schedules.Notes,
+                schedules.CreatedByUserId,
+                schedules.CreatedAt,
+                schedules.UpdatedAt,
+                schedules.IsArchived
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
+            WHERE schedules.IsArchived = 0
+              AND schedules.Status IN @OperationalStatuses
+              AND schedules.EndDate >= @ReferenceDate
+            ORDER BY schedules.StartDate, schedules.ScheduleId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        IEnumerable<FleetSchedule> schedules = await connection.QueryAsync<FleetSchedule>(
+            sql,
+            new
+            {
+                ReferenceDate = referenceDate.Date,
+                Take = take,
+                OperationalStatuses = FleetScheduleConstants.Status.Operational
+            });
+
+        return schedules.ToList();
+    }
+
     public async Task<IReadOnlyList<FleetSchedule>> GetSchedulesForCarAsync(int carId)
     {
         const string sql = """

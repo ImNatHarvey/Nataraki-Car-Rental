@@ -131,6 +131,38 @@ public sealed class CustomerRepository
         return counts ?? new CustomerCounts();
     }
 
+    public async Task<IReadOnlyList<Customer>> GetRecentCustomersAsync(int take)
+    {
+        const string sql = """
+            SELECT TOP (@Take)
+                CustomerId,
+                FirstName,
+                LastName,
+                Email,
+                PhoneNumber,
+                Region,
+                Province,
+                City,
+                Barangay,
+                StreetAddress,
+                IsBlacklisted,
+                BlacklistReason,
+                IsArchived,
+                DriverLicensePath,
+                ProofOfBillingPath,
+                CreatedAt,
+                UpdatedAt,
+                ArchivedAt
+            FROM dbo.Customers
+            WHERE IsArchived = 0
+            ORDER BY CreatedAt DESC, CustomerId DESC;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        IEnumerable<Customer> customers = await connection.QueryAsync<Customer>(sql, new { Take = take });
+        return customers.ToList();
+    }
+
     public async Task<bool> PhoneNumberExistsAsync(string phoneNumber, int? excludingCustomerId = null)
     {
         string normalizedPhoneNumber = (phoneNumber ?? string.Empty).Trim();

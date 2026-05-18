@@ -398,14 +398,19 @@ public sealed class CustomerDetailsForm : Form
             return;
         }
 
+        string? newDriverLicensePath = null;
+        string? newProofOfBillingPath = null;
+
         try
         {
             saveButton.Enabled = false;
             ClearValidationState();
 
             Customer customer = BuildCustomerFromInputs();
-            customer.DriverLicensePath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedDriverLicenseSourcePath, _sourceCustomer?.DriverLicensePath);
-            customer.ProofOfBillingPath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedProofOfBillingSourcePath, _sourceCustomer?.ProofOfBillingPath);
+            newDriverLicensePath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedDriverLicenseSourcePath, _sourceCustomer?.DriverLicensePath);
+            newProofOfBillingPath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedProofOfBillingSourcePath, _sourceCustomer?.ProofOfBillingPath);
+            customer.DriverLicensePath = newDriverLicensePath;
+            customer.ProofOfBillingPath = newProofOfBillingPath;
 
             if (_mode == CustomerFormMode.Edit)
             {
@@ -423,10 +428,14 @@ public sealed class CustomerDetailsForm : Form
         }
         catch (ValidationException exception)
         {
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newDriverLicensePath, _sourceCustomer?.DriverLicensePath);
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newProofOfBillingPath, _sourceCustomer?.ProofOfBillingPath);
             ShowValidationErrors(exception.Errors.ToList(), exception.Message);
         }
         catch (Exception exception)
         {
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newDriverLicensePath, _sourceCustomer?.DriverLicensePath);
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newProofOfBillingPath, _sourceCustomer?.ProofOfBillingPath);
             MessageBoxHelper.ShowError($"Unable to save customer record.\n\n{exception.Message}");
         }
         finally

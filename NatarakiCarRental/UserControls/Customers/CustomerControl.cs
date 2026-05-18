@@ -22,6 +22,7 @@ public sealed class CustomerControl : UserControl
     private readonly IconButton _archivedButton = new();
     private readonly DataGridView _customersGrid = new();
     private readonly Label _emptyStateLabel = new();
+    private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
 
     private CustomerListFilter _filter = CustomerListFilter.Active;
 
@@ -203,12 +204,21 @@ public sealed class CustomerControl : UserControl
         _searchTextBox.ForeColor = ThemeHelper.TextPrimary;
         _searchTextBox.Location = new Point(34, 7);
         _searchTextBox.Width = 216;
-        _searchTextBox.TextChanged += async (_, _) => await LoadCustomersAsync();
+        _searchTextBox.TextChanged += (_, _) =>
+        {
+            _searchTimer.Stop();
+            _searchTimer.Start();
+        };
 
         searchContainer.Controls.Add(searchIcon);
         searchContainer.Controls.Add(_searchTextBox);
         searchContainer.Click += (_, _) => _searchTextBox.Focus();
         panel.Controls.Add(searchContainer);
+        _searchTimer.Tick += async (_, _) =>
+        {
+            _searchTimer.Stop();
+            await LoadCustomersAsync();
+        };
         return panel;
     }
 

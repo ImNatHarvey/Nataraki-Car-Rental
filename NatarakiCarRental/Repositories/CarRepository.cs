@@ -122,6 +122,7 @@ public sealed class CarRepository
             SELECT
                 TotalCars = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
                 AvailableCars = COUNT(CASE WHEN IsArchived = 0 AND Status = @AvailableStatus THEN 1 END),
+                MaintenanceCars = COUNT(CASE WHEN IsArchived = 0 AND Status = @MaintenanceStatus THEN 1 END),
                 RentedCars = COUNT(CASE WHEN IsArchived = 0 AND Status = @RentedStatus THEN 1 END),
                 ArchivedCars = COUNT(CASE WHEN IsArchived = 1 THEN 1 END)
             FROM dbo.Cars;
@@ -133,6 +134,7 @@ public sealed class CarRepository
             new
             {
                 AvailableStatus = CarConstants.Status.Available,
+                MaintenanceStatus = CarConstants.Status.Maintenance,
                 RentedStatus = CarConstants.Status.Rented
             });
 

@@ -47,6 +47,16 @@ public static class UploadPathHelper
         return ResolveExistingFilePath(storedPath, AppConstants.CustomersUploadFolder);
     }
 
+    public static void DeleteNewCarUploadIfSaveFailed(string? storedPath, string? previousPath)
+    {
+        DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.CarsUploadFolder);
+    }
+
+    public static void DeleteNewCustomerUploadIfSaveFailed(string? storedPath, string? previousPath)
+    {
+        DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.CustomersUploadFolder);
+    }
+
     private static string? SaveUploadedFileIfSelected(
         string? sourcePath,
         string? existingPath,
@@ -111,11 +121,41 @@ public static class UploadPathHelper
         return File.Exists(relativeToBaseDirectory) ? relativeToBaseDirectory : null;
     }
 
+    private static void DeleteNewUploadIfSaveFailed(string? storedPath, string? previousPath, string relativeFolder)
+    {
+        if (string.IsNullOrWhiteSpace(storedPath)
+            || string.Equals(storedPath, previousPath, StringComparison.OrdinalIgnoreCase)
+            || Path.IsPathRooted(storedPath))
+        {
+            return;
+        }
+
+        string expectedFolder = NormalizeRelativePath(relativeFolder);
+        string storedDirectory = NormalizeRelativePath(Path.GetDirectoryName(storedPath) ?? string.Empty);
+
+        if (!string.Equals(storedDirectory, expectedFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string candidatePath = Path.Combine(GetLocalUploadDirectory(relativeFolder), Path.GetFileName(storedPath));
+
+        if (File.Exists(candidatePath))
+        {
+            File.Delete(candidatePath);
+        }
+    }
+
     private static string GetLocalUploadDirectory(string relativeFolder)
     {
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             AppConstants.ApplicationName,
             relativeFolder);
+    }
+
+    private static string NormalizeRelativePath(string path)
+    {
+        return path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar).Trim(Path.DirectorySeparatorChar);
     }
 }

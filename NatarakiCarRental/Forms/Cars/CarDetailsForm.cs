@@ -452,6 +452,9 @@ public sealed class CarDetailsForm : Form
             return;
         }
 
+        string? newImagePath = null;
+        string? newOrCrPath = null;
+
         try
         {
             saveButton.Enabled = false;
@@ -460,8 +463,10 @@ public sealed class CarDetailsForm : Form
             EnsureRatePerDayIsValid();
 
             Car car = BuildCarFromInputs();
-            car.ImagePath = UploadPathHelper.SaveCarFileIfSelected(_selectedImageSourcePath, _sourceCar?.ImagePath, allowPdf: false);
-            car.OrCrPath = UploadPathHelper.SaveCarFileIfSelected(_selectedOrCrSourcePath, _sourceCar?.OrCrPath, allowPdf: true);
+            newImagePath = UploadPathHelper.SaveCarFileIfSelected(_selectedImageSourcePath, _sourceCar?.ImagePath, allowPdf: false);
+            newOrCrPath = UploadPathHelper.SaveCarFileIfSelected(_selectedOrCrSourcePath, _sourceCar?.OrCrPath, allowPdf: true);
+            car.ImagePath = newImagePath;
+            car.OrCrPath = newOrCrPath;
 
             if (_mode == CarFormMode.Edit)
             {
@@ -479,10 +484,14 @@ public sealed class CarDetailsForm : Form
         }
         catch (ValidationException exception)
         {
+            UploadPathHelper.DeleteNewCarUploadIfSaveFailed(newImagePath, _sourceCar?.ImagePath);
+            UploadPathHelper.DeleteNewCarUploadIfSaveFailed(newOrCrPath, _sourceCar?.OrCrPath);
             ShowValidationErrors(exception.Errors.ToList(), exception.Message);
         }
         catch (Exception exception)
         {
+            UploadPathHelper.DeleteNewCarUploadIfSaveFailed(newImagePath, _sourceCar?.ImagePath);
+            UploadPathHelper.DeleteNewCarUploadIfSaveFailed(newOrCrPath, _sourceCar?.OrCrPath);
             MessageBoxHelper.ShowError($"Unable to save car record.\n\n{exception.Message}");
         }
         finally

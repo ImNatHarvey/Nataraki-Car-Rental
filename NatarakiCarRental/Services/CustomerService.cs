@@ -71,6 +71,11 @@ public sealed class CustomerService
         return _customerRepository.GetCustomerCountsAsync();
     }
 
+    public Task<IReadOnlyList<Customer>> GetRecentCustomersAsync(int take)
+    {
+        return _customerRepository.GetRecentCustomersAsync(take);
+    }
+
     public Task<bool> PhoneNumberExistsAsync(string phoneNumber, int? excludingCustomerId = null)
     {
         return _customerRepository.PhoneNumberExistsAsync(phoneNumber, excludingCustomerId);
