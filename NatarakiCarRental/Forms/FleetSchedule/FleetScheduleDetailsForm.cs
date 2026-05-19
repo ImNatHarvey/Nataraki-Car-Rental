@@ -15,6 +15,8 @@ public enum FleetScheduleFormMode
 
 public sealed class FleetScheduleDetailsForm : Form
 {
+    private const int InputWidth = 368;
+
     private readonly FleetScheduleService _scheduleService;
     private readonly CarService _carService = new();
     private readonly CustomerService _customerService = new();
@@ -30,14 +32,6 @@ public sealed class FleetScheduleDetailsForm : Form
     private readonly ComboBox _statusComboBox = CreateComboBox();
     private readonly DateTimePicker _startDatePicker = CreateDatePicker();
     private readonly DateTimePicker _endDatePicker = CreateDatePicker();
-    private readonly TextBox _notesTextBox = new()
-    {
-        Width = 580,
-        Height = 90,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        Font = FontHelper.Regular(10F)
-    };
     private readonly Label _validationLabel = new();
 
     private IReadOnlyList<Car> _cars = [];
@@ -66,7 +60,7 @@ public sealed class FleetScheduleDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(1060, 720);
+        ClientSize = new Size(920, 520);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -78,23 +72,23 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             Text = Text,
             AutoSize = false,
-            Location = new Point(32, 24),
+            Location = new Point(32, 20),
             Size = new Size(260, 34),
             Font = FontHelper.Title(18F),
             ForeColor = ThemeHelper.TextPrimary
         };
 
         _validationLabel.AutoSize = false;
-        _validationLabel.Location = new Point(34, 68);
-        _validationLabel.Size = new Size(996, 24);
+        _validationLabel.Location = new Point(34, 58);
+        _validationLabel.Size = new Size(856, 24);
         _validationLabel.Font = FontHelper.SemiBold(9F);
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
 
         Panel contentPanel = new()
         {
-            Location = new Point(32, 106),
-            Size = new Size(996, 500),
+            Location = new Point(32, 88),
+            Size = new Size(856, 360),
             BackColor = ThemeHelper.Surface
         };
 
@@ -102,32 +96,30 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4
+            RowCount = 3
         };
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 146F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
 
         contentLayout.Controls.Add(CreateSection("Car / Customer Information", CreateCarCustomerLayout()), 0, 0);
         contentLayout.Controls.Add(CreateSection("Schedule Information", CreateScheduleInfoLayout()), 0, 1);
         contentLayout.Controls.Add(CreateSection("Date Range", CreateDateRangeLayout()), 0, 2);
-        contentLayout.Controls.Add(CreateSection("Notes", CreateNotesLayout()), 0, 3);
         contentPanel.Controls.Add(contentLayout);
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(756, 640);
+        cancelButton.Location = new Point(622, 462);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
-        saveButton.Location = new Point(888, 640);
+        saveButton.Location = new Point(754, 462);
         saveButton.Click += SaveButton_Click;
 
         Button? archiveButton = null;
         if (_mode == FleetScheduleFormMode.Edit)
         {
             archiveButton = CreateDangerButton("Archive", 110, 38);
-            archiveButton.Location = new Point(32, 640);
+            archiveButton.Location = new Point(32, 462);
             archiveButton.Click += ArchiveButton_Click;
         }
 
@@ -213,7 +205,6 @@ public sealed class FleetScheduleDetailsForm : Form
         SelectStatus(schedule.Status);
         _startDatePicker.Value = schedule.StartDate;
         _endDatePicker.Value = schedule.EndDate;
-        _notesTextBox.Text = schedule.Notes ?? string.Empty;
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)
@@ -297,7 +288,7 @@ public sealed class FleetScheduleDetailsForm : Form
             Status = GetSelectedStatusValue(),
             StartDate = _startDatePicker.Value.Date,
             EndDate = _endDatePicker.Value.Date,
-            Notes = _notesTextBox.Text
+            Notes = _sourceSchedule?.Notes ?? string.Empty
         };
     }
 
@@ -366,23 +357,13 @@ public sealed class FleetScheduleDetailsForm : Form
         return layout;
     }
 
-    private Panel CreateNotesLayout()
-    {
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
-        _notesTextBox.Width = 930;
-        _notesTextBox.Height = 86;
-        _notesTextBox.Location = new Point(0, 0);
-        panel.Controls.Add(_notesTextBox);
-        return panel;
-    }
-
     private static GroupBox CreateSection(string title, Control content)
     {
         GroupBox section = new()
         {
             Text = title,
             Dock = DockStyle.Fill,
-            Padding = new Padding(16, 30, 16, 12),
+            Padding = new Padding(16, 24, 16, 14),
             Font = FontHelper.SemiBold(9.5F),
             ForeColor = ThemeHelper.TextPrimary,
             BackColor = ThemeHelper.Surface
@@ -401,14 +382,22 @@ public sealed class FleetScheduleDetailsForm : Form
             RowCount = rows
         };
 
-        for (int column = 0; column < columns; column++)
+        if (columns == 2)
         {
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        }
+        else
+        {
+            for (int column = 0; column < columns; column++)
+            {
+                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+            }
         }
 
         for (int row = 0; row < rows; row++)
         {
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
         }
 
         return layout;
@@ -416,10 +405,10 @@ public sealed class FleetScheduleDetailsForm : Form
 
     private static Panel CreateInputPanel(string labelText, Control inputControl)
     {
-        Panel panel = new() { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 12, 0), BackColor = ThemeHelper.Surface };
+        Panel panel = new() { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 20, 0), BackColor = ThemeHelper.Surface };
         Label label = ControlFactory.CreateInputLabel(labelText);
         label.Location = new Point(0, 0);
-        inputControl.Location = new Point(0, 22);
+        inputControl.Location = new Point(0, 26);
         panel.Controls.Add(label);
         panel.Controls.Add(inputControl);
         return panel;
@@ -429,7 +418,7 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         return new ComboBox
         {
-            Width = 280,
+            Width = InputWidth,
             Height = 30,
             DropDownStyle = ComboBoxStyle.DropDownList,
             Font = FontHelper.Regular(10F)
@@ -440,7 +429,7 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         return new DateTimePicker
         {
-            Width = 280,
+            Width = InputWidth,
             Height = 30,
             Format = DateTimePickerFormat.Short,
             Font = FontHelper.Regular(10F)

@@ -166,7 +166,7 @@ public sealed class TransactionService
                         Amount = request.AmountPaid,
                         ModeOfPayment = request.ModeOfPayment.Trim(),
                         ReceiptFilePath = request.ReceiptFilePath,
-                        Notes = "Initial payment upon creation from reservation.",
+                        Notes = "Initial payment",
                         CreatedByUserId = _currentUserId
                     },
                     dbTransaction);
@@ -244,7 +244,7 @@ public sealed class TransactionService
                         Amount = request.AmountPaid,
                         ModeOfPayment = request.ModeOfPayment.Trim(),
                         ReceiptFilePath = request.ReceiptFilePath,
-                        Notes = "Initial payment upon creation (walk-in).",
+                        Notes = "Initial payment",
                         CreatedByUserId = _currentUserId
                     },
                     dbTransaction);

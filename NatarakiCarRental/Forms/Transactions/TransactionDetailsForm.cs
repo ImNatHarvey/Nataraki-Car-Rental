@@ -92,6 +92,7 @@ public sealed class TransactionDetailsForm : Form
         _scheduleService = new FleetScheduleService(currentUserId: null);
         InitializeForm();
         LoadViewTransaction(transaction);
+        Load += TransactionDetailsFormPayments_Load;
     }
 
     public TransactionDetailsForm(Transaction transaction, int currentUserId)
@@ -103,6 +104,7 @@ public sealed class TransactionDetailsForm : Form
         _scheduleService = new FleetScheduleService(currentUserId);
         InitializeForm();
         LoadEditTransaction(transaction);
+        Load += TransactionDetailsFormPayments_Load;
     }
 
     private void InitializeForm()
@@ -117,7 +119,9 @@ public sealed class TransactionDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(1060, 880);
+        ClientSize = _mode == TransactionFormMode.Add
+            ? new Size(1060, 700)
+            : new Size(1060, 880);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -160,14 +164,25 @@ public sealed class TransactionDetailsForm : Form
 
     private void CreateAddLayout()
     {
-        _flowTabs.Dock = DockStyle.Fill;
+        ConfigureAddInputWidths();
+
+        _flowTabs.Dock = DockStyle.None;
+        _flowTabs.Location = new Point(32, 94);
+        _flowTabs.Size = new Size(996, 342);
         _flowTabs.Font = FontHelper.SemiBold(9F);
         _flowTabs.TabPages.Add(CreateReservationTab());
         _flowTabs.TabPages.Add(CreateWalkInTab());
-        GroupBox rentalSection = CreateSection("Rental Information", _flowTabs);
-        rentalSection.Location = new Point(32, 98);
-        rentalSection.Size = new Size(996, 400);
-        rentalSection.Dock = DockStyle.None;
+        _flowTabs.SelectedIndexChanged += (_, _) =>
+        {
+            if (_flowTabs.SelectedIndex == 0)
+            {
+                UpdateReservationSummary();
+            }
+            else
+            {
+                ApplySelectedCarRate();
+            }
+        };
 
         _modeOfPaymentComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All.Cast<object>().ToArray());
         _modeOfPaymentComboBox.SelectedItem = TransactionConstants.ModeOfPayment.Cash;
@@ -175,47 +190,64 @@ public sealed class TransactionDetailsForm : Form
         ConfigureProofPicker(_initialProofBrowseButton, _initialProofOpenButton, _initialProofPathLabel);
         _amountPaidInput.ValueChanged += (_, _) => UpdateBalanceLabel();
 
-        TableLayoutPanel footerLayout = new()
-        {
-            Location = new Point(32, 514),
-            Size = new Size(996, 250),
-            ColumnCount = 2,
-            RowCount = 2
-        };
-        footerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
-        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 132F));
-
-        footerLayout.Controls.Add(CreateSection("Payment Information", CreateInitialPaymentLayout()), 0, 0);
-        footerLayout.SetColumnSpan(footerLayout.GetControlFromPosition(0, 0)!, 2);
-        footerLayout.Controls.Add(CreateSection("Notes", CreateNotesLayout()), 0, 1);
-        footerLayout.SetColumnSpan(footerLayout.GetControlFromPosition(0, 1)!, 2);
+        GroupBox paymentSection = CreateSection("Payment Information", CreateInitialPaymentLayout());
+        paymentSection.Location = new Point(32, 450);
+        paymentSection.Size = new Size(996, 170);
+        paymentSection.Dock = DockStyle.None;
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(756, 800);
+        cancelButton.Location = new Point(742, 640);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton("Create Transaction", 164, 38);
-        saveButton.Location = new Point(888, 800);
+        saveButton.Location = new Point(864, 640);
         saveButton.Click += SaveButton_Click;
 
-        Controls.Add(rentalSection);
-        Controls.Add(footerLayout);
+        Controls.Add(_flowTabs);
+        Controls.Add(paymentSection);
         Controls.Add(cancelButton);
         Controls.Add(saveButton);
         AcceptButton = saveButton;
         CancelButton = cancelButton;
     }
 
+    private void ConfigureAddInputWidths()
+    {
+        const int twoColumnInputWidth = 420;
+
+        _reservationComboBox.Width = 920;
+        _walkInCustomerComboBox.Width = twoColumnInputWidth;
+        _walkInCarComboBox.Width = twoColumnInputWidth;
+        _walkInStartDatePicker.Width = twoColumnInputWidth;
+        _walkInEndDatePicker.Width = twoColumnInputWidth;
+        _walkInDailyRateInput.Width = twoColumnInputWidth;
+        _walkInFirstNameTextBox.Width = twoColumnInputWidth;
+        _walkInLastNameTextBox.Width = twoColumnInputWidth;
+        _modeOfPaymentComboBox.Width = twoColumnInputWidth;
+        _amountPaidInput.Width = twoColumnInputWidth;
+        _walkInTotalLabel.Size = new Size(twoColumnInputWidth, 66);
+    }
+
     private TableLayoutPanel CreateInitialPaymentLayout()
     {
-        TableLayoutPanel layout = CreateGrid(2, 1);
-        TableLayoutPanel paymentFields = CreateGrid(2, 1);
-        paymentFields.Controls.Add(CreateInputPanel("Mode of Payment *", _modeOfPaymentComboBox), 0, 0);
-        paymentFields.Controls.Add(CreateInputPanel("Amount Paid *", _amountPaidInput), 1, 0);
-        layout.Controls.Add(paymentFields, 0, 0);
-        layout.Controls.Add(CreateProofPickerPanel("Payment Proof", _initialProofPathLabel, _initialProofBrowseButton, _initialProofOpenButton), 1, 0);
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
+
+        layout.Controls.Add(CreateInputPanel("Mode of Payment *", _modeOfPaymentComboBox), 0, 0);
+        layout.Controls.Add(CreateInputPanel("Amount Paid *", _amountPaidInput), 1, 0);
+
+        Panel proofPanel = CreateProofPickerPanel("Payment Proof", _initialProofPathLabel, _initialProofBrowseButton, _initialProofOpenButton);
+        layout.Controls.Add(proofPanel, 0, 1);
+        layout.SetColumnSpan(proofPanel, 2);
         return layout;
     }
 
@@ -233,9 +265,9 @@ public sealed class TransactionDetailsForm : Form
     {
         TabPage tab = new("Create from Reservation") { BackColor = ThemeHelper.Surface };
         _reservationComboBox.Width = 920;
-        tab.Controls.Add(CreateInputPanel("Eligible Reservation *", _reservationComboBox, new Point(18, 18)));
-        _reservationSummaryLabel.Location = new Point(18, 94);
-        _reservationSummaryLabel.Size = new Size(920, 230);
+        tab.Controls.Add(CreateInputPanel("Eligible Reservation *", _reservationComboBox, new Point(18, 16)));
+        _reservationSummaryLabel.Location = new Point(18, 82);
+        _reservationSummaryLabel.Size = new Size(920, 170);
         _reservationSummaryLabel.Text = "Select a pending or reserved reservation to view its details.";
         tab.Controls.Add(_reservationSummaryLabel);
         _reservationComboBox.SelectedIndexChanged += (_, _) => UpdateReservationSummary();
@@ -248,17 +280,17 @@ public sealed class TransactionDetailsForm : Form
         TableLayoutPanel layout = new()
         {
             Location = new Point(18, 18),
-            Size = new Size(920, 330),
+            Size = new Size(920, 292),
             ColumnCount = 2,
             RowCount = 5
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
 
         layout.Controls.Add(CreateInputPanel("Customer", _walkInCustomerComboBox), 0, 0);
         layout.Controls.Add(CreateInputPanel("Car *", _walkInCarComboBox), 1, 0);
@@ -269,15 +301,14 @@ public sealed class TransactionDetailsForm : Form
         _walkInTotalLabel.BorderStyle = BorderStyle.None;
         _walkInTotalLabel.BackColor = ThemeHelper.Surface;
         _walkInTotalLabel.Padding = new Padding(0, 2, 0, 0);
+        _walkInTotalLabel.Height = 66;
         layout.Controls.Add(CreateInputPanel("Rental Summary", _walkInTotalLabel), 1, 2);
         Panel checkboxPanel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
-        _useWalkInCustomerCheckBox.Location = new Point(0, 6);
+        _useWalkInCustomerCheckBox.Location = new Point(0, 2);
         checkboxPanel.Controls.Add(_useWalkInCustomerCheckBox);
         layout.Controls.Add(checkboxPanel, 0, 3);
         layout.SetColumnSpan(checkboxPanel, 2);
 
-        _walkInFirstNameTextBox.Width = 280;
-        _walkInLastNameTextBox.Width = 280;
         _walkInFirstNameTextBox.PlaceholderText = "First name";
         _walkInLastNameTextBox.PlaceholderText = "Last name";
         layout.Controls.Add(CreateInputPanel("First Name", _walkInFirstNameTextBox), 0, 4);
@@ -509,7 +540,7 @@ public sealed class TransactionDetailsForm : Form
         if (schedule is null)
         {
             _reservationSummaryLabel.Text = "Select a car and date range to calculate total.";
-            _amountPaidInput.Maximum = 0;
+            SetAmountPaidMaximum(0);
             UpdateBalanceLabel();
             return;
         }
@@ -525,7 +556,7 @@ public sealed class TransactionDetailsForm : Form
             $"Daily Rate: ₱{rate:N2}{Environment.NewLine}" +
             $"Total Days: {totalDays}{Environment.NewLine}" +
             $"Total Amount: ₱{total:N2}";
-        _amountPaidInput.Maximum = total;
+        SetAmountPaidMaximum(total);
         UpdateBalanceLabel();
     }
 
@@ -536,26 +567,51 @@ public sealed class TransactionDetailsForm : Form
         {
             _walkInDailyRateInput.Value = Math.Min(_walkInDailyRateInput.Maximum, car.RatePerDay);
         }
+        else
+        {
+            _walkInDailyRateInput.Value = 0;
+        }
         UpdateWalkInTotal();
     }
 
     private void UpdateWalkInTotal()
     {
-        int days = Math.Max((_walkInEndDatePicker.Value.Date - _walkInStartDatePicker.Value.Date).Days + 1, 0);
-        decimal total = days * _walkInDailyRateInput.Value;
         if (GetSelectedCar() is null)
         {
             _walkInTotalLabel.Text = "Select a car and date range to calculate total.";
+            SetAmountPaidMaximum(0);
+            UpdateBalanceLabel();
+            return;
         }
-        else
+
+        DateTime startDate = _walkInStartDatePicker.Value.Date;
+        DateTime endDate = _walkInEndDatePicker.Value.Date;
+        if (endDate < startDate)
         {
-            _walkInTotalLabel.Text =
-                $"Daily Rate: ₱{_walkInDailyRateInput.Value:N2}{Environment.NewLine}" +
-                $"Total Days: {days}{Environment.NewLine}" +
-                $"Total Amount: ₱{total:N2}";
+            _walkInTotalLabel.Text = "Invalid date range.";
+            SetAmountPaidMaximum(0);
+            UpdateBalanceLabel();
+            return;
         }
-        _amountPaidInput.Maximum = Math.Max(total, 0);
+
+        int days = (endDate - startDate).Days + 1;
+        decimal total = days * _walkInDailyRateInput.Value;
+        _walkInTotalLabel.Text =
+            $"Daily Rate: ₱{_walkInDailyRateInput.Value:N2}{Environment.NewLine}" +
+            $"Total Days: {days}{Environment.NewLine}" +
+            $"Total Amount: ₱{total:N2}";
+        SetAmountPaidMaximum(total);
         UpdateBalanceLabel();
+    }
+
+    private void SetAmountPaidMaximum(decimal maximum)
+    {
+        decimal safeMaximum = Math.Max(maximum, 0);
+        if (_amountPaidInput.Value > safeMaximum)
+        {
+            _amountPaidInput.Value = safeMaximum;
+        }
+        _amountPaidInput.Maximum = safeMaximum;
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)
@@ -588,7 +644,7 @@ public sealed class TransactionDetailsForm : Form
                         ModeOfPayment = GetSelectedText(_modeOfPaymentComboBox),
                         AmountPaid = _amountPaidInput.Value,
                         ReceiptFilePath = newReceiptPath,
-                        Notes = _notesTextBox.Text
+                        Notes = string.Empty
                     });
             }
             else
@@ -606,7 +662,7 @@ public sealed class TransactionDetailsForm : Form
                         ReceiptFilePath = newReceiptPath,
                         WalkInFirstName = _useWalkInCustomerCheckBox.Checked ? _walkInFirstNameTextBox.Text : null,
                         WalkInLastName = _useWalkInCustomerCheckBox.Checked ? _walkInLastNameTextBox.Text : null,
-                        Notes = _notesTextBox.Text
+                        Notes = string.Empty
                     });
             }
 
@@ -735,6 +791,12 @@ public sealed class TransactionDetailsForm : Form
             pathLabel.ForeColor = ThemeHelper.Primary;
             openButton.Enabled = true;
         }
+    }
+
+    private async void TransactionDetailsFormPayments_Load(object? sender, EventArgs e)
+    {
+        Load -= TransactionDetailsFormPayments_Load;
+        await LoadPaymentsAsync();
     }
 
     private static void OpenProofFile(string? selectedSourcePath, string? storedPath)
