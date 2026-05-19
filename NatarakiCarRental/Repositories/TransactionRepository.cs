@@ -169,6 +169,7 @@ public sealed class TransactionRepository
         string searchText,
         string? transactionStatus,
         string? paymentStatus,
+        bool includeArchived = false,
         int maxRows = 100)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
@@ -193,7 +194,7 @@ public sealed class TransactionRepository
             FROM dbo.Transactions AS transactions
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
-            WHERE transactions.IsArchived = 0
+            WHERE transactions.IsArchived = @IncludeArchived
               AND (@TransactionStatus IS NULL OR transactions.TransactionStatus = @TransactionStatus)
               AND (@PaymentStatus IS NULL OR transactions.PaymentStatus = @PaymentStatus)
               AND (
@@ -217,7 +218,8 @@ public sealed class TransactionRepository
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
                 TransactionStatus = NullIfWhiteSpace(transactionStatus),
-                PaymentStatus = NullIfWhiteSpace(paymentStatus)
+                PaymentStatus = NullIfWhiteSpace(paymentStatus),
+                IncludeArchived = includeArchived
             });
         return transactions.ToList();
     }
@@ -343,6 +345,32 @@ public sealed class TransactionRepository
                 UpdatedAt = sysdatetime()
             WHERE TransactionId = @TransactionId
               AND IsArchived = 0;
+            """;
+
+        IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.ExecuteAsync(sql, new { TransactionId = transactionId }, dbTransaction);
+        }
+        finally
+        {
+            if (dbTransaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
+    public async Task<int> RestoreAsync(int transactionId, IDbTransaction? dbTransaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.Transactions
+            SET IsArchived = 0,
+                ArchivedAt = NULL,
+                UpdatedAt = sysdatetime()
+            WHERE TransactionId = @TransactionId
+              AND IsArchived = 1;
             """;
 
         IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();

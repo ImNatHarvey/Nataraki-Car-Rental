@@ -190,9 +190,9 @@ public sealed class CustomerControl : UserControl
             BackColor = ThemeHelper.ContentBackground
         };
 
-        ConfigureTabButton(_activeButton, "Active", IconChar.CircleCheck, new Point(0, 10));
-        ConfigureTabButton(_blacklistedButton, "Blacklisted", IconChar.UserSlash, new Point(112, 10));
-        ConfigureTabButton(_archivedButton, "Archived", IconChar.BoxArchive, new Point(244, 10));
+        ConfigureTabButton(_activeButton, "Customers", IconChar.Users, new Point(0, 10));
+        ConfigureTabButton(_archivedButton, "Archived", IconChar.BoxArchive, new Point(132, 10));
+        ConfigureTabButton(_blacklistedButton, "Blacklisted", IconChar.UserSlash, new Point(256, 10));
 
         IconButton addCustomerButton = new()
         {
@@ -285,7 +285,7 @@ public sealed class CustomerControl : UserControl
         button.IconSize = 16;
         button.TextImageRelation = TextImageRelation.ImageBeforeText;
         button.Location = location;
-        button.Size = new Size(text == "Blacklisted" ? 124 : 104, 34);
+        button.Size = new Size(text == "Customers" ? 124 : text == "Blacklisted" ? 124 : 116, 34);
         button.FlatStyle = FlatStyle.Flat;
         button.Cursor = Cursors.Hand;
         button.Font = FontHelper.SemiBold(9F);
@@ -450,6 +450,7 @@ public sealed class CustomerControl : UserControl
             if (Math.Abs(Height - _lastHeight) > 50)
             {
                 _lastHeight = Height;
+                _currentPage = 1;
                 await LoadCustomersAsync();
             }
         };

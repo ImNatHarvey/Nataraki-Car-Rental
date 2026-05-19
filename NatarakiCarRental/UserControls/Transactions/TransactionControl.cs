@@ -1,5 +1,4 @@
 using System.Drawing.Drawing2D;
-using System.Globalization;
 using FontAwesome.Sharp;
 using FluentValidation;
 using NatarakiCarRental.Forms.Transactions;
@@ -13,7 +12,6 @@ namespace NatarakiCarRental.UserControls.Transactions;
 
 public sealed class TransactionControl : UserControl
 {
-    private static readonly CultureInfo PhilippineCulture = new("en-PH");
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
     private readonly MetricCardControl _totalTransactionsCard = new();
@@ -23,6 +21,9 @@ public sealed class TransactionControl : UserControl
     private readonly TextBox _searchTextBox = new();
     private readonly ComboBox _statusFilterComboBox = new();
     private readonly ComboBox _paymentFilterComboBox = new();
+    private readonly IconButton _transactionsTabButton = new();
+    private readonly IconButton _archivedTabButton = new();
+    private readonly Button _addTransactionButton;
     private readonly DataGridView _transactionsGrid = new();
     private readonly Label _emptyStateLabel = new();
     private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
@@ -31,11 +32,13 @@ public sealed class TransactionControl : UserControl
     private readonly Label _paginationLabel = new();
     private readonly Button _prevPageButton = CreatePaginationButton("Previous");
     private readonly Button _nextPageButton = CreatePaginationButton("Next");
+    private bool _showArchived;
 
     public TransactionControl(int currentUserId)
     {
         _currentUserId = currentUserId;
         _transactionService = new TransactionService(currentUserId);
+        _addTransactionButton = ControlFactory.CreatePrimaryButton("Add Transaction", 146, 36);
         InitializeControl();
         Load += TransactionControl_Load;
     }
@@ -164,11 +167,35 @@ public sealed class TransactionControl : UserControl
     private Panel CreateActionBarPanel()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        Button addButton = ControlFactory.CreatePrimaryButton("Add Transaction", 146, 36);
-        addButton.Location = new Point(0, 10);
-        addButton.Click += AddButton_Click;
-        panel.Controls.Add(addButton);
+        ConfigureTabButton(_transactionsTabButton, "Transactions", IconChar.Receipt, new Point(0, 10));
+        ConfigureTabButton(_archivedTabButton, "Archived", IconChar.BoxArchive, new Point(144, 10));
+
+        _addTransactionButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _addTransactionButton.Location = new Point(0, 10);
+        _addTransactionButton.Click += AddButton_Click;
+        panel.Resize += (_, _) => _addTransactionButton.Left = Math.Max(0, panel.Width - _addTransactionButton.Width);
+
+        _transactionsTabButton.Click += async (_, _) => await SwitchArchiveViewAsync(false);
+        _archivedTabButton.Click += async (_, _) => await SwitchArchiveViewAsync(true);
+
+        panel.Controls.Add(_transactionsTabButton);
+        panel.Controls.Add(_archivedTabButton);
+        panel.Controls.Add(_addTransactionButton);
         return panel;
+    }
+
+    private static void ConfigureTabButton(IconButton button, string text, IconChar icon, Point location)
+    {
+        button.Text = text;
+        button.IconChar = icon;
+        button.IconSize = 16;
+        button.TextImageRelation = TextImageRelation.ImageBeforeText;
+        button.Location = location;
+        button.Size = new Size(text == "Transactions" ? 136 : 112, 34);
+        button.FlatStyle = FlatStyle.Flat;
+        button.Cursor = Cursors.Hand;
+        button.Font = FontHelper.SemiBold(9F);
+        button.FlatAppearance.BorderSize = 0;
     }
 
     private Panel CreateSearchPanel()
@@ -244,8 +271,8 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.AllowUserToDeleteRows = false;
         _transactionsGrid.AllowUserToResizeRows = false;
         _transactionsGrid.AllowUserToResizeColumns = false;
-        _transactionsGrid.ScrollBars = ScrollBars.Vertical;
-        _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _transactionsGrid.ScrollBars = ScrollBars.Both;
+        _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
         _transactionsGrid.BackgroundColor = ThemeHelper.Surface;
         _transactionsGrid.BorderStyle = BorderStyle.None;
         _transactionsGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
@@ -287,6 +314,7 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.Columns.Add("CarPlate", "Car / Plate");
         _transactionsGrid.Columns.Add("Dates", "Dates");
         _transactionsGrid.Columns.Add("TotalAmount", "Total Amount");
+        _transactionsGrid.Columns.Add("AmountPaid", "Amount Paid");
         _transactionsGrid.Columns.Add("Balance", "Balance");
         _transactionsGrid.Columns.Add("Payment", "Payment");
         _transactionsGrid.Columns.Add("Status", "Status");
@@ -300,22 +328,24 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.Columns.Add(actionsColumn);
 
         _transactionsGrid.Columns["TransactionId"]!.Visible = false;
-        SetFillWeight("TransactionCode", 100);
-        SetFillWeight("Customer", 100);
-        SetFillWeight("CarPlate", 100);
-        SetFillWeight("Dates", 95);
-        SetFillWeight("TotalAmount", 80);
-        SetFillWeight("Balance", 76);
-        SetFillWeight("Payment", 74);
-        SetFillWeight("Status", 74);
-        SetFillWeight("Actions", 280);
+        SetColumnWidth("TransactionCode", 150);
+        SetColumnWidth("Customer", 170);
+        SetColumnWidth("CarPlate", 180);
+        SetColumnWidth("Dates", 130);
+        SetColumnWidth("TotalAmount", 116);
+        SetColumnWidth("AmountPaid", 116);
+        SetColumnWidth("Balance", 110);
+        SetColumnWidth("Payment", 116);
+        SetColumnWidth("Status", 126);
+        SetColumnWidth("Actions", 330);
     }
 
-    private void SetFillWeight(string columnName, float weight)
+    private void SetColumnWidth(string columnName, int width)
     {
         if (_transactionsGrid.Columns[columnName] is DataGridViewColumn column)
         {
-            column.FillWeight = weight;
+            column.Width = width;
+            column.MinimumWidth = Math.Min(width, 90);
         }
     }
 
@@ -330,6 +360,7 @@ public sealed class TransactionControl : UserControl
             if (Math.Abs(Height - _lastHeight) > 50)
             {
                 _lastHeight = Height;
+                _currentPage = 1;
                 await LoadTransactionsAsync();
             }
         };
@@ -341,12 +372,13 @@ public sealed class TransactionControl : UserControl
         try
         {
             _pageSize = Height > 700 ? 15 : 5;
+            UpdateTabStyles();
 
             TransactionMetrics metrics = await _transactionService.GetMetricsAsync(DateTime.Today);
             UpdateMetricCards(metrics);
             string? status = _statusFilterComboBox.SelectedIndex <= 0 ? null : _statusFilterComboBox.SelectedItem?.ToString();
             string? payment = _paymentFilterComboBox.SelectedIndex <= 0 ? null : _paymentFilterComboBox.SelectedItem?.ToString();
-            IReadOnlyList<TransactionListItem> transactions = await _transactionService.SearchTransactionsAsync(_searchTextBox.Text, status, payment);
+            IReadOnlyList<TransactionListItem> transactions = await _transactionService.SearchTransactionsAsync(_searchTextBox.Text, status, payment, _showArchived);
             PopulateGrid(transactions);
         }
         catch (Exception exception)
@@ -381,7 +413,11 @@ public sealed class TransactionControl : UserControl
         foreach (TransactionListItem transaction in pagedTransactions)
         {
             string actions = "View";
-            if (transaction.TransactionStatus == TransactionConstants.Status.Active)
+            if (_showArchived)
+            {
+                actions += "|Restore";
+            }
+            else if (transaction.TransactionStatus == TransactionConstants.Status.Active)
             {
                 actions += "|Payment|Complete|Cancel";
             }
@@ -396,14 +432,17 @@ public sealed class TransactionControl : UserControl
                 transaction.CustomerName,
                 $"{transaction.CarName} ({transaction.PlateNumber})",
                 $"{transaction.StartDate:MMM d} - {transaction.EndDate:MMM d}",
-                transaction.TotalAmount.ToString("C", PhilippineCulture),
-                transaction.BalanceAmount.ToString("C", PhilippineCulture),
+                FormatPeso(transaction.TotalAmount),
+                FormatPeso(transaction.AmountPaid),
+                FormatPeso(transaction.BalanceAmount),
                 transaction.PaymentStatus,
                 transaction.TransactionStatus,
                 actions);
         }
         _emptyStateLabel.Visible = totalItems == 0;
     }
+
+    private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
 
     private void TransactionsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
     {
@@ -440,7 +479,7 @@ public sealed class TransactionControl : UserControl
             foreach (string action in actions)
             {
                 SizeF textSize = e.Graphics.MeasureString(action, font);
-                float width = textSize.Width + 16;
+                float width = textSize.Width + 22;
                 RectangleF rect = new(currentX, y, width, height);
 
                 Color color = GetPillColor(action);
@@ -458,6 +497,10 @@ public sealed class TransactionControl : UserControl
                 e.Graphics.DrawString(action, font, foreground, rect, format);
 
                 currentX += width + 6;
+                if (currentX > e.CellBounds.Right - 4)
+                {
+                    break;
+                }
             }
         }
         else
@@ -501,6 +544,7 @@ public sealed class TransactionControl : UserControl
             "Complete" => ThemeHelper.Success,
             "Cancel" => ThemeHelper.Danger,
             "Archive" => ThemeHelper.GrayIcon,
+            "Restore" => ThemeHelper.Warning,
             _ => ThemeHelper.Primary
         };
     }
@@ -554,12 +598,14 @@ public sealed class TransactionControl : UserControl
         Font font = _transactionsGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
         string[] actions = text.Split('|');
         float currentX = 4;
+        float height = 26;
+        float y = (_transactionsGrid.Rows[e.RowIndex].Height - height) / 2F;
         
         foreach (string action in actions)
         {
             SizeF textSize = g.MeasureString(action, font);
-            float width = textSize.Width + 16;
-            RectangleF rect = new(currentX, 6, width, 26);
+            float width = textSize.Width + 22;
+            RectangleF rect = new(currentX, y, width, height);
             
             if (rect.Contains(e.X, e.Y))
             {
@@ -579,6 +625,9 @@ public sealed class TransactionControl : UserControl
                         break;
                     case "Archive":
                         await ArchiveTransactionAsync(transactionId);
+                        break;
+                    case "Restore":
+                        await RestoreTransactionAsync(transactionId);
                         break;
                 }
                 return;
@@ -672,6 +721,43 @@ public sealed class TransactionControl : UserControl
         await _transactionService.ArchiveTransactionAsync(transactionId, _currentUserId);
         MessageBoxHelper.ShowSuccess("Transaction archived successfully.");
         await LoadTransactionsAsync();
+    }
+
+    private async Task RestoreTransactionAsync(int transactionId)
+    {
+        Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
+        if (transaction is null)
+        {
+            return;
+        }
+        if (!MessageBoxHelper.ShowConfirmWarning($"Restore transaction {transaction.TransactionCode} to the active list?", "Restore Transaction"))
+        {
+            return;
+        }
+        await _transactionService.RestoreTransactionAsync(transactionId, _currentUserId);
+        MessageBoxHelper.ShowSuccess("Transaction restored successfully.");
+        await LoadTransactionsAsync();
+    }
+
+    private async Task SwitchArchiveViewAsync(bool showArchived)
+    {
+        _showArchived = showArchived;
+        _currentPage = 1;
+        await LoadTransactionsAsync();
+    }
+
+    private void UpdateTabStyles()
+    {
+        ApplyTabStyle(_transactionsTabButton, !_showArchived);
+        ApplyTabStyle(_archivedTabButton, _showArchived);
+        _addTransactionButton.Visible = !_showArchived;
+    }
+
+    private static void ApplyTabStyle(IconButton button, bool isActive)
+    {
+        button.BackColor = isActive ? ThemeHelper.Primary : ThemeHelper.Surface;
+        button.ForeColor = isActive ? Color.White : ThemeHelper.TextPrimary;
+        button.IconColor = isActive ? Color.White : ThemeHelper.TextSecondary;
     }
 
     private async Task<Transaction?> GetTransactionOrRefreshAsync(int transactionId)

@@ -87,10 +87,10 @@ public sealed class MainForm : Form
         NavigationItem[] menuItems =
         [
             new("Overview", IconChar.ChartLine, true),
-            new("Car Garage", IconChar.Car, true),
             new("Fleet Schedule", IconChar.CalendarDays, true),
-            new("Customers", IconChar.Users, true),
             new("Transactions", IconChar.Receipt, true),
+            new("Customers", IconChar.Users, true),
+            new("Car Garage", IconChar.Car, true),
             new("Offsite", IconChar.LocationDot, false),
             new("Activity Log", IconChar.ClipboardList, true),
             new("Manage System", IconChar.Gear, false)

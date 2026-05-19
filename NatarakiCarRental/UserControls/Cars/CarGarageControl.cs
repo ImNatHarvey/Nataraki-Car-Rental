@@ -1,6 +1,5 @@
 using FontAwesome.Sharp;
 using System.Drawing.Drawing2D;
-using System.Globalization;
 using System.Linq;
 using NatarakiCarRental.Forms.Cars;
 using NatarakiCarRental.Helpers;
@@ -18,7 +17,6 @@ public sealed class CarGarageControl : UserControl
     private readonly MetricCardControl _availableCarsCard = new();
     private readonly MetricCardControl _rentedCarsCard = new();
     private readonly MetricCardControl _archivedCarsCard = new();
-    private static readonly CultureInfo PhilippineCulture = new("en-PH");
 
     private readonly TextBox _searchTextBox = new();
     private readonly ComboBox _filterComboBox = new();
@@ -194,8 +192,8 @@ public sealed class CarGarageControl : UserControl
             BackColor = ThemeHelper.ContentBackground
         };
 
-        ConfigureTabButton(_activeCarsButton, "Active Cars", IconChar.CircleCheck, new Point(0, 10));
-        ConfigureTabButton(_archivedCarsButton, "Archived Cars", IconChar.BoxArchive, new Point(128, 10));
+        ConfigureTabButton(_activeCarsButton, "Cars", IconChar.Car, new Point(0, 10));
+        ConfigureTabButton(_archivedCarsButton, "Archived", IconChar.BoxArchive, new Point(112, 10));
 
         IconButton addCarButton = new()
         {
@@ -220,12 +218,14 @@ public sealed class CarGarageControl : UserControl
         _activeCarsButton.Click += async (_, _) =>
         {
             _showArchived = false;
+            _currentPage = 1;
             await LoadCarsAsync();
         };
 
         _archivedCarsButton.Click += async (_, _) =>
         {
             _showArchived = true;
+            _currentPage = 1;
             await LoadCarsAsync();
         };
 
@@ -288,7 +288,11 @@ public sealed class CarGarageControl : UserControl
         _filterComboBox.Location = new Point(256, 8);
         _filterComboBox.Items.AddRange(["All Status", "Available", "Maintenance"]);
         _filterComboBox.SelectedIndex = 0;
-        _filterComboBox.SelectedIndexChanged += async (_, _) => await LoadCarsAsync();
+        _filterComboBox.SelectedIndexChanged += async (_, _) =>
+        {
+            _currentPage = 1;
+            await LoadCarsAsync();
+        };
         _searchTimer.Tick += async (_, _) =>
         {
             _searchTimer.Stop();
@@ -464,6 +468,7 @@ public sealed class CarGarageControl : UserControl
             if (Math.Abs(Height - _lastHeight) > 50)
             {
                 _lastHeight = Height;
+                _currentPage = 1;
                 await LoadCarsAsync();
             }
         };
@@ -529,7 +534,7 @@ public sealed class CarGarageControl : UserControl
                 car.CarName,
                 car.Model,
                 car.PlateNumber,
-                car.RatePerDay.ToString("C", PhilippineCulture),
+                FormatPeso(car.RatePerDay),
                 codingDayDisplay,
                 car.Status);
         }
@@ -542,6 +547,8 @@ public sealed class CarGarageControl : UserControl
         ApplyTabStyle(_activeCarsButton, !_showArchived);
         ApplyTabStyle(_archivedCarsButton, _showArchived);
     }
+
+    private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
 
     private static void ApplyTabStyle(IconButton button, bool isActive)
     {

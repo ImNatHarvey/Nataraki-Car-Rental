@@ -4,13 +4,11 @@ using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
 using NatarakiCarRental.UserControls.Cards;
 using FleetScheduleModel = NatarakiCarRental.Models.FleetSchedule;
-using System.Globalization;
 
 namespace NatarakiCarRental.UserControls.Dashboard;
 
 public sealed class OverviewControl : UserControl
 {
-    private static readonly CultureInfo PhilippineCulture = new("en-PH");
     private const int RecentItemLimit = 5;
     private readonly CarService _carService = new();
     private readonly CustomerService _customerService = new();
@@ -58,6 +56,7 @@ public sealed class OverviewControl : UserControl
         mainLayout.Controls.Add(CreateTransactionSummaryPanel());
 
         Controls.Add(mainLayout);
+        mainLayout.Margin = new Padding(0, 0, 0, 28);
     }
 
     private static Panel CreateHeaderPanel()
@@ -190,10 +189,10 @@ public sealed class OverviewControl : UserControl
 
     private Panel CreateTransactionSummaryPanel()
     {
-        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 220));
+        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 248));
         panel.Dock = DockStyle.Top;
-        panel.Margin = new Padding(0, 18, 0, 0);
-        panel.Padding = new Padding(18);
+        panel.Margin = new Padding(0, 18, 0, 32);
+        panel.Padding = new Padding(18, 18, 18, 22);
         panel.Controls.Add(_recentTransactionsGrid);
         panel.Controls.Add(_recentTransactionsEmptyLabel);
         panel.Controls.Add(new Label
@@ -227,7 +226,7 @@ public sealed class OverviewControl : UserControl
             RowHeadersVisible = false,
             RowTemplate = { Height = 34 },
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            ScrollBars = ScrollBars.Vertical
+            ScrollBars = ScrollBars.Both
         };
 
         grid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
@@ -344,10 +343,12 @@ public sealed class OverviewControl : UserControl
                 transaction.TransactionCode,
                 transaction.CustomerName,
                 $"{transaction.CarName} ({transaction.PlateNumber})",
-                transaction.TotalAmount.ToString("C", PhilippineCulture),
+                FormatPeso(transaction.TotalAmount),
                 transaction.TransactionStatus);
         }
 
         _recentTransactionsEmptyLabel.Visible = transactions.Count == 0;
     }
+
+    private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
 }

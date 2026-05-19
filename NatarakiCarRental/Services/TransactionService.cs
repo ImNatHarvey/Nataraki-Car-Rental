@@ -79,9 +79,10 @@ public sealed class TransactionService
         string searchText,
         string? transactionStatus = null,
         string? paymentStatus = null,
+        bool includeArchived = false,
         int maxRows = 100)
     {
-        return _transactionRepository.SearchAsync(searchText, transactionStatus, paymentStatus, maxRows);
+        return _transactionRepository.SearchAsync(searchText, transactionStatus, paymentStatus, includeArchived, maxRows);
     }
 
     public Task<TransactionMetrics> GetMetricsAsync(DateTime referenceDate)
@@ -297,6 +298,43 @@ public sealed class TransactionService
                 "Transaction",
                 transactionId,
                 $"Archived transaction {transaction.TransactionCode}.",
+                currentUserId,
+                dbTransaction);
+            dbTransaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    public async Task RestoreTransactionAsync(int transactionId, int currentUserId)
+    {
+        Transaction? transaction = await _transactionRepository.GetByIdAsync(transactionId);
+
+        if (transaction is null || !transaction.IsArchived)
+        {
+            throw new RecordNotFoundException($"Archived transaction record #{transactionId} was not found.");
+        }
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            int affectedRows = await _transactionRepository.RestoreAsync(transactionId, dbTransaction);
+
+            if (affectedRows == 0)
+            {
+                throw new RecordNotFoundException($"Archived transaction record #{transactionId} was not found.");
+            }
+
+            await _activityLogService.LogAsync(
+                "Restore transaction",
+                "Transaction",
+                transactionId,
+                $"Restored transaction {transaction.TransactionCode}.",
                 currentUserId,
                 dbTransaction);
             dbTransaction.Commit();
