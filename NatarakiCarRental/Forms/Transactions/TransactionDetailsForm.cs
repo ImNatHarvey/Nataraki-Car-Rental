@@ -115,7 +115,7 @@ public sealed class TransactionDetailsForm : Form
         {
             TransactionFormMode.Add => new Size(1060, 700),
             TransactionFormMode.View => new Size(1060, 685),
-            TransactionFormMode.Edit => new Size(1060, 820),
+            TransactionFormMode.Edit => new Size(1060, 852),
             _ => new Size(1060, 880)
         };
         BackColor = ThemeHelper.Surface;
@@ -328,14 +328,14 @@ public sealed class TransactionDetailsForm : Form
         if (_transaction?.TransactionStatus == TransactionConstants.Status.Active)
         {
             CreateAddPaymentSection();
-            _submitPaymentButton.Location = new Point(864, 758);
+            _submitPaymentButton.Location = new Point(868, 786);
             _submitPaymentButton.Click += AddPaymentButton_Click;
             Controls.Add(_submitPaymentButton);
         }
 
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
         closeButton.Location = _transaction?.TransactionStatus == TransactionConstants.Status.Active
-            ? new Point(742, 758)
+            ? new Point(746, 786)
             : new Point(918, 622);
         closeButton.Click += (_, _) => Close();
         Controls.Add(closeButton);
@@ -464,6 +464,7 @@ public sealed class TransactionDetailsForm : Form
 
         _addPaymentPanel.Controls.Add(CreateInputPanel("Amount *", _newPaymentAmountInput, new Point(0, 0)));
         _addPaymentPanel.Controls.Add(CreateInputPanel("Mode *", _newPaymentModeComboBox, new Point(492, 0)));
+
         Panel proofPanel = CreateProofPickerPanel("Payment Proof", _paymentProofPathLabel, _paymentProofBrowseButton, _paymentProofOpenButton);
         proofPanel.Dock = DockStyle.None;
         proofPanel.Location = new Point(0, 52);
@@ -478,10 +479,11 @@ public sealed class TransactionDetailsForm : Form
             ForeColor = ThemeHelper.TextPrimary,
             BackColor = ThemeHelper.Surface
         };
+
         _addPaymentPanel.Dock = DockStyle.Fill;
         section.Controls.Add(_addPaymentPanel);
-        section.Location = new Point(32, 616);
-        section.Size = new Size(996, 126);
+        section.Location = new Point(32, 610);
+        section.Size = new Size(996, 160);
         section.Dock = DockStyle.None;
         Controls.Add(section);
     }
@@ -877,15 +879,13 @@ public sealed class TransactionDetailsForm : Form
             }, _currentUserId);
 
             MessageBoxHelper.ShowSuccess("Payment added successfully.");
-            
-            // Reset input
+
             _newPaymentAmountInput.Value = 0;
             _selectedReceiptSourcePath = null;
             _paymentProofPathLabel.Text = "No file selected";
             _paymentProofPathLabel.ForeColor = ThemeHelper.TextSecondary;
             _paymentProofOpenButton.Enabled = false;
 
-            // Refresh data
             Transaction? updated = await _transactionService.GetByIdAsync(_transaction.TransactionId);
             if (updated is not null)
             {
