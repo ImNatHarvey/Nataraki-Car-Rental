@@ -1,3 +1,4 @@
+using System.Data;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Data.SqlClient;
@@ -13,6 +14,7 @@ public sealed class TransactionService
 {
     private const int MaxTransactionCodeCreateAttempts = 3;
     private readonly TransactionRepository _transactionRepository;
+    private readonly TransactionPaymentRepository _transactionPaymentRepository;
     private readonly FleetScheduleRepository _scheduleRepository;
     private readonly FleetScheduleService _scheduleService;
     private readonly CarRepository _carRepository;
@@ -29,6 +31,7 @@ public sealed class TransactionService
     private TransactionService(DbConnectionFactory connectionFactory, int? currentUserId)
         : this(
             new TransactionRepository(connectionFactory),
+            new TransactionPaymentRepository(connectionFactory),
             new FleetScheduleRepository(connectionFactory),
             new FleetScheduleService(
                 new FleetScheduleRepository(connectionFactory),
@@ -47,6 +50,7 @@ public sealed class TransactionService
 
     public TransactionService(
         TransactionRepository transactionRepository,
+        TransactionPaymentRepository transactionPaymentRepository,
         FleetScheduleRepository scheduleRepository,
         FleetScheduleService scheduleService,
         CarRepository carRepository,
@@ -56,6 +60,7 @@ public sealed class TransactionService
         int? currentUserId = null)
     {
         _transactionRepository = transactionRepository;
+        _transactionPaymentRepository = transactionPaymentRepository;
         _scheduleRepository = scheduleRepository;
         _scheduleService = scheduleService;
         _carRepository = carRepository;
@@ -149,6 +154,23 @@ public sealed class TransactionService
             }
 
             int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
+
+            if (request.AmountPaid > 0)
+            {
+                await _transactionPaymentRepository.AddAsync(
+                    new TransactionPayment
+                    {
+                        TransactionId = transactionId,
+                        PaymentDate = DateTime.Now,
+                        Amount = request.AmountPaid,
+                        ModeOfPayment = request.ModeOfPayment.Trim(),
+                        ReceiptFilePath = request.ReceiptFilePath,
+                        Notes = "Initial payment upon creation from reservation.",
+                        CreatedByUserId = _currentUserId
+                    },
+                    dbTransaction);
+            }
+
             await _activityLogService.LogAsync(
                 "Create transaction",
                 "Transaction",
@@ -209,6 +231,23 @@ public sealed class TransactionService
                 request.AmountPaid,
                 request.Notes);
             int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
+
+            if (request.AmountPaid > 0)
+            {
+                await _transactionPaymentRepository.AddAsync(
+                    new TransactionPayment
+                    {
+                        TransactionId = transactionId,
+                        PaymentDate = DateTime.Now,
+                        Amount = request.AmountPaid,
+                        ModeOfPayment = request.ModeOfPayment.Trim(),
+                        ReceiptFilePath = request.ReceiptFilePath,
+                        Notes = "Initial payment upon creation (walk-in).",
+                        CreatedByUserId = _currentUserId
+                    },
+                    dbTransaction);
+            }
+
             await _activityLogService.LogAsync(
                 "Create walk-in transaction",
                 "Transaction",
@@ -269,36 +308,65 @@ public sealed class TransactionService
         }
     }
 
-    public async Task UpdatePaymentAsync(UpdateTransactionPaymentRequest request, int currentUserId)
+    public async Task AddPaymentAsync(AddTransactionPaymentRequest request, int currentUserId)
     {
         Transaction transaction = await GetActiveTransactionAsync(request.TransactionId);
-        if (transaction.TransactionStatus is TransactionConstants.Status.Completed or TransactionConstants.Status.Cancelled)
+
+        if (transaction.TransactionStatus == TransactionConstants.Status.Cancelled)
         {
-            throw Validation(nameof(Transaction.TransactionStatus), "Completed or cancelled transactions are read-only.");
+            throw Validation(nameof(Transaction.TransactionStatus), "Cannot add payments to a cancelled transaction.");
         }
 
-        ValidatePaymentInputs(transaction.TotalAmount, request.AmountPaid, request.ModeOfPayment);
-        string paymentStatus = GetPaymentStatus(request.AmountPaid, transaction.TotalAmount);
-        decimal balanceAmount = transaction.TotalAmount - request.AmountPaid;
+        if (transaction.TransactionStatus == TransactionConstants.Status.Completed)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Cannot add payments to a completed transaction.");
+        }
+
+        if (request.Amount <= 0)
+        {
+            throw Validation(nameof(AddTransactionPaymentRequest.Amount), "Payment amount must be greater than 0.");
+        }
+
+        decimal currentTotalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(request.TransactionId);
+
+        if (currentTotalPaid + request.Amount > transaction.TotalAmount)
+        {
+            throw Validation(nameof(AddTransactionPaymentRequest.Amount), $"Payment amount exceeds the remaining balance. Remaining: ₱{transaction.TotalAmount - currentTotalPaid:N2}");
+        }
+
+        if (!TransactionConstants.ModeOfPayment.All.Contains(request.ModeOfPayment))
+        {
+            throw Validation(nameof(AddTransactionPaymentRequest.ModeOfPayment), "Mode of payment is invalid.");
+        }
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
+
         try
         {
-            await _transactionRepository.UpdatePaymentAsync(
-                request.TransactionId,
-                request.AmountPaid,
-                balanceAmount,
-                request.ModeOfPayment.Trim(),
-                paymentStatus,
-                string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-                dbTransaction);
+            TransactionPayment payment = new()
+            {
+                TransactionId = request.TransactionId,
+                PaymentDate = DateTime.Now,
+                Amount = request.Amount,
+                ModeOfPayment = request.ModeOfPayment.Trim(),
+                ReferenceNumber = string.IsNullOrWhiteSpace(request.ReferenceNumber) ? null : request.ReferenceNumber.Trim(),
+                ReceiptFilePath = request.ReceiptFilePath,
+                Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+                CreatedByUserId = currentUserId
+            };
+
+            await _transactionPaymentRepository.AddAsync(payment, dbTransaction);
+            await RecalculatePaymentSummaryAsync(request.TransactionId, dbTransaction);
+
             await _activityLogService.LogAsync(
-                "Update transaction payment",
+                "Add payment",
                 "Transaction",
                 request.TransactionId,
-                $"Updated payment for {transaction.TransactionCode}. Amount paid: {request.AmountPaid:C}.",
+                $"Added payment of ₱{request.Amount:N2} for {transaction.TransactionCode} via {request.ModeOfPayment}.",
                 currentUserId,
                 dbTransaction);
+
             dbTransaction.Commit();
         }
         catch
@@ -306,6 +374,31 @@ public sealed class TransactionService
             RollbackQuietly(dbTransaction);
             throw;
         }
+    }
+
+    public Task<IReadOnlyList<TransactionPaymentListItem>> GetPaymentsAsync(int transactionId)
+    {
+        return _transactionPaymentRepository.GetByTransactionIdAsync(transactionId);
+    }
+
+    public async Task RecalculatePaymentSummaryAsync(int transactionId, IDbTransaction? dbTransaction = null)
+    {
+        Transaction? transaction = await _transactionRepository.GetByIdAsync(transactionId, dbTransaction);
+
+        if (transaction is null)
+        {
+            return;
+        }
+
+        decimal totalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transactionId, dbTransaction);
+        string paymentStatus = GetPaymentStatus(totalPaid, transaction.TotalAmount);
+
+        await _transactionRepository.UpdatePaymentSummaryAsync(
+            transactionId,
+            totalPaid,
+            transaction.TotalAmount - totalPaid,
+            paymentStatus,
+            dbTransaction);
     }
 
     private async Task CompletePaidTransactionAsync(int transactionId, int currentUserId)

@@ -184,7 +184,8 @@ public sealed class CustomerRepository
                 UpdatedAt,
                 ArchivedAt
             FROM dbo.Customers
-            WHERE (
+            WHERE PhoneNumber <> N'00000000000'
+              AND (
                     (@Filter = 0 AND IsArchived = 0 AND IsBlacklisted = 0)
                     OR (@Filter = 1 AND IsArchived = 0 AND IsBlacklisted = 1)
                     OR (@Filter = 2 AND IsArchived = 1)
@@ -231,7 +232,8 @@ public sealed class CustomerRepository
                 ActiveCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 0 THEN 1 END),
                 BlacklistedCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 1 THEN 1 END),
                 ArchivedCustomers = COUNT(CASE WHEN IsArchived = 1 THEN 1 END)
-            FROM dbo.Customers;
+            FROM dbo.Customers
+            WHERE PhoneNumber <> N'00000000000';
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -264,6 +266,7 @@ public sealed class CustomerRepository
                 ArchivedAt
             FROM dbo.Customers
             WHERE IsArchived = 0
+              AND PhoneNumber <> N'00000000000'
             ORDER BY CreatedAt DESC, CustomerId DESC;
             """;
 

@@ -8,5 +8,6 @@ public sealed class CreateTransactionFromReservationRequest
     public decimal? DailyRate { get; set; }
     public decimal AmountPaid { get; set; }
     public string ModeOfPayment { get; set; } = string.Empty;
+    public string? ReceiptFilePath { get; set; }
     public string? Notes { get; set; }
 }

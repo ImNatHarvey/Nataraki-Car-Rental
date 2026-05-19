@@ -37,6 +37,15 @@ public static class UploadPathHelper
             DocumentExtensions);
     }
 
+    public static string? SavePaymentReceiptIfSelected(string? sourcePath, string? existingPath)
+    {
+        return SaveUploadedFileIfSelected(
+            sourcePath,
+            existingPath,
+            AppConstants.PaymentsUploadFolder,
+            DocumentExtensions);
+    }
+
     public static string? ResolveCarFilePath(string? storedPath)
     {
         return ResolveExistingFilePath(storedPath, AppConstants.CarsUploadFolder);
@@ -47,6 +56,11 @@ public static class UploadPathHelper
         return ResolveExistingFilePath(storedPath, AppConstants.CustomersUploadFolder);
     }
 
+    public static string? ResolvePaymentReceiptPath(string? storedPath)
+    {
+        return ResolveExistingFilePath(storedPath, AppConstants.PaymentsUploadFolder);
+    }
+
     public static void DeleteNewCarUploadIfSaveFailed(string? storedPath, string? previousPath)
     {
         DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.CarsUploadFolder);
@@ -55,6 +69,11 @@ public static class UploadPathHelper
     public static void DeleteNewCustomerUploadIfSaveFailed(string? storedPath, string? previousPath)
     {
         DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.CustomersUploadFolder);
+    }
+
+    public static void DeleteNewPaymentReceiptIfSaveFailed(string? storedPath, string? previousPath)
+    {
+        DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.PaymentsUploadFolder);
     }
 
     private static string? SaveUploadedFileIfSelected(

@@ -575,7 +575,65 @@ public static class DatabaseInitializer
             END;
             """);
 
-        // 8. Customers Schema Updates
+        // 8. Transaction Payments Ledger
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.TransactionPayments
+                (
+                    TransactionPaymentId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    TransactionId int NOT NULL,
+                    PaymentDate datetime2 NOT NULL DEFAULT sysdatetime(),
+                    Amount decimal(18,2) NOT NULL,
+                    ModeOfPayment nvarchar(30) NOT NULL,
+                    ReferenceNumber nvarchar(100) NULL,
+                    ReceiptFilePath nvarchar(500) NULL,
+                    Notes nvarchar(300) NULL,
+                    CreatedByUserId int NULL,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
+                    IsArchived bit NOT NULL DEFAULT 0,
+                    CONSTRAINT FK_TransactionPayments_Transactions FOREIGN KEY (TransactionId) REFERENCES dbo.Transactions(TransactionId),
+                    CONSTRAINT FK_TransactionPayments_Users FOREIGN KEY (CreatedByUserId) REFERENCES dbo.Users(UserId),
+                    CONSTRAINT CK_TransactionPayments_Amount_Positive CHECK (Amount > 0),
+                    CONSTRAINT CK_TransactionPayments_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'))
+                );
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
+            BEGIN
+                -- Migrate existing AmountPaid from Transactions to TransactionPayments if no non-archived payments exist yet.
+                INSERT INTO dbo.TransactionPayments
+                (
+                    TransactionId,
+                    PaymentDate,
+                    Amount,
+                    ModeOfPayment,
+                    Notes,
+                    CreatedByUserId,
+                    CreatedAt
+                )
+                SELECT
+                    transactions.TransactionId,
+                    transactions.CreatedAt,
+                    transactions.AmountPaid,
+                    transactions.ModeOfPayment,
+                    N'Migrated initial payment',
+                    transactions.CreatedByUserId,
+                    transactions.CreatedAt
+                FROM dbo.Transactions AS transactions
+                WHERE transactions.AmountPaid > 0
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.TransactionPayments AS payments
+                    WHERE payments.TransactionId = transactions.TransactionId
+                      AND payments.IsArchived = 0
+                  );
+            END;
+            """);
+
+        // 9. Customers Schema Updates
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
             BEGIN
@@ -887,6 +945,42 @@ public static class DatabaseInitializer
             BEGIN
                 CREATE NONCLUSTERED INDEX IX_Transactions_IsArchived_CreatedAt
                 ON dbo.Transactions (IsArchived, CreatedAt DESC);
+            END;
+
+            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_TransactionPayments_TransactionId'
+                      AND object_id = OBJECT_ID(N'dbo.TransactionPayments')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_TransactionPayments_TransactionId
+                ON dbo.TransactionPayments (TransactionId);
+            END;
+
+            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_TransactionPayments_PaymentDate'
+                      AND object_id = OBJECT_ID(N'dbo.TransactionPayments')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_TransactionPayments_PaymentDate
+                ON dbo.TransactionPayments (PaymentDate DESC);
+            END;
+
+            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_TransactionPayments_IsArchived'
+                      AND object_id = OBJECT_ID(N'dbo.TransactionPayments')
+               )
+            BEGIN
+                CREATE NONCLUSTERED INDEX IX_TransactionPayments_IsArchived
+                ON dbo.TransactionPayments (IsArchived);
             END;
             """);
     }

@@ -9,6 +9,7 @@ public sealed class CreateWalkInTransactionRequest
     public decimal? DailyRate { get; set; }
     public decimal AmountPaid { get; set; }
     public string ModeOfPayment { get; set; } = string.Empty;
+    public string? ReceiptFilePath { get; set; }
     public string? WalkInFirstName { get; set; }
     public string? WalkInLastName { get; set; }
     public string? Notes { get; set; }

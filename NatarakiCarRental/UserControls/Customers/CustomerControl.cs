@@ -23,6 +23,11 @@ public sealed class CustomerControl : UserControl
     private readonly DataGridView _customersGrid = new();
     private readonly Label _emptyStateLabel = new();
     private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
+    private int _currentPage = 1;
+    private int _pageSize = 15;
+    private readonly Label _paginationLabel = new();
+    private readonly Button _prevPageButton = CreatePaginationButton("Previous");
+    private readonly Button _nextPageButton = CreatePaginationButton("Next");
 
     private CustomerListFilter _filter = CustomerListFilter.Active;
 
@@ -36,6 +41,22 @@ public sealed class CustomerControl : UserControl
         Load += CustomerControl_Load;
     }
 
+    private static Button CreatePaginationButton(string text)
+    {
+        Button button = new()
+        {
+            Text = text,
+            Size = new Size(80, 32),
+            BackColor = ThemeHelper.Surface,
+            ForeColor = ThemeHelper.TextPrimary,
+            Font = FontHelper.SemiBold(9F),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderColor = ThemeHelper.Border;
+        return button;
+    }
+
     private void InitializeControl()
     {
         BackColor = ThemeHelper.ContentBackground;
@@ -46,7 +67,7 @@ public sealed class CustomerControl : UserControl
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 6
         };
 
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
@@ -54,14 +75,48 @@ public sealed class CustomerControl : UserControl
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
 
         mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
         mainLayout.Controls.Add(CreateMetricGrid(), 0, 1);
         mainLayout.Controls.Add(CreateActionBarPanel(), 0, 2);
         mainLayout.Controls.Add(CreateSearchPanel(), 0, 3);
         mainLayout.Controls.Add(CreateTablePanel(), 0, 4);
+        mainLayout.Controls.Add(CreatePaginationPanel(), 0, 5);
 
         Controls.Add(mainLayout);
+    }
+
+    private Panel CreatePaginationPanel()
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+        _prevPageButton.Location = new Point(0, 8);
+        _prevPageButton.Click += async (_, _) =>
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                await LoadCustomersAsync();
+            }
+        };
+        _nextPageButton.Location = new Point(90, 8);
+        _nextPageButton.Click += async (_, _) =>
+        {
+            _currentPage++;
+            await LoadCustomersAsync();
+        };
+
+        _paginationLabel.AutoSize = false;
+        _paginationLabel.Location = new Point(180, 8);
+        _paginationLabel.Size = new Size(200, 32);
+        _paginationLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _paginationLabel.Font = FontHelper.Regular(9.5F);
+        _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
+
+        panel.Controls.Add(_prevPageButton);
+        panel.Controls.Add(_nextPageButton);
+        panel.Controls.Add(_paginationLabel);
+        return panel;
     }
 
     private static Panel CreateHeaderPanel()
@@ -203,9 +258,10 @@ public sealed class CustomerControl : UserControl
         _searchTextBox.Font = FontHelper.Regular(10F);
         _searchTextBox.ForeColor = ThemeHelper.TextPrimary;
         _searchTextBox.Location = new Point(34, 7);
-        _searchTextBox.Width = 216;
+        _searchTextBox.Width = 196;
         _searchTextBox.TextChanged += (_, _) =>
         {
+            _currentPage = 1;
             _searchTimer.Stop();
             _searchTimer.Start();
         };
@@ -361,19 +417,23 @@ public sealed class CustomerControl : UserControl
 
     private async Task SwitchFilterAsync(CustomerListFilter filter)
     {
+        _currentPage = 1;
         _filter = filter;
         await LoadCustomersAsync();
     }
+
+    private int _lastHeight;
 
     private async Task LoadCustomersAsync()
     {
         try
         {
+            _pageSize = Height > 700 ? 15 : 5;
             UpdateTabStyles();
             CustomerCounts counts = await _customerService.GetCustomerCountsAsync();
             UpdateMetricCards(counts);
-            IReadOnlyList<Customer> customers = await _customerService.SearchCustomersAsync(_searchTextBox.Text, _filter);
-            PopulateGrid(customers);
+            IReadOnlyList<Customer> allCustomers = await _customerService.SearchCustomersAsync(_searchTextBox.Text, _filter);
+            PopulateGrid(allCustomers);
         }
         catch (Exception exception)
         {
@@ -384,6 +444,15 @@ public sealed class CustomerControl : UserControl
     private async void CustomerControl_Load(object? sender, EventArgs e)
     {
         Load -= CustomerControl_Load;
+        _lastHeight = Height;
+        Resize += async (_, _) =>
+        {
+            if (Math.Abs(Height - _lastHeight) > 50)
+            {
+                _lastHeight = Height;
+                await LoadCustomersAsync();
+            }
+        };
         await LoadCustomersAsync();
     }
 
@@ -395,12 +464,22 @@ public sealed class CustomerControl : UserControl
         _archivedCustomersCard.SetMetric(IconChar.BoxArchive, "Archived Customers", counts.ArchivedCustomers.ToString(), "Hidden records", ThemeHelper.GrayIcon);
     }
 
-    private void PopulateGrid(IReadOnlyList<Customer> customers)
+    private void PopulateGrid(IReadOnlyList<Customer> allCustomers)
     {
         AddGridColumns();
         _customersGrid.Rows.Clear();
 
-        foreach (Customer customer in customers)
+        int totalItems = allCustomers.Count;
+        int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
+        if (_currentPage > totalPages) _currentPage = totalPages;
+        
+        _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({totalItems} records)";
+        _prevPageButton.Enabled = _currentPage > 1;
+        _nextPageButton.Enabled = _currentPage < totalPages;
+
+        var pagedCustomers = allCustomers.Skip((_currentPage - 1) * _pageSize).Take(_pageSize);
+
+        foreach (Customer customer in pagedCustomers)
         {
             _customersGrid.Rows.Add(
                 customer.CustomerId,
@@ -412,7 +491,7 @@ public sealed class CustomerControl : UserControl
                 customer.BlacklistReason ?? "-");
         }
 
-        _emptyStateLabel.Visible = customers.Count == 0;
+        _emptyStateLabel.Visible = totalItems == 0;
     }
 
     private static string GetStatusText(Customer customer)

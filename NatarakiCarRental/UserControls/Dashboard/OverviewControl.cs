@@ -4,11 +4,13 @@ using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
 using NatarakiCarRental.UserControls.Cards;
 using FleetScheduleModel = NatarakiCarRental.Models.FleetSchedule;
+using System.Globalization;
 
 namespace NatarakiCarRental.UserControls.Dashboard;
 
 public sealed class OverviewControl : UserControl
 {
+    private static readonly CultureInfo PhilippineCulture = new("en-PH");
     private const int RecentItemLimit = 5;
     private readonly CarService _carService = new();
     private readonly CustomerService _customerService = new();
@@ -342,7 +344,7 @@ public sealed class OverviewControl : UserControl
                 transaction.TransactionCode,
                 transaction.CustomerName,
                 $"{transaction.CarName} ({transaction.PlateNumber})",
-                transaction.TotalAmount.ToString("C"),
+                transaction.TotalAmount.ToString("C", PhilippineCulture),
                 transaction.TransactionStatus);
         }
 

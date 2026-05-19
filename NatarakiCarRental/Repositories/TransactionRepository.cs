@@ -301,22 +301,18 @@ public sealed class TransactionRepository
         }
     }
 
-    public async Task<int> UpdatePaymentAsync(
+    public async Task<int> UpdatePaymentSummaryAsync(
         int transactionId,
         decimal amountPaid,
         decimal balanceAmount,
-        string modeOfPayment,
         string paymentStatus,
-        string? notes,
         IDbTransaction? dbTransaction = null)
     {
         const string sql = """
             UPDATE dbo.Transactions
             SET AmountPaid = @AmountPaid,
                 BalanceAmount = @BalanceAmount,
-                ModeOfPayment = @ModeOfPayment,
                 PaymentStatus = @PaymentStatus,
-                Notes = @Notes,
                 UpdatedAt = sysdatetime()
             WHERE TransactionId = @TransactionId
               AND IsArchived = 0;
@@ -326,7 +322,7 @@ public sealed class TransactionRepository
         {
             return await connection.ExecuteAsync(
                 sql,
-                new { TransactionId = transactionId, AmountPaid = amountPaid, BalanceAmount = balanceAmount, ModeOfPayment = modeOfPayment, PaymentStatus = paymentStatus, Notes = notes },
+                new { TransactionId = transactionId, AmountPaid = amountPaid, BalanceAmount = balanceAmount, PaymentStatus = paymentStatus },
                 dbTransaction);
         }
         finally

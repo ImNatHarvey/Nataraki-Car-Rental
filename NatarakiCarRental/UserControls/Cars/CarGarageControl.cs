@@ -27,6 +27,11 @@ public sealed class CarGarageControl : UserControl
     private readonly DataGridView _carsGrid = new();
     private readonly Label _emptyStateLabel = new();
     private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
+    private int _currentPage = 1;
+    private int _pageSize = 15;
+    private readonly Label _paginationLabel = new();
+    private readonly Button _prevPageButton = CreatePaginationButton("Previous");
+    private readonly Button _nextPageButton = CreatePaginationButton("Next");
 
     private bool _showArchived;
 
@@ -40,6 +45,22 @@ public sealed class CarGarageControl : UserControl
         Load += CarGarageControl_Load;
     }
 
+    private static Button CreatePaginationButton(string text)
+    {
+        Button button = new()
+        {
+            Text = text,
+            Size = new Size(80, 32),
+            BackColor = ThemeHelper.Surface,
+            ForeColor = ThemeHelper.TextPrimary,
+            Font = FontHelper.SemiBold(9F),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderColor = ThemeHelper.Border;
+        return button;
+    }
+
     private void InitializeControl()
     {
         BackColor = ThemeHelper.ContentBackground;
@@ -50,7 +71,7 @@ public sealed class CarGarageControl : UserControl
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 6
         };
 
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
@@ -58,14 +79,48 @@ public sealed class CarGarageControl : UserControl
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
 
         mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
         mainLayout.Controls.Add(CreateMetricGrid(), 0, 1);
         mainLayout.Controls.Add(CreateActionBarPanel(), 0, 2);
         mainLayout.Controls.Add(CreateSearchPanel(), 0, 3);
         mainLayout.Controls.Add(CreateTablePanel(), 0, 4);
+        mainLayout.Controls.Add(CreatePaginationPanel(), 0, 5);
 
         Controls.Add(mainLayout);
+    }
+
+    private Panel CreatePaginationPanel()
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+        _prevPageButton.Location = new Point(0, 8);
+        _prevPageButton.Click += async (_, _) =>
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                await LoadCarsAsync();
+            }
+        };
+        _nextPageButton.Location = new Point(90, 8);
+        _nextPageButton.Click += async (_, _) =>
+        {
+            _currentPage++;
+            await LoadCarsAsync();
+        };
+
+        _paginationLabel.AutoSize = false;
+        _paginationLabel.Location = new Point(180, 8);
+        _paginationLabel.Size = new Size(200, 32);
+        _paginationLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _paginationLabel.Font = FontHelper.Regular(9.5F);
+        _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
+
+        panel.Controls.Add(_prevPageButton);
+        panel.Controls.Add(_nextPageButton);
+        panel.Controls.Add(_paginationLabel);
+        return panel;
     }
 
     private static Panel CreateHeaderPanel()
@@ -217,6 +272,7 @@ public sealed class CarGarageControl : UserControl
         _searchTextBox.Width = 196;
         _searchTextBox.TextChanged += (_, _) =>
         {
+            _currentPage = 1;
             _searchTimer.Stop();
             _searchTimer.Start();
         };
@@ -397,10 +453,28 @@ public sealed class CarGarageControl : UserControl
         }
     }
 
+    private int _lastHeight;
+
+    private async void CarGarageControl_Load(object? sender, EventArgs e)
+    {
+        Load -= CarGarageControl_Load;
+        _lastHeight = Height;
+        Resize += async (_, _) =>
+        {
+            if (Math.Abs(Height - _lastHeight) > 50)
+            {
+                _lastHeight = Height;
+                await LoadCarsAsync();
+            }
+        };
+        await LoadCarsAsync();
+    }
+
     private async Task LoadCarsAsync()
     {
         try
         {
+            _pageSize = Height > 700 ? 15 : 5;
             UpdateTabStyles();
 
             CarCounts counts = await _carService.GetCarCountsAsync();
@@ -422,12 +496,6 @@ public sealed class CarGarageControl : UserControl
         }
     }
 
-    private async void CarGarageControl_Load(object? sender, EventArgs e)
-    {
-        Load -= CarGarageControl_Load;
-        await LoadCarsAsync();
-    }
-
     private void UpdateMetricCards(CarCounts counts)
     {
         _totalCarsCard.SetMetric(IconChar.Car, "Total Cars", counts.TotalCars.ToString(), "All active vehicles", ThemeHelper.Primary);
@@ -436,12 +504,22 @@ public sealed class CarGarageControl : UserControl
         _archivedCarsCard.SetMetric(IconChar.BoxArchive, "Archived Cars", counts.ArchivedCars.ToString(), "Hidden from active list", ThemeHelper.GrayIcon);
     }
 
-    private void PopulateGrid(IReadOnlyList<Car> cars)
+    private void PopulateGrid(IReadOnlyList<Car> allCars)
     {
         AddGridColumns();
         _carsGrid.Rows.Clear();
 
-        foreach (Car car in cars)
+        int totalItems = allCars.Count;
+        int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
+        if (_currentPage > totalPages) _currentPage = totalPages;
+        
+        _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({totalItems} records)";
+        _prevPageButton.Enabled = _currentPage > 1;
+        _nextPageButton.Enabled = _currentPage < totalPages;
+
+        var pagedCars = allCars.Skip((_currentPage - 1) * _pageSize).Take(_pageSize);
+
+        foreach (Car car in pagedCars)
         {
             string codingDayDisplay = string.IsNullOrWhiteSpace(car.CodingDay) ? "-" :
                 (car.CodingDay.StartsWith("None", StringComparison.OrdinalIgnoreCase) ? "None" : car.CodingDay);
@@ -456,7 +534,7 @@ public sealed class CarGarageControl : UserControl
                 car.Status);
         }
 
-        _emptyStateLabel.Visible = cars.Count == 0;
+        _emptyStateLabel.Visible = totalItems == 0;
     }
 
     private void UpdateTabStyles()
