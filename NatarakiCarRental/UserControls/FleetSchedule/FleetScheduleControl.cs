@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using FontAwesome.Sharp;
 using NatarakiCarRental.Forms.FleetSchedule;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
@@ -105,7 +106,7 @@ public sealed class FleetScheduleControl : UserControl
             await LoadBoardAsync();
         };
 
-        Button addButton = ControlFactory.CreatePrimaryButton("Add Schedule", 132, 36);
+        IconButton addButton = CreatePrimaryIconButton("Add Schedule", IconChar.CalendarPlus, 142, 36);
         addButton.Location = new Point(390, 9);
         addButton.Click += async (_, _) => await OpenAddFormAsync(null, null);
 
@@ -303,6 +304,27 @@ public sealed class FleetScheduleControl : UserControl
             Cursor = Cursors.Hand
         };
         button.FlatAppearance.BorderColor = ThemeHelper.Border;
+        return button;
+    }
+
+    private static IconButton CreatePrimaryIconButton(string text, IconChar icon, int width, int height)
+    {
+        IconButton button = new()
+        {
+            Text = text,
+            IconChar = icon,
+            IconColor = Color.White,
+            IconSize = 14,
+            Size = new Size(width, height),
+            BackColor = ThemeHelper.Primary,
+            ForeColor = Color.White,
+            Font = FontHelper.SemiBold(9F),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            TextImageRelation = TextImageRelation.ImageBeforeText
+        };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = ThemeHelper.PrimaryHover;
         return button;
     }
 

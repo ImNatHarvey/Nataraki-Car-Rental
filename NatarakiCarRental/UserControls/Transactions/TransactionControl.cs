@@ -38,7 +38,7 @@ public sealed class TransactionControl : UserControl
     {
         _currentUserId = currentUserId;
         _transactionService = new TransactionService(currentUserId);
-        _addTransactionButton = ControlFactory.CreatePrimaryButton("Add Transaction", 146, 36);
+        _addTransactionButton = CreatePrimaryIconButton("Add Transaction", IconChar.Plus, 158, 36);
         InitializeControl();
         Load += TransactionControl_Load;
     }
@@ -272,7 +272,7 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.AllowUserToResizeRows = false;
         _transactionsGrid.AllowUserToResizeColumns = false;
         _transactionsGrid.ScrollBars = ScrollBars.Both;
-        _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _transactionsGrid.BackgroundColor = ThemeHelper.Surface;
         _transactionsGrid.BorderStyle = BorderStyle.None;
         _transactionsGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
@@ -328,24 +328,24 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.Columns.Add(actionsColumn);
 
         _transactionsGrid.Columns["TransactionId"]!.Visible = false;
-        SetColumnWidth("TransactionCode", 150);
-        SetColumnWidth("Customer", 170);
-        SetColumnWidth("CarPlate", 180);
-        SetColumnWidth("Dates", 130);
-        SetColumnWidth("TotalAmount", 116);
-        SetColumnWidth("AmountPaid", 116);
-        SetColumnWidth("Balance", 110);
-        SetColumnWidth("Payment", 116);
-        SetColumnWidth("Status", 126);
-        SetColumnWidth("Actions", 330);
+        SetColumnSizing("TransactionCode", 145, 105);
+        SetColumnSizing("Customer", 150, 110);
+        SetColumnSizing("CarPlate", 165, 120);
+        SetColumnSizing("Dates", 118, 95);
+        SetColumnSizing("TotalAmount", 106, 86);
+        SetColumnSizing("AmountPaid", 96, 78);
+        SetColumnSizing("Balance", 96, 78);
+        SetColumnSizing("Payment", 104, 86);
+        SetColumnSizing("Status", 100, 82);
+        SetColumnSizing("Actions", 286, 230);
     }
 
-    private void SetColumnWidth(string columnName, int width)
+    private void SetColumnSizing(string columnName, float fillWeight, int minimumWidth)
     {
         if (_transactionsGrid.Columns[columnName] is DataGridViewColumn column)
         {
-            column.Width = width;
-            column.MinimumWidth = Math.Min(width, 90);
+            column.FillWeight = fillWeight;
+            column.MinimumWidth = minimumWidth;
         }
     }
 
@@ -443,6 +443,27 @@ public sealed class TransactionControl : UserControl
     }
 
     private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
+
+    private static IconButton CreatePrimaryIconButton(string text, IconChar icon, int width, int height)
+    {
+        IconButton button = new()
+        {
+            Text = text,
+            IconChar = icon,
+            IconColor = Color.White,
+            IconSize = 14,
+            Size = new Size(width, height),
+            BackColor = ThemeHelper.Primary,
+            ForeColor = Color.White,
+            Font = FontHelper.SemiBold(9F),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            TextImageRelation = TextImageRelation.ImageBeforeText
+        };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = ThemeHelper.PrimaryHover;
+        return button;
+    }
 
     private void TransactionsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
     {

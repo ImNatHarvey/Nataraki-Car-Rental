@@ -170,6 +170,7 @@ public sealed class TransactionService
                         CreatedByUserId = _currentUserId
                     },
                     dbTransaction);
+                await RecalculatePaymentSummaryAsync(transactionId, dbTransaction);
             }
 
             await _activityLogService.LogAsync(
@@ -247,6 +248,7 @@ public sealed class TransactionService
                         CreatedByUserId = _currentUserId
                     },
                     dbTransaction);
+                await RecalculatePaymentSummaryAsync(transactionId, dbTransaction);
             }
 
             await _activityLogService.LogAsync(

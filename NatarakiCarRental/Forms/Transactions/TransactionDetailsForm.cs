@@ -1,5 +1,6 @@
 using FluentValidation;
 using FluentValidation.Results;
+using System.Diagnostics;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
@@ -53,7 +54,6 @@ public sealed class TransactionDetailsForm : Form
     private readonly Panel _addPaymentPanel = new();
     private readonly NumericUpDown _newPaymentAmountInput = CreateMoneyInput();
     private readonly ComboBox _newPaymentModeComboBox = CreateComboBox();
-    private readonly TextBox _newPaymentReferenceTextBox = ControlFactory.CreateTextBox();
     private readonly TextBox _newPaymentNotesTextBox = new()
     {
         Width = 250,
@@ -62,7 +62,12 @@ public sealed class TransactionDetailsForm : Form
         ScrollBars = ScrollBars.Vertical,
         Font = FontHelper.Regular(10F)
     };
-    private readonly Button _uploadProofButton = CreateSecondaryButton("Upload Proof", 130, 30);
+    private readonly Label _initialProofPathLabel = CreatePathLabel();
+    private readonly Label _paymentProofPathLabel = CreatePathLabel();
+    private readonly Button _initialProofBrowseButton = CreateSecondaryButton("Browse", 90, 30);
+    private readonly Button _initialProofOpenButton = CreateSecondaryButton("Open File", 90, 30);
+    private readonly Button _paymentProofBrowseButton = CreateSecondaryButton("Browse", 90, 30);
+    private readonly Button _paymentProofOpenButton = CreateSecondaryButton("Open File", 90, 30);
     private readonly Button _submitPaymentButton = ControlFactory.CreatePrimaryButton("Submit Payment", 148, 38);
     private string? _selectedReceiptSourcePath;
     private IReadOnlyList<FleetScheduleModel> _eligibleReservations = [];
@@ -112,7 +117,7 @@ public sealed class TransactionDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(900, 820);
+        ClientSize = new Size(1060, 880);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -132,7 +137,7 @@ public sealed class TransactionDetailsForm : Form
 
         _validationLabel.AutoSize = false;
         _validationLabel.Location = new Point(34, 66);
-        _validationLabel.Size = new Size(820, 24);
+        _validationLabel.Size = new Size(996, 24);
         _validationLabel.Font = FontHelper.SemiBold(9F);
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
@@ -155,59 +160,47 @@ public sealed class TransactionDetailsForm : Form
 
     private void CreateAddLayout()
     {
-        _flowTabs.Location = new Point(32, 98);
-        _flowTabs.Size = new Size(836, 390);
+        _flowTabs.Dock = DockStyle.Fill;
         _flowTabs.Font = FontHelper.SemiBold(9F);
         _flowTabs.TabPages.Add(CreateReservationTab());
         _flowTabs.TabPages.Add(CreateWalkInTab());
+        GroupBox rentalSection = CreateSection("Rental Information", _flowTabs);
+        rentalSection.Location = new Point(32, 98);
+        rentalSection.Size = new Size(996, 400);
+        rentalSection.Dock = DockStyle.None;
 
         _modeOfPaymentComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All.Cast<object>().ToArray());
         _modeOfPaymentComboBox.SelectedItem = TransactionConstants.ModeOfPayment.Cash;
 
-        _uploadProofButton.Click -= UploadProofButton_Click; // Clear if re-called
-        _uploadProofButton.Click += UploadProofButton_Click;
-        _uploadProofButton.Visible = false;
-
-        _modeOfPaymentComboBox.SelectedIndexChanged += (_, _) =>
-        {
-            string mode = GetSelectedText(_modeOfPaymentComboBox);
-            _uploadProofButton.Visible = mode is TransactionConstants.ModeOfPayment.GCash or TransactionConstants.ModeOfPayment.BankTransfer or TransactionConstants.ModeOfPayment.Other;
-        };
+        ConfigureProofPicker(_initialProofBrowseButton, _initialProofOpenButton, _initialProofPathLabel);
         _amountPaidInput.ValueChanged += (_, _) => UpdateBalanceLabel();
 
         TableLayoutPanel footerLayout = new()
         {
-            Location = new Point(32, 506),
-            Size = new Size(836, 214),
+            Location = new Point(32, 514),
+            Size = new Size(996, 250),
             ColumnCount = 2,
-            RowCount = 3
+            RowCount = 2
         };
         footerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         footerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
-        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 108F));
-        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+        footerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 132F));
 
-        footerLayout.Controls.Add(CreateInputPanel("Mode of Payment *", _modeOfPaymentComboBox), 0, 0);
-        footerLayout.Controls.Add(CreateInputPanel("Amount Paid *", _amountPaidInput), 1, 0);
-        footerLayout.Controls.Add(CreateInputPanel("Notes", _notesTextBox), 0, 1);
+        footerLayout.Controls.Add(CreateSection("Payment Information", CreateInitialPaymentLayout()), 0, 0);
+        footerLayout.SetColumnSpan(footerLayout.GetControlFromPosition(0, 0)!, 2);
+        footerLayout.Controls.Add(CreateSection("Notes", CreateNotesLayout()), 0, 1);
         footerLayout.SetColumnSpan(footerLayout.GetControlFromPosition(0, 1)!, 2);
 
-        Panel proofPanel = new() { Dock = DockStyle.Fill };
-        _uploadProofButton.Location = new Point(0, 6);
-        proofPanel.Controls.Add(_uploadProofButton);
-        footerLayout.Controls.Add(proofPanel, 0, 2);
-        footerLayout.SetColumnSpan(proofPanel, 2);
-
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(582, 760);
+        cancelButton.Location = new Point(756, 800);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton("Create Transaction", 164, 38);
-        saveButton.Location = new Point(704, 760);
+        saveButton.Location = new Point(888, 800);
         saveButton.Click += SaveButton_Click;
 
-        Controls.Add(_flowTabs);
+        Controls.Add(rentalSection);
         Controls.Add(footerLayout);
         Controls.Add(cancelButton);
         Controls.Add(saveButton);
@@ -215,12 +208,34 @@ public sealed class TransactionDetailsForm : Form
         CancelButton = cancelButton;
     }
 
+    private TableLayoutPanel CreateInitialPaymentLayout()
+    {
+        TableLayoutPanel layout = CreateGrid(2, 1);
+        TableLayoutPanel paymentFields = CreateGrid(2, 1);
+        paymentFields.Controls.Add(CreateInputPanel("Mode of Payment *", _modeOfPaymentComboBox), 0, 0);
+        paymentFields.Controls.Add(CreateInputPanel("Amount Paid *", _amountPaidInput), 1, 0);
+        layout.Controls.Add(paymentFields, 0, 0);
+        layout.Controls.Add(CreateProofPickerPanel("Payment Proof", _initialProofPathLabel, _initialProofBrowseButton, _initialProofOpenButton), 1, 0);
+        return layout;
+    }
+
+    private Panel CreateNotesLayout()
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        _notesTextBox.Width = 930;
+        _notesTextBox.Height = 78;
+        _notesTextBox.Location = new Point(0, 0);
+        panel.Controls.Add(_notesTextBox);
+        return panel;
+    }
+
     private TabPage CreateReservationTab()
     {
         TabPage tab = new("Create from Reservation") { BackColor = ThemeHelper.Surface };
+        _reservationComboBox.Width = 920;
         tab.Controls.Add(CreateInputPanel("Eligible Reservation *", _reservationComboBox, new Point(18, 18)));
         _reservationSummaryLabel.Location = new Point(18, 94);
-        _reservationSummaryLabel.Size = new Size(780, 210);
+        _reservationSummaryLabel.Size = new Size(920, 230);
         _reservationSummaryLabel.Text = "Select a pending or reserved reservation to view its details.";
         tab.Controls.Add(_reservationSummaryLabel);
         _reservationComboBox.SelectedIndexChanged += (_, _) => UpdateReservationSummary();
@@ -233,16 +248,17 @@ public sealed class TransactionDetailsForm : Form
         TableLayoutPanel layout = new()
         {
             Location = new Point(18, 18),
-            Size = new Size(780, 300),
+            Size = new Size(920, 330),
             ColumnCount = 2,
-            RowCount = 4
+            RowCount = 5
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        for (int row = 0; row < 4; row++)
-        {
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
-        }
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
 
         layout.Controls.Add(CreateInputPanel("Customer", _walkInCustomerComboBox), 0, 0);
         layout.Controls.Add(CreateInputPanel("Car *", _walkInCarComboBox), 1, 0);
@@ -254,17 +270,18 @@ public sealed class TransactionDetailsForm : Form
         _walkInTotalLabel.BackColor = ThemeHelper.Surface;
         _walkInTotalLabel.Padding = new Padding(0, 2, 0, 0);
         layout.Controls.Add(CreateInputPanel("Rental Summary", _walkInTotalLabel), 1, 2);
-        Panel walkInNamePanel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
-        _useWalkInCustomerCheckBox.Location = new Point(0, 4);
-        _walkInFirstNameTextBox.Location = new Point(0, 32);
+        Panel checkboxPanel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        _useWalkInCustomerCheckBox.Location = new Point(0, 6);
+        checkboxPanel.Controls.Add(_useWalkInCustomerCheckBox);
+        layout.Controls.Add(checkboxPanel, 0, 3);
+        layout.SetColumnSpan(checkboxPanel, 2);
+
+        _walkInFirstNameTextBox.Width = 280;
+        _walkInLastNameTextBox.Width = 280;
         _walkInFirstNameTextBox.PlaceholderText = "First name";
-        _walkInLastNameTextBox.Location = new Point(290, 32);
         _walkInLastNameTextBox.PlaceholderText = "Last name";
-        walkInNamePanel.Controls.Add(_useWalkInCustomerCheckBox);
-        walkInNamePanel.Controls.Add(_walkInFirstNameTextBox);
-        walkInNamePanel.Controls.Add(_walkInLastNameTextBox);
-        layout.Controls.Add(walkInNamePanel, 0, 3);
-        layout.SetColumnSpan(walkInNamePanel, 2);
+        layout.Controls.Add(CreateInputPanel("First Name", _walkInFirstNameTextBox), 0, 4);
+        layout.Controls.Add(CreateInputPanel("Last Name", _walkInLastNameTextBox), 1, 4);
         tab.Controls.Add(layout);
 
         _walkInCarComboBox.SelectedIndexChanged += (_, _) => ApplySelectedCarRate();
@@ -284,15 +301,15 @@ public sealed class TransactionDetailsForm : Form
         if (_transaction?.TransactionStatus == TransactionConstants.Status.Active)
         {
             CreateAddPaymentSection();
-            _submitPaymentButton.Location = new Point(718, 760);
+            _submitPaymentButton.Location = new Point(880, 800);
             _submitPaymentButton.Click += AddPaymentButton_Click;
             Controls.Add(_submitPaymentButton);
         }
 
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
         closeButton.Location = _transaction?.TransactionStatus == TransactionConstants.Status.Active
-            ? new Point(596, 760)
-            : new Point(758, 760);
+            ? new Point(758, 800)
+            : new Point(918, 800);
         closeButton.Click += (_, _) => Close();
         Controls.Add(closeButton);
         CancelButton = closeButton;
@@ -304,7 +321,7 @@ public sealed class TransactionDetailsForm : Form
         CreatePaymentsGrid();
 
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
-        closeButton.Location = new Point(758, 760);
+        closeButton.Location = new Point(918, 800);
         closeButton.DialogResult = DialogResult.Cancel;
         Controls.Add(closeButton);
         CancelButton = closeButton;
@@ -312,8 +329,7 @@ public sealed class TransactionDetailsForm : Form
 
     private void CreateCommonDetailsLayout()
     {
-        _viewLayout.Location = new Point(32, 90);
-        _viewLayout.Size = new Size(836, 302);
+        _viewLayout.Dock = DockStyle.Fill;
         _viewLayout.ColumnCount = 2;
         _viewLayout.RowCount = 6;
         _viewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -322,22 +338,22 @@ public sealed class TransactionDetailsForm : Form
         {
             _viewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
         }
-        Controls.Add(_viewLayout);
+        GroupBox detailsSection = CreateSection("Transaction Information", _viewLayout);
+        detailsSection.Location = new Point(32, 90);
+        detailsSection.Size = new Size(996, 292);
+        detailsSection.Dock = DockStyle.None;
+        Controls.Add(detailsSection);
     }
 
     private void CreatePaymentsGrid()
     {
-        Label label = new()
+        Panel paymentPanel = new()
         {
-            Text = "Payment History",
-            AutoSize = true,
-            Location = new Point(32, 404),
-            Font = FontHelper.SemiBold(11F),
-            ForeColor = ThemeHelper.TextPrimary
+            Dock = DockStyle.Fill,
+            BackColor = ThemeHelper.Surface
         };
 
-        _paymentsGrid.Location = new Point(32, 434);
-        _paymentsGrid.Size = new Size(836, 158);
+        _paymentsGrid.Dock = DockStyle.Fill;
         _paymentsGrid.AllowUserToAddRows = false;
         _paymentsGrid.AllowUserToDeleteRows = false;
         _paymentsGrid.AllowUserToResizeRows = false;
@@ -355,8 +371,8 @@ public sealed class TransactionDetailsForm : Form
         _paymentsGrid.Columns.Add("Date", "Date");
         _paymentsGrid.Columns.Add("Amount", "Amount");
         _paymentsGrid.Columns.Add("Mode", "Mode");
-        _paymentsGrid.Columns.Add("Reference", "Reference #");
         _paymentsGrid.Columns.Add("Notes", "Notes");
+        _paymentsGrid.Columns.Add("ReceiptFilePath", "ReceiptFilePath");
         _paymentsGrid.Columns.Add(new DataGridViewButtonColumn
         {
             Name = "ProofAction",
@@ -370,55 +386,46 @@ public sealed class TransactionDetailsForm : Form
         _paymentsGrid.Columns["Date"]!.FillWeight = 90;
         _paymentsGrid.Columns["Amount"]!.FillWeight = 80;
         _paymentsGrid.Columns["Mode"]!.FillWeight = 80;
-        _paymentsGrid.Columns["Reference"]!.FillWeight = 90;
         _paymentsGrid.Columns["Notes"]!.FillWeight = 120;
+        _paymentsGrid.Columns["ReceiptFilePath"]!.Visible = false;
         _paymentsGrid.Columns["ProofAction"]!.FillWeight = 60;
 
-        Controls.Add(label);
-        Controls.Add(_paymentsGrid);
+        paymentPanel.Controls.Add(_paymentsGrid);
+        GroupBox section = CreateSection("Payment History", paymentPanel);
+        section.Location = new Point(32, 404);
+        section.Size = new Size(996, 156);
+        section.Dock = DockStyle.None;
+        Controls.Add(section);
     }
 
     private void CreateAddPaymentSection()
     {
-        _addPaymentPanel.Location = new Point(32, 608);
-        _addPaymentPanel.Size = new Size(836, 116);
-        _addPaymentPanel.BackColor = Color.FromArgb(248, 250, 252);
-        _addPaymentPanel.BorderStyle = BorderStyle.FixedSingle;
-
-        Label titleLabel = new()
-        {
-            Text = "Add New Payment",
-            AutoSize = true,
-            Location = new Point(12, 10),
-            Font = FontHelper.SemiBold(10F),
-            ForeColor = ThemeHelper.Primary
-        };
+        _addPaymentPanel.Dock = DockStyle.Fill;
+        _addPaymentPanel.BackColor = ThemeHelper.Surface;
 
         _newPaymentModeComboBox.Width = 150;
         _newPaymentModeComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All.Cast<object>().ToArray());
         _newPaymentModeComboBox.SelectedItem = TransactionConstants.ModeOfPayment.Cash;
 
         _newPaymentAmountInput.Width = 140;
-        _newPaymentReferenceTextBox.Width = 150;
-        _newPaymentNotesTextBox.Width = 250;
+        _newPaymentNotesTextBox.Width = 930;
+        _newPaymentNotesTextBox.Height = 54;
 
-        _uploadProofButton.Click += UploadProofButton_Click;
-        _newPaymentModeComboBox.SelectedIndexChanged += (_, _) =>
-        {
-            string mode = GetSelectedText(_newPaymentModeComboBox);
-            _uploadProofButton.Visible = mode is TransactionConstants.ModeOfPayment.GCash or TransactionConstants.ModeOfPayment.BankTransfer or TransactionConstants.ModeOfPayment.Other;
-        };
+        ConfigureProofPicker(_paymentProofBrowseButton, _paymentProofOpenButton, _paymentProofPathLabel);
 
-        _addPaymentPanel.Controls.Add(titleLabel);
-        _addPaymentPanel.Controls.Add(CreateInputPanel("Amount *", _newPaymentAmountInput, new Point(12, 34)));
-        _addPaymentPanel.Controls.Add(CreateInputPanel("Mode *", _newPaymentModeComboBox, new Point(162, 34)));
-        _addPaymentPanel.Controls.Add(CreateInputPanel("Reference #", _newPaymentReferenceTextBox, new Point(322, 34)));
-        _addPaymentPanel.Controls.Add(CreateInputPanel("Notes", _newPaymentNotesTextBox, new Point(482, 34)));
-        _addPaymentPanel.Controls.Add(_uploadProofButton);
-        _uploadProofButton.Location = new Point(12, 82);
-        _uploadProofButton.Visible = false;
+        _addPaymentPanel.Controls.Add(CreateInputPanel("Amount *", _newPaymentAmountInput, new Point(0, 0)));
+        _addPaymentPanel.Controls.Add(CreateInputPanel("Mode *", _newPaymentModeComboBox, new Point(170, 0)));
+        Panel proofPanel = CreateProofPickerPanel("Payment Proof", _paymentProofPathLabel, _paymentProofBrowseButton, _paymentProofOpenButton);
+        proofPanel.Location = new Point(360, 0);
+        proofPanel.Size = new Size(570, 70);
+        _addPaymentPanel.Controls.Add(proofPanel);
+        _addPaymentPanel.Controls.Add(CreateInputPanel("Notes", _newPaymentNotesTextBox, new Point(0, 80)));
 
-        Controls.Add(_addPaymentPanel);
+        GroupBox section = CreateSection("Add New Payment", _addPaymentPanel);
+        section.Location = new Point(32, 578);
+        section.Size = new Size(996, 190);
+        section.Dock = DockStyle.None;
+        Controls.Add(section);
     }
 
     private async void TransactionDetailsForm_Load(object? sender, EventArgs e)
@@ -459,9 +466,9 @@ public sealed class TransactionDetailsForm : Form
                     payment.PaymentDate.ToString("MMM d, yyyy h:mm tt"),
                     FormatPeso(payment.Amount),
                     payment.ModeOfPayment,
-                    payment.ReferenceNumber ?? "-",
                     payment.Notes ?? "-",
-                    (object?)payment.ReceiptFilePath ?? string.Empty);
+                    payment.ReceiptFilePath ?? string.Empty,
+                    "Open File");
             }
         }
         catch (Exception exception)
@@ -501,7 +508,9 @@ public sealed class TransactionDetailsForm : Form
         FleetScheduleModel? schedule = GetSelectedReservation();
         if (schedule is null)
         {
-            _reservationSummaryLabel.Text = "Select a pending or reserved reservation to view its details.";
+            _reservationSummaryLabel.Text = "Select a car and date range to calculate total.";
+            _amountPaidInput.Maximum = 0;
+            UpdateBalanceLabel();
             return;
         }
 
@@ -536,7 +545,7 @@ public sealed class TransactionDetailsForm : Form
         decimal total = days * _walkInDailyRateInput.Value;
         if (GetSelectedCar() is null)
         {
-            _walkInTotalLabel.Text = "Select a car to calculate total.";
+            _walkInTotalLabel.Text = "Select a car and date range to calculate total.";
         }
         else
         {
@@ -704,19 +713,52 @@ public sealed class TransactionDetailsForm : Form
         LoadViewTransaction(transaction);
     }
 
-    private void UploadProofButton_Click(object? sender, EventArgs e)
+    private void ConfigureProofPicker(Button browseButton, Button openButton, Label pathLabel)
+    {
+        openButton.Enabled = false;
+        browseButton.Click += (_, _) => BrowseProofFile(pathLabel, openButton);
+        openButton.Click += (_, _) => OpenProofFile(_selectedReceiptSourcePath, null);
+    }
+
+    private void BrowseProofFile(Label pathLabel, Button openButton)
     {
         using OpenFileDialog dialog = new()
         {
             Filter = "Image Files|*.jpg;*.jpeg;*.png;*.webp|PDF Files|*.pdf|All Files|*.*",
-            Title = "Select Payment Proof"
+            Title = "Select payment proof"
         };
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             _selectedReceiptSourcePath = dialog.FileName;
-            _uploadProofButton.Text = Path.GetFileName(dialog.FileName);
-            _uploadProofButton.BackColor = Color.FromArgb(220, 252, 231);
+            pathLabel.Text = Path.GetFileName(dialog.FileName);
+            pathLabel.ForeColor = ThemeHelper.Primary;
+            openButton.Enabled = true;
+        }
+    }
+
+    private static void OpenProofFile(string? selectedSourcePath, string? storedPath)
+    {
+        string? path = !string.IsNullOrWhiteSpace(selectedSourcePath) && File.Exists(selectedSourcePath)
+            ? selectedSourcePath
+            : UploadPathHelper.ResolvePaymentReceiptPath(storedPath);
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            MessageBoxHelper.ShowWarning("The payment proof file could not be found.", "Attachment Missing");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(path)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Unable to open payment proof.\n\n{exception.Message}", "Open File");
         }
     }
 
@@ -737,7 +779,7 @@ public sealed class TransactionDetailsForm : Form
                 TransactionId = _transaction.TransactionId,
                 Amount = _newPaymentAmountInput.Value,
                 ModeOfPayment = GetSelectedText(_newPaymentModeComboBox),
-                ReferenceNumber = _newPaymentReferenceTextBox.Text,
+                ReferenceNumber = null,
                 ReceiptFilePath = newReceiptPath,
                 Notes = _newPaymentNotesTextBox.Text
             }, _currentUserId);
@@ -746,11 +788,11 @@ public sealed class TransactionDetailsForm : Form
             
             // Reset input
             _newPaymentAmountInput.Value = 0;
-            _newPaymentReferenceTextBox.Clear();
             _newPaymentNotesTextBox.Clear();
             _selectedReceiptSourcePath = null;
-            _uploadProofButton.Text = "Upload Proof";
-            _uploadProofButton.BackColor = ThemeHelper.Surface;
+            _paymentProofPathLabel.Text = "No file selected";
+            _paymentProofPathLabel.ForeColor = ThemeHelper.TextSecondary;
+            _paymentProofOpenButton.Enabled = false;
 
             // Refresh data
             Transaction? updated = await _transactionService.GetByIdAsync(_transaction.TransactionId);
@@ -783,32 +825,14 @@ public sealed class TransactionDetailsForm : Form
 
         if (_paymentsGrid.Columns[e.ColumnIndex].Name == "ProofAction")
         {
-            string? receiptPath = _paymentsGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
+            string? receiptPath = _paymentsGrid.Rows[e.RowIndex].Cells["ReceiptFilePath"].Value?.ToString();
             if (string.IsNullOrWhiteSpace(receiptPath))
             {
                 MessageBoxHelper.ShowInfo("No proof receipt uploaded for this payment.");
                 return;
             }
 
-            string? fullPath = UploadPathHelper.ResolvePaymentReceiptPath(receiptPath);
-            if (fullPath is null || !File.Exists(fullPath))
-            {
-                MessageBoxHelper.ShowError("Proof receipt file was not found.");
-                return;
-            }
-
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = fullPath,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception exception)
-            {
-                MessageBoxHelper.ShowError($"Unable to open proof receipt.\n\n{exception.Message}", "Transactions");
-            }
+            OpenProofFile(null, receiptPath);
         }
     }
 
@@ -850,6 +874,71 @@ public sealed class TransactionDetailsForm : Form
         inputControl.Location = new Point(0, 22);
         panel.Controls.Add(label);
         panel.Controls.Add(inputControl);
+        return panel;
+    }
+
+    private static GroupBox CreateSection(string title, Control content)
+    {
+        GroupBox section = new()
+        {
+            Text = title,
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16, 28, 16, 12),
+            Font = FontHelper.SemiBold(9.5F),
+            ForeColor = ThemeHelper.TextPrimary,
+            BackColor = ThemeHelper.Surface
+        };
+        content.Dock = DockStyle.Fill;
+        section.Controls.Add(content);
+        return section;
+    }
+
+    private static TableLayoutPanel CreateGrid(int columns, int rows)
+    {
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = columns,
+            RowCount = rows,
+            Margin = new Padding(0)
+        };
+
+        for (int column = 0; column < columns; column++)
+        {
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+        }
+
+        for (int row = 0; row < rows; row++)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
+        }
+
+        return layout;
+    }
+
+    private static Panel CreateProofPickerPanel(string labelText, Label pathLabel, Button browseButton, Button openButton)
+    {
+        Panel panel = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemeHelper.Surface,
+            Margin = new Padding(0)
+        };
+
+        Label titleLabel = ControlFactory.CreateInputLabel(labelText);
+        titleLabel.Location = new Point(0, 0);
+
+        browseButton.Location = new Point(0, 24);
+        openButton.Location = new Point(96, 24);
+
+        pathLabel.Location = new Point(204, 29);
+        pathLabel.Size = new Size(Math.Max(panel.Width - 210, 260), 20);
+        panel.Resize += (_, _) => pathLabel.Width = Math.Max(panel.Width - 210, 220);
+
+        panel.Controls.Add(titleLabel);
+        panel.Controls.Add(browseButton);
+        panel.Controls.Add(openButton);
+        panel.Controls.Add(pathLabel);
         return panel;
     }
 
@@ -923,6 +1012,18 @@ public sealed class TransactionDetailsForm : Form
             BorderStyle = BorderStyle.FixedSingle,
             Padding = new Padding(12),
             BackColor = Color.FromArgb(248, 250, 252)
+        };
+    }
+
+    private static Label CreatePathLabel()
+    {
+        return new Label
+        {
+            AutoSize = false,
+            Text = "No file selected",
+            Font = FontHelper.Regular(9F),
+            ForeColor = ThemeHelper.TextSecondary,
+            AutoEllipsis = true
         };
     }
 

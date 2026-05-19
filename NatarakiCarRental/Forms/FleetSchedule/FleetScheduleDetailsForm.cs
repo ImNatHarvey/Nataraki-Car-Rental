@@ -66,7 +66,7 @@ public sealed class FleetScheduleDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(720, 544);
+        ClientSize = new Size(1060, 720);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -86,53 +86,54 @@ public sealed class FleetScheduleDetailsForm : Form
 
         _validationLabel.AutoSize = false;
         _validationLabel.Location = new Point(34, 68);
-        _validationLabel.Size = new Size(650, 24);
+        _validationLabel.Size = new Size(996, 24);
         _validationLabel.Font = FontHelper.SemiBold(9F);
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
 
-        TableLayoutPanel layout = new()
+        Panel contentPanel = new()
         {
             Location = new Point(32, 106),
-            Size = new Size(650, 334),
-            ColumnCount = 2,
+            Size = new Size(996, 500),
+            BackColor = ThemeHelper.Surface
+        };
+
+        TableLayoutPanel contentLayout = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
             RowCount = 4
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 136F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 146F));
 
-        layout.Controls.Add(CreateInputPanel("Car *", _carComboBox), 0, 0);
-        layout.Controls.Add(CreateInputPanel("Customer", _customerComboBox), 1, 0);
-        layout.Controls.Add(CreateInputPanel("Schedule Type *", _scheduleTypeComboBox), 0, 1);
-        layout.Controls.Add(CreateInputPanel("Status *", _statusComboBox), 1, 1);
-        layout.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 2);
-        layout.Controls.Add(CreateInputPanel("End Date *", _endDatePicker), 1, 2);
-        layout.Controls.Add(CreateInputPanel("Notes", _notesTextBox), 0, 3);
-        layout.SetColumnSpan(layout.GetControlFromPosition(0, 3)!, 2);
+        contentLayout.Controls.Add(CreateSection("Car / Customer Information", CreateCarCustomerLayout()), 0, 0);
+        contentLayout.Controls.Add(CreateSection("Schedule Information", CreateScheduleInfoLayout()), 0, 1);
+        contentLayout.Controls.Add(CreateSection("Date Range", CreateDateRangeLayout()), 0, 2);
+        contentLayout.Controls.Add(CreateSection("Notes", CreateNotesLayout()), 0, 3);
+        contentPanel.Controls.Add(contentLayout);
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(438, 472);
+        cancelButton.Location = new Point(756, 640);
         cancelButton.DialogResult = DialogResult.Cancel;
 
-        Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Changes" : "Add Schedule", 134, 38);
-        saveButton.Location = new Point(558, 472);
+        Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
+        saveButton.Location = new Point(888, 640);
         saveButton.Click += SaveButton_Click;
 
         Button? archiveButton = null;
         if (_mode == FleetScheduleFormMode.Edit)
         {
             archiveButton = CreateDangerButton("Archive", 110, 38);
-            archiveButton.Location = new Point(32, 472);
+            archiveButton.Location = new Point(32, 640);
             archiveButton.Click += ArchiveButton_Click;
         }
 
         Controls.Add(titleLabel);
         Controls.Add(_validationLabel);
-        Controls.Add(layout);
+        Controls.Add(contentPanel);
         Controls.Add(cancelButton);
         Controls.Add(saveButton);
         if (archiveButton is not null)
@@ -339,6 +340,78 @@ public sealed class FleetScheduleDetailsForm : Form
             nameof(FleetScheduleModel.EndDate) => _endDatePicker,
             _ => null
         };
+    }
+
+    private TableLayoutPanel CreateCarCustomerLayout()
+    {
+        TableLayoutPanel layout = CreateGrid(2, 1);
+        layout.Controls.Add(CreateInputPanel("Car *", _carComboBox), 0, 0);
+        layout.Controls.Add(CreateInputPanel("Customer", _customerComboBox), 1, 0);
+        return layout;
+    }
+
+    private TableLayoutPanel CreateScheduleInfoLayout()
+    {
+        TableLayoutPanel layout = CreateGrid(2, 1);
+        layout.Controls.Add(CreateInputPanel("Schedule Type *", _scheduleTypeComboBox), 0, 0);
+        layout.Controls.Add(CreateInputPanel("Status *", _statusComboBox), 1, 0);
+        return layout;
+    }
+
+    private TableLayoutPanel CreateDateRangeLayout()
+    {
+        TableLayoutPanel layout = CreateGrid(2, 1);
+        layout.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 0);
+        layout.Controls.Add(CreateInputPanel("End Date *", _endDatePicker), 1, 0);
+        return layout;
+    }
+
+    private Panel CreateNotesLayout()
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        _notesTextBox.Width = 930;
+        _notesTextBox.Height = 86;
+        _notesTextBox.Location = new Point(0, 0);
+        panel.Controls.Add(_notesTextBox);
+        return panel;
+    }
+
+    private static GroupBox CreateSection(string title, Control content)
+    {
+        GroupBox section = new()
+        {
+            Text = title,
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16, 30, 16, 12),
+            Font = FontHelper.SemiBold(9.5F),
+            ForeColor = ThemeHelper.TextPrimary,
+            BackColor = ThemeHelper.Surface
+        };
+        content.Dock = DockStyle.Fill;
+        section.Controls.Add(content);
+        return section;
+    }
+
+    private static TableLayoutPanel CreateGrid(int columns, int rows)
+    {
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = columns,
+            RowCount = rows
+        };
+
+        for (int column = 0; column < columns; column++)
+        {
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+        }
+
+        for (int row = 0; row < rows; row++)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
+        }
+
+        return layout;
     }
 
     private static Panel CreateInputPanel(string labelText, Control inputControl)
