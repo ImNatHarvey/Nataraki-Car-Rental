@@ -813,9 +813,16 @@ public sealed class TransactionControl : UserControl
         {
             return;
         }
-        await _transactionService.ArchiveTransactionAsync(transactionId, _currentUserId);
-        MessageBoxHelper.ShowSuccess("Transaction archived successfully.");
-        await LoadTransactionsAsync();
+        try
+        {
+            await _transactionService.ArchiveTransactionAsync(transactionId, _currentUserId);
+            MessageBoxHelper.ShowSuccess("Transaction archived successfully.");
+            await LoadTransactionsAsync();
+        }
+        catch (ValidationException exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Archive Transaction");
+        }
     }
 
     private async Task RestoreTransactionAsync(int transactionId)
@@ -829,9 +836,16 @@ public sealed class TransactionControl : UserControl
         {
             return;
         }
-        await _transactionService.RestoreTransactionAsync(transactionId, _currentUserId);
-        MessageBoxHelper.ShowSuccess("Transaction restored successfully.");
-        await LoadTransactionsAsync();
+        try
+        {
+            await _transactionService.RestoreTransactionAsync(transactionId, _currentUserId);
+            MessageBoxHelper.ShowSuccess("Transaction restored successfully.");
+            await LoadTransactionsAsync();
+        }
+        catch (ValidationException exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Restore Transaction");
+        }
     }
 
     private async Task SwitchArchiveViewAsync(bool showArchived)

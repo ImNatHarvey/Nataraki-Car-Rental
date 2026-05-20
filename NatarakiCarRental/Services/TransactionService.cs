@@ -389,6 +389,11 @@ public sealed class TransactionService
             throw new RecordNotFoundException($"Archived transaction record #{transactionId} was not found.");
         }
 
+        if (await _transactionRepository.HasActiveForFleetScheduleAsync(transaction.FleetScheduleId))
+        {
+            throw Validation(nameof(Transaction.FleetScheduleId), "The linked schedule already has a non-archived transaction.");
+        }
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
