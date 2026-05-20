@@ -11,6 +11,7 @@ public sealed class LoginForm : Form
     private readonly AuthService _authService = new();
     private readonly TextBox _usernameTextBox = ControlFactory.CreateTextBox();
     private readonly TextBox _passwordTextBox = ControlFactory.CreatePasswordTextBox();
+    private readonly IconButton _passwordPreviewButton = new();
 
     public LoginForm()
     {
@@ -113,7 +114,10 @@ public sealed class LoginForm : Form
         Label passwordLabel = ControlFactory.CreateInputLabel("Password");
         passwordLabel.Location = new Point(66, 286);
         _passwordTextBox.Location = new Point(66, 310);
-        _passwordTextBox.Width = 320;
+        _passwordTextBox.Width = 280;
+
+        ConfigurePasswordPreviewButton();
+        _passwordPreviewButton.Location = new Point(348, 310);
 
         Button loginButton = ControlFactory.CreatePrimaryButton("Log In", 320, 40);
         loginButton.Location = new Point(66, 374);
@@ -130,6 +134,7 @@ public sealed class LoginForm : Form
         formPanel.Controls.Add(_usernameTextBox);
         formPanel.Controls.Add(passwordLabel);
         formPanel.Controls.Add(_passwordTextBox);
+        formPanel.Controls.Add(_passwordPreviewButton);
         formPanel.Controls.Add(loginButton);
 
         rootLayout.Controls.Add(brandingPanel, 0, 0);
@@ -148,6 +153,8 @@ public sealed class LoginForm : Form
             if (user is null)
             {
                 MessageBoxHelper.ShowError("Invalid username or password.");
+                _passwordTextBox.Clear();
+                _passwordTextBox.Focus();
                 return;
             }
 
@@ -157,6 +164,30 @@ public sealed class LoginForm : Form
         {
             MessageBoxHelper.ShowError($"Login failed.\n\n{exception.Message}");
         }
+    }
+
+    private void ConfigurePasswordPreviewButton()
+    {
+        _passwordPreviewButton.Size = new Size(38, 30);
+        _passwordPreviewButton.IconChar = IconChar.Eye;
+        _passwordPreviewButton.IconColor = ThemeHelper.TextSecondary;
+        _passwordPreviewButton.IconSize = 16;
+        _passwordPreviewButton.BackColor = ThemeHelper.Surface;
+        _passwordPreviewButton.ForeColor = ThemeHelper.TextPrimary;
+        _passwordPreviewButton.FlatStyle = FlatStyle.Flat;
+        _passwordPreviewButton.Cursor = Cursors.Hand;
+        _passwordPreviewButton.TabStop = false;
+        _passwordPreviewButton.Text = string.Empty;
+        _passwordPreviewButton.FlatAppearance.BorderColor = ThemeHelper.Border;
+        _passwordPreviewButton.Click += (_, _) => TogglePasswordPreview();
+    }
+
+    private void TogglePasswordPreview()
+    {
+        bool showPassword = _passwordTextBox.UseSystemPasswordChar;
+        _passwordTextBox.UseSystemPasswordChar = !showPassword;
+        _passwordPreviewButton.IconChar = showPassword ? IconChar.EyeSlash : IconChar.Eye;
+        _passwordTextBox.Focus();
     }
 
     private void OpenMainForm(User user)

@@ -306,11 +306,11 @@ public sealed class CustomerControl : UserControl
         _customersGrid.ScrollBars = ScrollBars.Vertical;
         _customersGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _customersGrid.BackgroundColor = ThemeHelper.Surface;
-        _customersGrid.BorderStyle = BorderStyle.None;
-        _customersGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _customersGrid.BorderStyle = BorderStyle.FixedSingle;
+        _customersGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
         _customersGrid.ColumnHeadersHeight = 38;
         _customersGrid.EnableHeadersVisualStyles = false;
-        _customersGrid.GridColor = ThemeHelper.Border;
+        _customersGrid.GridColor = ThemeHelper.TableGridLine;
         _customersGrid.ReadOnly = true;
         _customersGrid.RowHeadersVisible = false;
         _customersGrid.RowTemplate.Height = 38;
@@ -323,6 +323,8 @@ public sealed class CustomerControl : UserControl
         _customersGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
         _customersGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         _customersGrid.CellContentClick += CustomersGrid_CellContentClick;
+        _customersGrid.CellMouseMove += CustomersGrid_CellMouseMove;
+        _customersGrid.CellMouseLeave += (_, _) => _customersGrid.Cursor = Cursors.Default;
         _customersGrid.CellPainting += CustomersGrid_CellPainting;
 
         _emptyStateLabel.Text = "No customer records found.";
@@ -684,6 +686,17 @@ public sealed class CustomerControl : UserControl
                 await RestoreCustomerAsync(customerId);
                 break;
         }
+    }
+
+    private void CustomersGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        _customersGrid.Cursor = IsActionColumn(e.ColumnIndex) ? Cursors.Hand : Cursors.Default;
+    }
+
+    private bool IsActionColumn(int columnIndex)
+    {
+        return columnIndex >= 0
+            && _customersGrid.Columns[columnIndex].Name.EndsWith("Action", StringComparison.Ordinal);
     }
 
     private async void AddCustomerButton_Click(object? sender, EventArgs e)

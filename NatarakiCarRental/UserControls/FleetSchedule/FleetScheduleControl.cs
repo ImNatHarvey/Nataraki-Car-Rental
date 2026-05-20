@@ -417,7 +417,8 @@ public sealed class FleetScheduleControl : UserControl
             _scheduleBounds.Clear();
 
             int days = DateTime.DaysInMonth(_owner.SelectedMonth.Year, _owner.SelectedMonth.Month);
-            using Pen gridPen = new(Color.FromArgb(226, 232, 240));
+            using Pen gridPen = new(ThemeHelper.TableGridLine);
+            using Pen majorGridPen = new(ThemeHelper.TableGridLineStrong);
             using SolidBrush headerBrush = new(ThemeHelper.ContentBackground);
             using SolidBrush surfaceBrush = new(ThemeHelper.Surface);
             using SolidBrush textBrush = new(ThemeHelper.TextPrimary);
@@ -444,12 +445,12 @@ public sealed class FleetScheduleControl : UserControl
                     graphics.FillRectangle(todayBrush, x, 0, DayWidth, AutoScrollMinSize.Height);
                 }
 
-                graphics.DrawLine(gridPen, x, 0, x, AutoScrollMinSize.Height);
+                graphics.DrawLine(date.Day == 1 ? majorGridPen : gridPen, x, 0, x, AutoScrollMinSize.Height);
                 graphics.DrawString(date.Day.ToString(), FontHelper.SemiBold(9F), textBrush, new PointF(x + 13, 8));
                 graphics.DrawString(date.ToString("ddd"), FontHelper.Regular(8F), mutedBrush, new PointF(x + 10, 24));
             }
 
-            graphics.DrawLine(gridPen, 0, HeaderHeight, AutoScrollMinSize.Width, HeaderHeight);
+            graphics.DrawLine(majorGridPen, 0, HeaderHeight, AutoScrollMinSize.Width, HeaderHeight);
             if (_owner._cars.Count == 0)
             {
                 const string message = "No active cars available. Add cars in Car Garage first.";
@@ -485,7 +486,7 @@ public sealed class FleetScheduleControl : UserControl
                 graphics.DrawString(displayStatus, FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(rect.X + 8, rect.Y, rect.Width - 12, rect.Height), format);
             }
 
-            DrawStickyCarColumn(graphics, gridPen, headerBrush, textBrush, mutedBrush);
+            DrawStickyCarColumn(graphics, gridPen, majorGridPen, headerBrush, textBrush, mutedBrush);
         }
 
         private Point TranslatePoint(Point point)
@@ -496,13 +497,14 @@ public sealed class FleetScheduleControl : UserControl
         private void DrawStickyCarColumn(
             Graphics graphics,
             Pen gridPen,
+            Pen majorGridPen,
             Brush headerBrush,
             Brush textBrush,
             Brush mutedBrush)
         {
             int stickyX = -AutoScrollPosition.X;
             graphics.FillRectangle(headerBrush, stickyX, 0, CarColumnWidth, AutoScrollMinSize.Height);
-            graphics.DrawLine(gridPen, stickyX + CarColumnWidth, 0, stickyX + CarColumnWidth, AutoScrollMinSize.Height);
+            graphics.DrawLine(majorGridPen, stickyX + CarColumnWidth, 0, stickyX + CarColumnWidth, AutoScrollMinSize.Height);
             graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(stickyX + 14, 15));
 
             int drawableRows = Math.Min(_owner._cars.Count, _rowLayouts.Count);

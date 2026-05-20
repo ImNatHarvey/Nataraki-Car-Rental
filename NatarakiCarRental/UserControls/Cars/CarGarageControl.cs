@@ -333,11 +333,11 @@ public sealed class CarGarageControl : UserControl
         _carsGrid.ScrollBars = ScrollBars.Vertical;
         _carsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _carsGrid.BackgroundColor = ThemeHelper.Surface;
-        _carsGrid.BorderStyle = BorderStyle.None;
-        _carsGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _carsGrid.BorderStyle = BorderStyle.FixedSingle;
+        _carsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
         _carsGrid.ColumnHeadersHeight = 38;
         _carsGrid.EnableHeadersVisualStyles = false;
-        _carsGrid.GridColor = ThemeHelper.Border;
+        _carsGrid.GridColor = ThemeHelper.TableGridLine;
         _carsGrid.ReadOnly = true;
         _carsGrid.RowHeadersVisible = false;
         _carsGrid.RowTemplate.Height = 38;
@@ -353,6 +353,8 @@ public sealed class CarGarageControl : UserControl
         _carsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
 
         _carsGrid.CellContentClick += CarsGrid_CellContentClick;
+        _carsGrid.CellMouseMove += CarsGrid_CellMouseMove;
+        _carsGrid.CellMouseLeave += (_, _) => _carsGrid.Cursor = Cursors.Default;
         _carsGrid.CellPainting += CarsGrid_CellPainting;
 
         _emptyStateLabel.Text = "No car records found.";
@@ -724,6 +726,17 @@ public sealed class CarGarageControl : UserControl
         {
             await RestoreCarAsync(carId);
         }
+    }
+
+    private void CarsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        _carsGrid.Cursor = IsActionColumn(e.ColumnIndex) ? Cursors.Hand : Cursors.Default;
+    }
+
+    private bool IsActionColumn(int columnIndex)
+    {
+        return columnIndex >= 0
+            && _carsGrid.Columns[columnIndex].Name is "ViewAction" or "EditAction" or "ArchiveAction" or "RestoreAction";
     }
 
     private async void AddCarButton_Click(object? sender, EventArgs e)

@@ -861,6 +861,7 @@ public sealed class TransactionDetailsForm : Form
         if (_transaction is null || sender is not Button addButton) return;
 
         string? newReceiptPath = null;
+        bool paymentSaved = false;
         try
         {
             addButton.Enabled = false;
@@ -877,8 +878,7 @@ public sealed class TransactionDetailsForm : Form
                 ReceiptFilePath = newReceiptPath,
                 Notes = null
             }, _currentUserId);
-
-            MessageBoxHelper.ShowSuccess("Payment added successfully.");
+            paymentSaved = true;
 
             _newPaymentAmountInput.Value = 0;
             _selectedReceiptSourcePath = null;
@@ -889,19 +889,39 @@ public sealed class TransactionDetailsForm : Form
             Transaction? updated = await _transactionService.GetByIdAsync(_transaction.TransactionId);
             if (updated is not null)
             {
-                LoadViewTransaction(updated);
-                _submitPaymentButton.Enabled = updated.BalanceAmount > 0;
+                if (updated.PaymentStatus == TransactionConstants.PaymentStatus.Paid && updated.BalanceAmount <= 0)
+                {
+                    await _transactionService.CompleteTransactionAsync(updated.TransactionId, _currentUserId);
+                    MessageBoxHelper.ShowSuccess("Payment complete. The transaction has been marked as completed.");
+                    DialogResult = DialogResult.OK;
+                    Close();
+                    return;
+                }
+
+                MessageBoxHelper.ShowSuccess($"Payment recorded successfully. Remaining balance: {FormatPeso(updated.BalanceAmount)}.");
+                DialogResult = DialogResult.OK;
+                Close();
+                return;
             }
-            await LoadPaymentsAsync();
+
+            MessageBoxHelper.ShowSuccess("Payment recorded successfully.");
+            DialogResult = DialogResult.OK;
+            Close();
         }
         catch (ValidationException exception)
         {
-            UploadPathHelper.DeleteNewPaymentReceiptIfSaveFailed(newReceiptPath, null);
+            if (!paymentSaved)
+            {
+                UploadPathHelper.DeleteNewPaymentReceiptIfSaveFailed(newReceiptPath, null);
+            }
             ShowValidationErrors(exception.Errors.ToList(), exception.Message);
         }
         catch (Exception exception)
         {
-            UploadPathHelper.DeleteNewPaymentReceiptIfSaveFailed(newReceiptPath, null);
+            if (!paymentSaved)
+            {
+                UploadPathHelper.DeleteNewPaymentReceiptIfSaveFailed(newReceiptPath, null);
+            }
             MessageBoxHelper.ShowError($"Unable to save payment.\n\n{exception.Message}", "Transactions");
         }
         finally

@@ -12,6 +12,9 @@ namespace NatarakiCarRental.UserControls.Transactions;
 
 public sealed class TransactionControl : UserControl
 {
+    private const float StatusPillHeight = 26F;
+    private const float PaymentStatusPillWidth = 76F;
+    private const float TransactionStatusPillWidth = 104F;
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
     private readonly MetricCardControl _totalTransactionsCard = new();
@@ -274,11 +277,11 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.ScrollBars = ScrollBars.Both;
         _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _transactionsGrid.BackgroundColor = ThemeHelper.Surface;
-        _transactionsGrid.BorderStyle = BorderStyle.None;
-        _transactionsGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _transactionsGrid.BorderStyle = BorderStyle.FixedSingle;
+        _transactionsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
         _transactionsGrid.ColumnHeadersHeight = 38;
         _transactionsGrid.EnableHeadersVisualStyles = false;
-        _transactionsGrid.GridColor = ThemeHelper.Border;
+        _transactionsGrid.GridColor = ThemeHelper.TableGridLine;
         _transactionsGrid.ReadOnly = true;
         _transactionsGrid.RowHeadersVisible = false;
         _transactionsGrid.RowTemplate.Height = 38;
@@ -291,6 +294,8 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
         _transactionsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         _transactionsGrid.CellMouseClick += TransactionsGrid_CellMouseClick;
+        _transactionsGrid.CellMouseMove += TransactionsGrid_CellMouseMove;
+        _transactionsGrid.CellMouseLeave += (_, _) => _transactionsGrid.Cursor = Cursors.Default;
         _transactionsGrid.CellPainting += TransactionsGrid_CellPainting;
 
         _emptyStateLabel.Text = "No transaction records found.";
@@ -494,13 +499,12 @@ public sealed class TransactionControl : UserControl
         {
             string[] actions = text.Split('|');
             float currentX = e.CellBounds.X + 4;
-            float height = 26;
+            float height = StatusPillHeight;
             float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
 
             foreach (string action in actions)
             {
-                SizeF textSize = e.Graphics.MeasureString(action, font);
-                float width = textSize.Width + 22;
+                float width = GetActionPillWidth(e.Graphics, font, action);
                 RectangleF rect = new(currentX, y, width, height);
 
                 Color color = GetPillColor(action);
@@ -527,10 +531,10 @@ public sealed class TransactionControl : UserControl
         else
         {
             Color color = GetPillColor(text);
-            SizeF textSize = e.Graphics.MeasureString(text, font);
-            float height = 26;
-            float width = Math.Min(textSize.Width + 24, e.CellBounds.Width - 4);
-            float x = e.CellBounds.X + 8;
+            float height = StatusPillHeight;
+            float preferredWidth = columnName == "Payment" ? PaymentStatusPillWidth : TransactionStatusPillWidth;
+            float width = Math.Min(preferredWidth, e.CellBounds.Width - 4);
+            float x = e.CellBounds.X + Math.Max((e.CellBounds.Width - width) / 2F, 2F);
             float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
             RectangleF rect = new(x, y, width, height);
             using GraphicsPath path = CreateRoundedRect(rect, height / 2);
@@ -615,46 +619,78 @@ public sealed class TransactionControl : UserControl
 
         int transactionId = Convert.ToInt32(_transactionsGrid.Rows[e.RowIndex].Cells["TransactionId"].Value);
 
-        using Graphics g = _transactionsGrid.CreateGraphics();
-        Font font = _transactionsGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
-        string[] actions = text.Split('|');
-        float currentX = 4;
-        float height = 26;
-        float y = (_transactionsGrid.Rows[e.RowIndex].Height - height) / 2F;
-        
-        foreach (string action in actions)
+        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
+        if (clickedAction is null)
         {
-            SizeF textSize = g.MeasureString(action, font);
-            float width = textSize.Width + 22;
-            RectangleF rect = new(currentX, y, width, height);
-            
-            if (rect.Contains(e.X, e.Y))
-            {
-                switch (action)
-                {
-                    case "View":
-                        await ViewTransactionAsync(transactionId);
-                        break;
-                    case "Payment":
-                        await EditTransactionAsync(transactionId);
-                        break;
-                    case "Complete":
-                        await CompleteTransactionAsync(transactionId);
-                        break;
-                    case "Cancel":
-                        await CancelTransactionAsync(transactionId);
-                        break;
-                    case "Archive":
-                        await ArchiveTransactionAsync(transactionId);
-                        break;
-                    case "Restore":
-                        await RestoreTransactionAsync(transactionId);
-                        break;
-                }
-                return;
-            }
-            currentX += width + 6;
+            return;
         }
+
+        switch (clickedAction)
+        {
+            case "View":
+                await ViewTransactionAsync(transactionId);
+                break;
+            case "Payment":
+                await EditTransactionAsync(transactionId);
+                break;
+            case "Complete":
+                await CompleteTransactionAsync(transactionId);
+                break;
+            case "Cancel":
+                await CancelTransactionAsync(transactionId);
+                break;
+            case "Archive":
+                await ArchiveTransactionAsync(transactionId);
+                break;
+            case "Restore":
+                await RestoreTransactionAsync(transactionId);
+                break;
+        }
+    }
+
+    private void TransactionsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        _transactionsGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is null
+            ? Cursors.Default
+            : Cursors.Hand;
+    }
+
+    private string? GetActionAt(int rowIndex, int columnIndex, int x, int y)
+    {
+        if (rowIndex < 0 || columnIndex < 0 || _transactionsGrid.Columns[columnIndex].Name != "Actions")
+        {
+            return null;
+        }
+
+        string text = _transactionsGrid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        using Graphics graphics = _transactionsGrid.CreateGraphics();
+        Font font = _transactionsGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
+        float currentX = 4F;
+        float yOffset = (_transactionsGrid.Rows[rowIndex].Height - StatusPillHeight) / 2F;
+
+        foreach (string action in text.Split('|'))
+        {
+            float width = GetActionPillWidth(graphics, font, action);
+            RectangleF rect = new(currentX, yOffset, width, StatusPillHeight);
+            if (rect.Contains(x, y))
+            {
+                return action;
+            }
+
+            currentX += width + 6F;
+        }
+
+        return null;
+    }
+
+    private static float GetActionPillWidth(Graphics graphics, Font font, string action)
+    {
+        return graphics.MeasureString(action, font).Width + 22F;
     }
 
     private async Task ViewTransactionAsync(int transactionId)

@@ -21,6 +21,8 @@ public static class ThemeHelper
     public static readonly Color TextPrimary = Color.FromArgb(30, 41, 59);
     public static readonly Color TextSecondary = Color.FromArgb(100, 116, 139);
     public static readonly Color Border = Color.FromArgb(203, 213, 225);
+    public static readonly Color TableGridLine = Color.FromArgb(148, 163, 184);
+    public static readonly Color TableGridLineStrong = Color.FromArgb(71, 85, 105);
     public static readonly Color Danger = Color.FromArgb(220, 38, 38);
     public static readonly Color Error = Danger;
 
