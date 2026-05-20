@@ -14,6 +14,7 @@ public sealed class FleetScheduleService
     private readonly FleetScheduleRepository _scheduleRepository;
     private readonly CarRepository _carRepository;
     private readonly CustomerRepository _customerRepository;
+    private readonly TransactionRepository _transactionRepository;
     private readonly ActivityLogService _activityLogService;
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
@@ -28,6 +29,7 @@ public sealed class FleetScheduleService
             new FleetScheduleRepository(connectionFactory),
             new CarRepository(connectionFactory),
             new CustomerRepository(connectionFactory),
+            new TransactionRepository(connectionFactory),
             new ActivityLogService(connectionFactory),
             connectionFactory,
             currentUserId)
@@ -38,6 +40,7 @@ public sealed class FleetScheduleService
         FleetScheduleRepository scheduleRepository,
         CarRepository carRepository,
         CustomerRepository customerRepository,
+        TransactionRepository transactionRepository,
         ActivityLogService activityLogService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
@@ -45,6 +48,7 @@ public sealed class FleetScheduleService
         _scheduleRepository = scheduleRepository;
         _carRepository = carRepository;
         _customerRepository = customerRepository;
+        _transactionRepository = transactionRepository;
         _activityLogService = activityLogService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
@@ -112,6 +116,7 @@ public sealed class FleetScheduleService
 
     public async Task UpdateAsync(FleetSchedule schedule)
     {
+        await ValidateTransactionLifecycleLockAsync(schedule);
         await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
@@ -142,9 +147,48 @@ public sealed class FleetScheduleService
         }
     }
 
+    private async Task ValidateTransactionLifecycleLockAsync(FleetSchedule schedule)
+    {
+        FleetSchedule? existingSchedule = await _scheduleRepository.GetByIdAsync(schedule.ScheduleId);
+
+        if (existingSchedule is null || existingSchedule.IsArchived)
+        {
+            throw new RecordNotFoundException($"Schedule record #{schedule.ScheduleId} was not found or is archived.");
+        }
+
+        bool lifecycleChanged = existingSchedule.ScheduleType != schedule.ScheduleType
+            || existingSchedule.Status != schedule.Status;
+
+        if (!lifecycleChanged)
+        {
+            return;
+        }
+
+        if (await _transactionRepository.HasActiveForFleetScheduleAsync(schedule.ScheduleId))
+        {
+            throw new ValidationException(
+                [new ValidationFailure(
+                    nameof(FleetSchedule.Status),
+                    "This schedule is linked to a transaction. Use the Transaction module to start, complete, cancel, or archive the rental.")]);
+        }
+    }
+
     public async Task ArchiveAsync(int scheduleId)
     {
         FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(scheduleId);
+        if (schedule is null || schedule.IsArchived)
+        {
+            throw new RecordNotFoundException($"Schedule record #{scheduleId} was not found or is archived.");
+        }
+
+        if (await _transactionRepository.HasActiveForFleetScheduleAsync(scheduleId))
+        {
+            throw new ValidationException(
+                [new ValidationFailure(
+                    nameof(FleetSchedule.ScheduleId),
+                    "This schedule is linked to a transaction. Archive or cancel it from the Transaction module first.")]);
+        }
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
@@ -263,6 +307,10 @@ public sealed class FleetScheduleService
         schedule.Title = schedule.Title?.Trim() ?? string.Empty;
         schedule.ScheduleType = schedule.ScheduleType?.Trim() ?? string.Empty;
         schedule.Status = schedule.Status?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(schedule.Status))
+        {
+            schedule.Status = FleetScheduleVisualHelper.GetDefaultStatusForType(schedule.ScheduleType);
+        }
         schedule.StartDate = schedule.StartDate.Date;
         schedule.EndDate = schedule.EndDate.Date;
         schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) ? null : schedule.Notes.Trim();

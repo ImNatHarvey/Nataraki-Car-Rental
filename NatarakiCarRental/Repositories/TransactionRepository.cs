@@ -165,6 +165,32 @@ public sealed class TransactionRepository
         return await connection.QuerySingleOrDefaultAsync<Transaction>(sql, new { TransactionCode = transactionCode });
     }
 
+    public async Task<bool> HasActiveForFleetScheduleAsync(int fleetScheduleId, IDbTransaction? dbTransaction = null)
+    {
+        const string sql = """
+            SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM dbo.Transactions
+                WHERE FleetScheduleId = @FleetScheduleId
+                  AND IsArchived = 0
+            ) THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END;
+            """;
+
+        IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.ExecuteScalarAsync<bool>(sql, new { FleetScheduleId = fleetScheduleId }, dbTransaction);
+        }
+        finally
+        {
+            if (dbTransaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
     public async Task<IReadOnlyList<TransactionListItem>> SearchAsync(
         string searchText,
         string? transactionStatus,

@@ -440,7 +440,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Transactions_BalanceAmount_Valid CHECK (BalanceAmount >= 0 AND BalanceAmount = TotalAmount - AmountPaid),
                     CONSTRAINT CK_Transactions_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')),
                     CONSTRAINT CK_Transactions_PaymentStatus_Valid CHECK (PaymentStatus IN (N'Unpaid', N'Partial', N'Paid')),
-                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Active', N'Completed', N'Cancelled'))
+                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled'))
                 );
             END;
             """);
@@ -479,6 +479,22 @@ public static class DatabaseInitializer
                         WHEN CASE WHEN PaymentStatus = N'Paid' THEN TotalAmount ELSE ISNULL(AmountPaid, 0) END < TotalAmount THEN N'Partial'
                         ELSE N'Paid'
                     END;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+            BEGIN
+                IF OBJECT_ID(N'dbo.CK_Transactions_Status_Valid', N'C') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM sys.check_constraints
+                        WHERE name = N'CK_Transactions_Status_Valid'
+                          AND definition LIKE N'%Pending%'
+                   )
+                BEGIN
+                    ALTER TABLE dbo.Transactions DROP CONSTRAINT CK_Transactions_Status_Valid;
+                END;
             END;
             """);
 
@@ -567,11 +583,11 @@ public static class DatabaseInitializer
                    AND NOT EXISTS (
                         SELECT 1
                         FROM dbo.Transactions
-                        WHERE TransactionStatus NOT IN (N'Pending', N'Active', N'Completed', N'Cancelled')
+                        WHERE TransactionStatus NOT IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled')
                    )
                 BEGIN
                     ALTER TABLE dbo.Transactions WITH CHECK
-                    ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Active', N'Completed', N'Cancelled'));
+                    ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled'));
                 END;
             END;
             """);
@@ -703,6 +719,12 @@ public static class DatabaseInitializer
                   AND BlacklistReason IS NOT NULL;
 
                 IF OBJECT_ID(N'dbo.UQ_Customers_PhoneNumber', N'UQ') IS NULL
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM dbo.Customers
+                       GROUP BY PhoneNumber
+                       HAVING COUNT(1) > 1
+                   )
                 BEGIN
                     ALTER TABLE dbo.Customers WITH CHECK
                     ADD CONSTRAINT UQ_Customers_PhoneNumber UNIQUE (PhoneNumber);
@@ -904,6 +926,28 @@ public static class DatabaseInitializer
             BEGIN
                 CREATE NONCLUSTERED INDEX IX_Transactions_FleetScheduleId
                 ON dbo.Transactions (FleetScheduleId);
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'UX_Transactions_FleetScheduleId_NotArchived'
+                      AND object_id = OBJECT_ID(N'dbo.Transactions')
+               )
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                    GROUP BY FleetScheduleId
+                    HAVING COUNT(1) > 1
+               )
+            BEGIN
+                CREATE UNIQUE NONCLUSTERED INDEX UX_Transactions_FleetScheduleId_NotArchived
+                ON dbo.Transactions (FleetScheduleId)
+                WHERE IsArchived = 0;
             END;
             """);
 

@@ -37,6 +37,7 @@ public sealed class TransactionService
                 new FleetScheduleRepository(connectionFactory),
                 new CarRepository(connectionFactory),
                 new CustomerRepository(connectionFactory),
+                new TransactionRepository(connectionFactory),
                 new ActivityLogService(connectionFactory),
                 connectionFactory,
                 currentUserId),
@@ -122,14 +123,20 @@ public sealed class TransactionService
         decimal dailyRate = request.DailyRate ?? car.RatePerDay;
         ValidateCommercialInputs(startDate, endDate, dailyRate, request.AmountPaid, request.ModeOfPayment);
 
-        FleetSchedule rentalSchedule = CreateRentalSchedule(
+        if (await _transactionRepository.HasActiveForFleetScheduleAsync(reservation.ScheduleId))
+        {
+            throw Validation(nameof(CreateTransactionFromReservationRequest.FleetScheduleId), "This reservation already has a transaction.");
+        }
+
+        FleetSchedule reservedSchedule = CreateReservationSchedule(
             reservation.ScheduleId,
             car.CarId,
             customer.CustomerId,
             startDate,
             endDate,
-            reservation.Notes);
-        await _scheduleService.PrepareForSaveAsync(rentalSchedule, reservation.ScheduleId);
+            reservation.Notes,
+            GetReservationStatusForPaidAmount(request.AmountPaid));
+        await _scheduleService.PrepareForSaveAsync(reservedSchedule, reservation.ScheduleId);
 
         Transaction transaction = BuildTransaction(
             reservation.ScheduleId,
@@ -140,14 +147,15 @@ public sealed class TransactionService
             dailyRate,
             request.ModeOfPayment,
             request.AmountPaid,
-            request.Notes);
+            request.Notes,
+            GetReservationTransactionStatusForPaidAmount(request.AmountPaid));
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
-            int affectedRows = await _scheduleRepository.UpdateAsync(rentalSchedule, dbTransaction);
+            int affectedRows = await _scheduleRepository.UpdateAsync(reservedSchedule, dbTransaction);
 
             if (affectedRows == 0)
             {
@@ -181,10 +189,10 @@ public sealed class TransactionService
                 _currentUserId,
                 dbTransaction);
             await _activityLogService.LogAsync(
-                "Convert reservation to rental",
+                "Reserve transaction",
                 "FleetSchedule",
                 reservation.ScheduleId,
-                $"Converted reservation schedule #{reservation.ScheduleId} into rental schedule for transaction {transaction.TransactionCode}.",
+                $"Linked reservation schedule #{reservation.ScheduleId} to reserved transaction {transaction.TransactionCode}.",
                 _currentUserId,
                 dbTransaction);
             dbTransaction.Commit();
@@ -199,6 +207,15 @@ public sealed class TransactionService
 
     public async Task<int> CreateWalkInTransactionAsync(CreateWalkInTransactionRequest request)
     {
+        string transactionType = string.IsNullOrWhiteSpace(request.TransactionType)
+            ? FleetScheduleConstants.Type.Rental
+            : request.TransactionType.Trim();
+
+        if (transactionType is not FleetScheduleConstants.Type.Reservation and not FleetScheduleConstants.Type.Rental)
+        {
+            throw Validation(nameof(CreateWalkInTransactionRequest.TransactionType), "Transaction type is invalid.");
+        }
+
         Customer customer = request.CustomerId.HasValue
             ? await GetEligibleCustomerAsync(request.CustomerId.Value)
             : await GetWalkInCustomerAsync(request.WalkInFirstName, request.WalkInLastName);
@@ -206,22 +223,38 @@ public sealed class TransactionService
         decimal dailyRate = request.DailyRate ?? car.RatePerDay;
         ValidateCommercialInputs(request.StartDate.Date, request.EndDate.Date, dailyRate, request.AmountPaid, request.ModeOfPayment);
 
-        FleetSchedule rentalSchedule = CreateRentalSchedule(
-            scheduleId: 0,
-            car.CarId,
-            customer.CustomerId,
-            request.StartDate.Date,
-            request.EndDate.Date,
-            request.Notes);
-        await _scheduleService.PrepareForSaveAsync(rentalSchedule);
+        decimal totalAmount = CalculateTotalAmount(request.StartDate.Date, request.EndDate.Date, dailyRate);
+
+        if (transactionType == FleetScheduleConstants.Type.Rental && request.AmountPaid < totalAmount)
+        {
+            throw Validation(nameof(CreateWalkInTransactionRequest.AmountPaid), "Direct rental requires full payment before the car can be released.");
+        }
+
+        FleetSchedule schedule = transactionType == FleetScheduleConstants.Type.Reservation
+            ? CreateReservationSchedule(
+                scheduleId: 0,
+                car.CarId,
+                customer.CustomerId,
+                request.StartDate.Date,
+                request.EndDate.Date,
+                request.Notes,
+                GetReservationStatusForPaidAmount(request.AmountPaid))
+            : CreateRentalSchedule(
+                scheduleId: 0,
+                car.CarId,
+                customer.CustomerId,
+                request.StartDate.Date,
+                request.EndDate.Date,
+                request.Notes);
+        await _scheduleService.PrepareForSaveAsync(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
-            rentalSchedule.CreatedByUserId = _currentUserId;
-            int scheduleId = await _scheduleRepository.CreateAsync(rentalSchedule, dbTransaction);
+            schedule.CreatedByUserId = _currentUserId;
+            int scheduleId = await _scheduleRepository.CreateAsync(schedule, dbTransaction);
             Transaction transaction = BuildTransaction(
                 scheduleId,
                 customer.CustomerId,
@@ -231,7 +264,10 @@ public sealed class TransactionService
                 dailyRate,
                 request.ModeOfPayment,
                 request.AmountPaid,
-                request.Notes);
+                request.Notes,
+                transactionType == FleetScheduleConstants.Type.Reservation
+                    ? GetReservationTransactionStatusForPaidAmount(request.AmountPaid)
+                    : TransactionConstants.Status.Active);
             int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
 
             if (request.AmountPaid > 0)
@@ -255,7 +291,7 @@ public sealed class TransactionService
                 "Create walk-in transaction",
                 "Transaction",
                 transactionId,
-                $"Created walk-in transaction {transaction.TransactionCode} with rental schedule #{scheduleId}.",
+                $"Created walk-in {transactionType.ToLowerInvariant()} transaction {transaction.TransactionCode} with schedule #{scheduleId}.",
                 _currentUserId,
                 dbTransaction);
             dbTransaction.Commit();
@@ -273,15 +309,48 @@ public sealed class TransactionService
         return CompletePaidTransactionAsync(transactionId, currentUserId);
     }
 
-    public Task CancelTransactionAsync(int transactionId, int currentUserId, string? reason = null)
+    public async Task StartRentalAsync(int transactionId, int currentUserId)
+    {
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        if (transaction.TransactionStatus != TransactionConstants.Status.Reserved)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only reserved transactions can be started.");
+        }
+
+        if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid)
+        {
+            throw Validation(nameof(Transaction.PaymentStatus), "This rental cannot start until the payment is fully paid.");
+        }
+
+        await ChangeStatusAsync(
+            transactionId,
+            currentUserId,
+            TransactionConstants.Status.Active,
+            FleetScheduleConstants.Type.Rental,
+            FleetScheduleConstants.Status.Rented,
+            "Start rental");
+    }
+
+    public async Task CancelTransactionAsync(int transactionId, int currentUserId, string? reason = null)
     {
         string? trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        return ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Cancelled, FleetScheduleConstants.Status.Cancelled, "Cancel transaction", trimmedReason);
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+        string scheduleType = transaction.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved
+            ? FleetScheduleConstants.Type.Reservation
+            : FleetScheduleConstants.Type.Rental;
+
+        await ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Cancelled, scheduleType, FleetScheduleConstants.Status.Cancelled, "Cancel transaction", trimmedReason);
     }
 
     public async Task ArchiveTransactionAsync(int transactionId, int currentUserId)
     {
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        if (transaction.TransactionStatus is not (TransactionConstants.Status.Completed or TransactionConstants.Status.Cancelled))
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only completed or cancelled transactions can be archived.");
+        }
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
@@ -398,6 +467,7 @@ public sealed class TransactionService
 
             await _transactionPaymentRepository.AddAsync(payment, dbTransaction);
             await RecalculatePaymentSummaryAsync(request.TransactionId, dbTransaction);
+            await SyncReservationTransactionPaymentStatusAsync(transaction, dbTransaction);
 
             await _activityLogService.LogAsync(
                 "Add payment",
@@ -444,17 +514,30 @@ public sealed class TransactionService
     private async Task CompletePaidTransactionAsync(int transactionId, int currentUserId)
     {
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        if (transaction.TransactionStatus != TransactionConstants.Status.Active)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only active transactions can be completed.");
+        }
+
         if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid)
         {
             throw Validation(nameof(Transaction.PaymentStatus), "This transaction cannot be completed until the payment is fully paid.");
         }
-        await ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Completed, FleetScheduleConstants.Status.Completed, "Complete transaction");
+        await ChangeStatusAsync(
+            transactionId,
+            currentUserId,
+            TransactionConstants.Status.Completed,
+            FleetScheduleConstants.Type.Rental,
+            FleetScheduleConstants.Status.Completed,
+            "Complete transaction");
     }
 
     private async Task ChangeStatusAsync(
         int transactionId,
         int currentUserId,
         string transactionStatus,
+        string scheduleType,
         string scheduleStatus,
         string actionType,
         string? reason = null)
@@ -477,7 +560,7 @@ public sealed class TransactionService
             throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found or is archived.");
         }
 
-        schedule.ScheduleType = FleetScheduleConstants.Type.Rental;
+        schedule.ScheduleType = scheduleType;
         schedule.Status = scheduleStatus;
         await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
 
@@ -593,6 +676,28 @@ public sealed class TransactionService
         };
     }
 
+    private static FleetSchedule CreateReservationSchedule(
+        int scheduleId,
+        int carId,
+        int customerId,
+        DateTime startDate,
+        DateTime endDate,
+        string? notes,
+        string status)
+    {
+        return new FleetSchedule
+        {
+            ScheduleId = scheduleId,
+            CarId = carId,
+            CustomerId = customerId,
+            ScheduleType = FleetScheduleConstants.Type.Reservation,
+            Status = status,
+            StartDate = startDate.Date,
+            EndDate = endDate.Date,
+            Notes = notes
+        };
+    }
+
     private Transaction BuildTransaction(
         int scheduleId,
         int customerId,
@@ -602,10 +707,11 @@ public sealed class TransactionService
         decimal dailyRate,
         string modeOfPayment,
         decimal amountPaid,
-        string? notes)
+        string? notes,
+        string transactionStatus)
     {
         int totalDays = (endDate.Date - startDate.Date).Days + 1;
-        decimal totalAmount = dailyRate * totalDays;
+        decimal totalAmount = CalculateTotalAmount(startDate, endDate, dailyRate);
         return new Transaction
         {
             FleetScheduleId = scheduleId,
@@ -620,7 +726,7 @@ public sealed class TransactionService
             BalanceAmount = totalAmount - amountPaid,
             ModeOfPayment = modeOfPayment.Trim(),
             PaymentStatus = GetPaymentStatus(amountPaid, totalAmount),
-            TransactionStatus = TransactionConstants.Status.Active,
+            TransactionStatus = transactionStatus,
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             CreatedByUserId = _currentUserId
         };
@@ -645,7 +751,7 @@ public sealed class TransactionService
             failures.Add(new ValidationFailure(nameof(Transaction.DailyRate), "Daily rate must be greater than 0."));
         }
 
-        ValidatePaymentInputs(dailyRate * ((endDate.Date - startDate.Date).Days + 1), amountPaid, modeOfPayment, failures);
+        ValidatePaymentInputs(CalculateTotalAmount(startDate, endDate, dailyRate), amountPaid, modeOfPayment, failures);
 
         if (failures.Count > 0)
         {
@@ -681,6 +787,58 @@ public sealed class TransactionService
             : amountPaid < totalAmount
                 ? TransactionConstants.PaymentStatus.Partial
                 : TransactionConstants.PaymentStatus.Paid;
+    }
+
+    private static decimal CalculateTotalAmount(DateTime startDate, DateTime endDate, decimal dailyRate)
+    {
+        int totalDays = (endDate.Date - startDate.Date).Days + 1;
+        return dailyRate * totalDays;
+    }
+
+    private static string GetReservationStatusForPaidAmount(decimal amountPaid)
+    {
+        return amountPaid > 0
+            ? FleetScheduleConstants.Status.Reserved
+            : FleetScheduleConstants.Status.Pending;
+    }
+
+    private static string GetReservationTransactionStatusForPaidAmount(decimal amountPaid)
+    {
+        return amountPaid > 0
+            ? TransactionConstants.Status.Reserved
+            : TransactionConstants.Status.Pending;
+    }
+
+    private async Task SyncReservationTransactionPaymentStatusAsync(Transaction transaction, SqlTransaction dbTransaction)
+    {
+        if (transaction.TransactionStatus is not (TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved))
+        {
+            return;
+        }
+
+        FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
+        if (schedule is null || schedule.IsArchived || schedule.ScheduleType != FleetScheduleConstants.Type.Reservation)
+        {
+            return;
+        }
+
+        decimal totalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transaction.TransactionId, dbTransaction);
+        string scheduleStatus = GetReservationStatusForPaidAmount(totalPaid);
+        string transactionStatus = GetReservationTransactionStatusForPaidAmount(totalPaid);
+
+        if (transaction.TransactionStatus != transactionStatus)
+        {
+            await _transactionRepository.UpdateStatusAsync(transaction.TransactionId, transactionStatus, dbTransaction);
+        }
+
+        if (schedule.Status == scheduleStatus)
+        {
+            return;
+        }
+
+        schedule.Status = scheduleStatus;
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+        await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
     }
 
     private async Task<string> GenerateTransactionCodeAsync(SqlTransaction dbTransaction)

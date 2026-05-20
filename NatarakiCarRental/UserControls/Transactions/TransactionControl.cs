@@ -237,7 +237,7 @@ public sealed class TransactionControl : UserControl
         searchContainer.Controls.Add(_searchTextBox);
         searchContainer.Click += (_, _) => _searchTextBox.Focus();
 
-        ConfigureFilter(_statusFilterComboBox, new Point(356, 8), ["All Status", TransactionConstants.Status.Active, TransactionConstants.Status.Completed, TransactionConstants.Status.Cancelled]);
+        ConfigureFilter(_statusFilterComboBox, new Point(356, 8), ["All Status", .. TransactionConstants.Status.All]);
         ConfigureFilter(_paymentFilterComboBox, new Point(536, 8), ["All Payment", .. TransactionConstants.PaymentStatus.All]);
         _statusFilterComboBox.SelectedIndexChanged += async (_, _) => { _currentPage = 1; await LoadTransactionsAsync(); };
         _paymentFilterComboBox.SelectedIndexChanged += async (_, _) => { _currentPage = 1; await LoadTransactionsAsync(); };
@@ -422,6 +422,14 @@ public sealed class TransactionControl : UserControl
             {
                 actions += "|Restore";
             }
+            else if (transaction.TransactionStatus == TransactionConstants.Status.Pending)
+            {
+                actions += "|Payment|Cancel";
+            }
+            else if (transaction.TransactionStatus == TransactionConstants.Status.Reserved)
+            {
+                actions += "|Payment|Start Rental|Cancel";
+            }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Active)
             {
                 actions += "|Payment|Complete|Cancel";
@@ -561,11 +569,14 @@ public sealed class TransactionControl : UserControl
             TransactionConstants.PaymentStatus.Paid => ThemeHelper.Success,
             TransactionConstants.PaymentStatus.Partial => ThemeHelper.Warning,
             TransactionConstants.PaymentStatus.Unpaid => ThemeHelper.Danger,
+            TransactionConstants.Status.Pending => ThemeHelper.Warning,
+            TransactionConstants.Status.Reserved => ThemeHelper.Primary,
             TransactionConstants.Status.Active => ThemeHelper.Success,
             TransactionConstants.Status.Completed => ThemeHelper.GrayIcon,
             TransactionConstants.Status.Cancelled => ThemeHelper.Danger,
             "View" => ThemeHelper.Primary,
             "Payment" => ThemeHelper.Warning,
+            "Start Rental" => ThemeHelper.Primary,
             "Complete" => ThemeHelper.Success,
             "Cancel" => ThemeHelper.Danger,
             "Archive" => ThemeHelper.GrayIcon,
@@ -632,6 +643,9 @@ public sealed class TransactionControl : UserControl
                 break;
             case "Payment":
                 await EditTransactionAsync(transactionId);
+                break;
+            case "Start Rental":
+                await StartRentalAsync(transactionId);
                 break;
             case "Complete":
                 await CompleteTransactionAsync(transactionId);
@@ -727,10 +741,34 @@ public sealed class TransactionControl : UserControl
         }
     }
 
+    private async Task StartRentalAsync(int transactionId)
+    {
+        Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
+        if (transaction is null)
+        {
+            return;
+        }
+        if (!MessageBoxHelper.ShowConfirmWarning($"Start rental for {transaction.TransactionCode}?", "Start Rental"))
+        {
+            return;
+        }
+        try
+        {
+            await _transactionService.StartRentalAsync(transactionId, _currentUserId);
+            MessageBoxHelper.ShowSuccess("Rental started successfully.");
+            await LoadTransactionsAsync();
+        }
+        catch (ValidationException exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Start Rental");
+        }
+    }
+
     private async Task EditTransactionAsync(int transactionId)
     {
         Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
-        if (transaction is null || transaction.TransactionStatus != TransactionConstants.Status.Active)
+        if (transaction is null
+            || transaction.TransactionStatus is not (TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved or TransactionConstants.Status.Active))
         {
             return;
         }

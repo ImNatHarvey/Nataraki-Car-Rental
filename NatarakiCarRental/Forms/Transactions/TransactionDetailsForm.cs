@@ -31,6 +31,7 @@ public sealed class TransactionDetailsForm : Form
     private readonly Label _reservationSummaryLabel = CreateSummaryLabel();
     private readonly ComboBox _walkInCustomerComboBox = CreateComboBox();
     private readonly ComboBox _walkInCarComboBox = CreateComboBox();
+    private readonly ComboBox _walkInTransactionTypeComboBox = CreateComboBox();
     private readonly DateTimePicker _walkInStartDatePicker = CreateDatePicker();
     private readonly DateTimePicker _walkInEndDatePicker = CreateDatePicker();
     private readonly NumericUpDown _walkInDailyRateInput = CreateMoneyInput();
@@ -113,7 +114,7 @@ public sealed class TransactionDetailsForm : Form
         MinimizeBox = false;
         ClientSize = _mode switch
         {
-            TransactionFormMode.Add => new Size(1060, 700),
+            TransactionFormMode.Add => new Size(1060, 720),
             TransactionFormMode.View => new Size(1060, 685),
             TransactionFormMode.Edit => new Size(1060, 852),
             _ => new Size(1060, 880)
@@ -164,7 +165,7 @@ public sealed class TransactionDetailsForm : Form
 
         _flowTabs.Dock = DockStyle.None;
         _flowTabs.Location = new Point(32, 94);
-        _flowTabs.Size = new Size(996, 342);
+        _flowTabs.Size = new Size(996, 360);
         _flowTabs.Font = FontHelper.SemiBold(9F);
         _flowTabs.TabPages.Add(CreateReservationTab());
         _flowTabs.TabPages.Add(CreateWalkInTab());
@@ -187,16 +188,16 @@ public sealed class TransactionDetailsForm : Form
         _amountPaidInput.ValueChanged += (_, _) => UpdateBalanceLabel();
 
         GroupBox paymentSection = CreateSection("Payment Information", CreateInitialPaymentLayout());
-        paymentSection.Location = new Point(32, 450);
+        paymentSection.Location = new Point(32, 466);
         paymentSection.Size = new Size(996, 170);
         paymentSection.Dock = DockStyle.None;
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(742, 640);
+        cancelButton.Location = new Point(742, 660);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton("Create Transaction", 164, 38);
-        saveButton.Location = new Point(864, 640);
+        saveButton.Location = new Point(864, 660);
         saveButton.Click += SaveButton_Click;
 
         Controls.Add(_flowTabs);
@@ -214,6 +215,7 @@ public sealed class TransactionDetailsForm : Form
         _reservationComboBox.Width = 920;
         _walkInCustomerComboBox.Width = twoColumnInputWidth;
         _walkInCarComboBox.Width = twoColumnInputWidth;
+        _walkInTransactionTypeComboBox.Width = twoColumnInputWidth;
         _walkInStartDatePicker.Width = twoColumnInputWidth;
         _walkInEndDatePicker.Width = twoColumnInputWidth;
         _walkInDailyRateInput.Width = twoColumnInputWidth;
@@ -275,17 +277,17 @@ public sealed class TransactionDetailsForm : Form
         TabPage tab = new("Direct Walk-In") { BackColor = ThemeHelper.Surface };
         TableLayoutPanel layout = new()
         {
-            Location = new Point(18, 18),
-            Size = new Size(920, 292),
+            Location = new Point(18, 10),
+            Size = new Size(920, 320),
             ColumnCount = 2,
             RowCount = 5
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
 
         layout.Controls.Add(CreateInputPanel("Customer", _walkInCustomerComboBox), 0, 0);
@@ -293,17 +295,17 @@ public sealed class TransactionDetailsForm : Form
         layout.Controls.Add(CreateInputPanel("Start Date *", _walkInStartDatePicker), 0, 1);
         layout.Controls.Add(CreateInputPanel("End Date *", _walkInEndDatePicker), 1, 1);
         layout.Controls.Add(CreateInputPanel("Daily Rate", _walkInDailyRateInput), 0, 2);
+        layout.Controls.Add(CreateInputPanel("Transaction Type *", _walkInTransactionTypeComboBox), 1, 2);
         _walkInDailyRateInput.Enabled = false;
         _walkInTotalLabel.BorderStyle = BorderStyle.None;
         _walkInTotalLabel.BackColor = ThemeHelper.Surface;
         _walkInTotalLabel.Padding = new Padding(0, 2, 0, 0);
         _walkInTotalLabel.Height = 66;
-        layout.Controls.Add(CreateInputPanel("Rental Summary", _walkInTotalLabel), 1, 2);
+        layout.Controls.Add(CreateInputPanel("Rental Summary", _walkInTotalLabel), 1, 3);
         Panel checkboxPanel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
-        _useWalkInCustomerCheckBox.Location = new Point(0, 2);
+        _useWalkInCustomerCheckBox.Location = new Point(0, 26);
         checkboxPanel.Controls.Add(_useWalkInCustomerCheckBox);
         layout.Controls.Add(checkboxPanel, 0, 3);
-        layout.SetColumnSpan(checkboxPanel, 2);
 
         _walkInFirstNameTextBox.PlaceholderText = "First name";
         _walkInLastNameTextBox.PlaceholderText = "Last name";
@@ -315,6 +317,7 @@ public sealed class TransactionDetailsForm : Form
         _walkInStartDatePicker.ValueChanged += (_, _) => UpdateWalkInTotal();
         _walkInEndDatePicker.ValueChanged += (_, _) => UpdateWalkInTotal();
         _walkInDailyRateInput.ValueChanged += (_, _) => UpdateWalkInTotal();
+        _walkInTransactionTypeComboBox.SelectedIndexChanged += (_, _) => UpdateWalkInTotal();
         _useWalkInCustomerCheckBox.CheckedChanged += (_, _) => UpdateWalkInInputs();
         UpdateWalkInInputs();
         return tab;
@@ -325,7 +328,7 @@ public sealed class TransactionDetailsForm : Form
         CreateViewDetailsLayout();
         CreatePaymentsGrid(new Point(32, 376), new Size(996, 222));
 
-        if (_transaction?.TransactionStatus == TransactionConstants.Status.Active)
+        if (_transaction?.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved or TransactionConstants.Status.Active)
         {
             CreateAddPaymentSection();
             _submitPaymentButton.Location = new Point(868, 786);
@@ -334,7 +337,7 @@ public sealed class TransactionDetailsForm : Form
         }
 
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
-        closeButton.Location = _transaction?.TransactionStatus == TransactionConstants.Status.Active
+        closeButton.Location = _transaction?.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved or TransactionConstants.Status.Active
             ? new Point(746, 786)
             : new Point(918, 622);
         closeButton.Click += (_, _) => Close();
@@ -372,29 +375,6 @@ public sealed class TransactionDetailsForm : Form
         detailsSection.Size = new Size(996, 268);
         detailsSection.Dock = DockStyle.None;
         Controls.Add(detailsSection);
-    }
-
-    private void CreateCommonDetailsLayout()
-    {
-        _viewLayout.Dock = DockStyle.Fill;
-        _viewLayout.ColumnCount = 2;
-        _viewLayout.RowCount = 6;
-        _viewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        _viewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        for (int row = 0; row < 6; row++)
-        {
-            _viewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
-        }
-        GroupBox detailsSection = CreateSection("Transaction Information", _viewLayout);
-        detailsSection.Location = new Point(32, 90);
-        detailsSection.Size = new Size(996, 292);
-        detailsSection.Dock = DockStyle.None;
-        Controls.Add(detailsSection);
-    }
-
-    private void CreatePaymentsGrid()
-    {
-        CreatePaymentsGrid(new Point(32, 404), new Size(996, 156));
     }
 
     private void CreatePaymentsGrid(Point location, Size size)
@@ -560,6 +540,14 @@ public sealed class TransactionDetailsForm : Form
             .Cast<object>()
             .ToArray());
         _walkInCarComboBox.SelectedIndex = 0;
+
+        _walkInTransactionTypeComboBox.Items.Clear();
+        _walkInTransactionTypeComboBox.Items.AddRange(new object[]
+        {
+            FleetScheduleConstants.Type.Reservation,
+            FleetScheduleConstants.Type.Rental
+        });
+        _walkInTransactionTypeComboBox.SelectedItem = FleetScheduleConstants.Type.Reservation;
     }
 
     private void UpdateReservationSummary()
@@ -681,6 +669,7 @@ public sealed class TransactionDetailsForm : Form
                     new CreateWalkInTransactionRequest
                     {
                         CustomerId = _useWalkInCustomerCheckBox.Checked ? null : GetSelectedLookupId(_walkInCustomerComboBox),
+                        TransactionType = GetSelectedText(_walkInTransactionTypeComboBox),
                         CarId = GetSelectedLookupId(_walkInCarComboBox) ?? 0,
                         StartDate = _walkInStartDatePicker.Value.Date,
                         EndDate = _walkInEndDatePicker.Value.Date,
@@ -758,6 +747,7 @@ public sealed class TransactionDetailsForm : Form
                 nameof(Transaction.StartDate) => _walkInStartDatePicker,
                 nameof(Transaction.EndDate) => _walkInEndDatePicker,
                 nameof(Transaction.DailyRate) => _walkInDailyRateInput,
+                nameof(CreateWalkInTransactionRequest.TransactionType) => _walkInTransactionTypeComboBox,
                 nameof(Transaction.ModeOfPayment) => _modeOfPaymentComboBox,
                 nameof(Transaction.AmountPaid) => _amountPaidInput,
                 _ => null
@@ -889,15 +879,6 @@ public sealed class TransactionDetailsForm : Form
             Transaction? updated = await _transactionService.GetByIdAsync(_transaction.TransactionId);
             if (updated is not null)
             {
-                if (updated.PaymentStatus == TransactionConstants.PaymentStatus.Paid && updated.BalanceAmount <= 0)
-                {
-                    await _transactionService.CompleteTransactionAsync(updated.TransactionId, _currentUserId);
-                    MessageBoxHelper.ShowSuccess("Payment complete. The transaction has been marked as completed.");
-                    DialogResult = DialogResult.OK;
-                    Close();
-                    return;
-                }
-
                 MessageBoxHelper.ShowSuccess($"Payment recorded successfully. Remaining balance: {FormatPeso(updated.BalanceAmount)}.");
                 DialogResult = DialogResult.OK;
                 Close();

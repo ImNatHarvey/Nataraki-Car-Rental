@@ -2,6 +2,7 @@ namespace NatarakiCarRental.Models;
 
 public sealed class CreateWalkInTransactionRequest
 {
+    public string TransactionType { get; set; } = string.Empty;
     public int? CustomerId { get; set; }
     public int CarId { get; set; }
     public DateTime StartDate { get; set; }

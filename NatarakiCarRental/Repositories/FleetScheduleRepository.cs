@@ -167,6 +167,12 @@ public sealed class FleetScheduleRepository
               AND schedules.ScheduleType = @ReservationType
               AND schedules.Status IN @ReservationStatuses
               AND schedules.EndDate >= @ReferenceDate
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.Transactions AS transactions
+                    WHERE transactions.FleetScheduleId = schedules.ScheduleId
+                      AND transactions.IsArchived = 0
+              )
             ORDER BY schedules.StartDate, schedules.ScheduleId;
             """;
 

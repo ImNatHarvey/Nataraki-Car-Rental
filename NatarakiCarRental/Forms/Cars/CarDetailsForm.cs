@@ -399,12 +399,17 @@ public sealed class CarDetailsForm : Form
         _modelTextBox.Text = car.Model;
         _plateNumberTextBox.Text = car.PlateNumber;
         _ratePerDayTextBox.Text = car.RatePerDay.ToString("0.##");
-        if (IsViewMode && !StatusOptions.Contains(car.Status))
+        bool hasLegacyStatus = !StatusOptions.Contains(car.Status);
+        if (hasLegacyStatus && !_statusComboBox.Items.Contains(car.Status))
         {
             _statusComboBox.Items.Add(car.Status);
         }
 
         _statusComboBox.SelectedItem = _statusComboBox.Items.Contains(car.Status) ? car.Status : CarConstants.Status.Available;
+        if (_mode == CarFormMode.Edit && hasLegacyStatus)
+        {
+            _statusComboBox.Enabled = false;
+        }
         _brandTextBox.Text = car.Brand;
         _yearTextBox.Text = car.Year?.ToString() ?? string.Empty;
         _colorTextBox.Text = car.Color ?? string.Empty;
