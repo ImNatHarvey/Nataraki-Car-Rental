@@ -27,6 +27,7 @@ public static class DatabaseInitializer
 
         CreateDatabaseIfMissing();
         ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL DELETE FROM dbo.TransactionPayments;
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL DELETE FROM dbo.Transactions;
             IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL DELETE FROM dbo.FleetSchedules;
             IF OBJECT_ID(N'dbo.ActivityLogs', N'U') IS NOT NULL DELETE FROM dbo.ActivityLogs;

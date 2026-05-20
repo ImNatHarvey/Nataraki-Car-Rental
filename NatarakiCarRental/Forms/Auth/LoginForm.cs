@@ -3,6 +3,7 @@ using NatarakiCarRental.Forms.Main;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
+using NatarakiCarRental.UserControls.Common;
 
 namespace NatarakiCarRental.Forms.Auth;
 
@@ -11,6 +12,7 @@ public sealed class LoginForm : Form
     private readonly AuthService _authService = new();
     private readonly TextBox _usernameTextBox = ControlFactory.CreateTextBox();
     private readonly TextBox _passwordTextBox = ControlFactory.CreatePasswordTextBox();
+    private readonly BorderedPanel _passwordFieldPanel = new();
     private readonly IconButton _passwordPreviewButton = new();
 
     public LoginForm()
@@ -113,11 +115,10 @@ public sealed class LoginForm : Form
 
         Label passwordLabel = ControlFactory.CreateInputLabel("Password");
         passwordLabel.Location = new Point(66, 286);
-        _passwordTextBox.Location = new Point(66, 310);
-        _passwordTextBox.Width = 280;
 
+        ConfigurePasswordFieldPanel();
+        _passwordFieldPanel.Location = new Point(66, 310);
         ConfigurePasswordPreviewButton();
-        _passwordPreviewButton.Location = new Point(348, 310);
 
         Button loginButton = ControlFactory.CreatePrimaryButton("Log In", 320, 40);
         loginButton.Location = new Point(66, 374);
@@ -133,8 +134,7 @@ public sealed class LoginForm : Form
         formPanel.Controls.Add(usernameLabel);
         formPanel.Controls.Add(_usernameTextBox);
         formPanel.Controls.Add(passwordLabel);
-        formPanel.Controls.Add(_passwordTextBox);
-        formPanel.Controls.Add(_passwordPreviewButton);
+        formPanel.Controls.Add(_passwordFieldPanel);
         formPanel.Controls.Add(loginButton);
 
         rootLayout.Controls.Add(brandingPanel, 0, 0);
@@ -168,7 +168,8 @@ public sealed class LoginForm : Form
 
     private void ConfigurePasswordPreviewButton()
     {
-        _passwordPreviewButton.Size = new Size(38, 30);
+        _passwordPreviewButton.Size = new Size(34, 28);
+        _passwordPreviewButton.Location = new Point(285, 1);
         _passwordPreviewButton.IconChar = IconChar.Eye;
         _passwordPreviewButton.IconColor = ThemeHelper.TextSecondary;
         _passwordPreviewButton.IconSize = 16;
@@ -178,8 +179,28 @@ public sealed class LoginForm : Form
         _passwordPreviewButton.Cursor = Cursors.Hand;
         _passwordPreviewButton.TabStop = false;
         _passwordPreviewButton.Text = string.Empty;
-        _passwordPreviewButton.FlatAppearance.BorderColor = ThemeHelper.Border;
+        _passwordPreviewButton.FlatAppearance.BorderSize = 0;
+        _passwordPreviewButton.FlatAppearance.MouseOverBackColor = ThemeHelper.ContentBackground;
+        _passwordPreviewButton.FlatAppearance.MouseDownBackColor = ThemeHelper.Secondary;
         _passwordPreviewButton.Click += (_, _) => TogglePasswordPreview();
+    }
+
+    private void ConfigurePasswordFieldPanel()
+    {
+        _passwordFieldPanel.Size = new Size(320, 30);
+        _passwordFieldPanel.BackColor = ThemeHelper.Surface;
+        _passwordFieldPanel.BorderColor = ThemeHelper.Border;
+        _passwordFieldPanel.Cursor = Cursors.IBeam;
+        _passwordFieldPanel.Click += (_, _) => _passwordTextBox.Focus();
+
+        _passwordTextBox.BorderStyle = BorderStyle.None;
+        _passwordTextBox.BackColor = ThemeHelper.Surface;
+        _passwordTextBox.Location = new Point(8, 6);
+        _passwordTextBox.Width = 272;
+        _passwordTextBox.Cursor = Cursors.IBeam;
+
+        _passwordFieldPanel.Controls.Add(_passwordTextBox);
+        _passwordFieldPanel.Controls.Add(_passwordPreviewButton);
     }
 
     private void TogglePasswordPreview()

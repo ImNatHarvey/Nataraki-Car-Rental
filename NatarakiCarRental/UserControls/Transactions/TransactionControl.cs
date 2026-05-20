@@ -31,7 +31,7 @@ public sealed class TransactionControl : UserControl
     private readonly Label _emptyStateLabel = new();
     private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
     private int _currentPage = 1;
-    private int _pageSize = 15;
+    private int _pageSize = 13;
     private readonly Label _paginationLabel = new();
     private readonly Button _prevPageButton = CreatePaginationButton("Previous");
     private readonly Button _nextPageButton = CreatePaginationButton("Next");
@@ -376,7 +376,7 @@ public sealed class TransactionControl : UserControl
     {
         try
         {
-            _pageSize = Height > 700 ? 15 : 5;
+            _pageSize = Height > 700 ? 13 : 4;
             UpdateTabStyles();
 
             TransactionMetrics metrics = await _transactionService.GetMetricsAsync(DateTime.Today);
