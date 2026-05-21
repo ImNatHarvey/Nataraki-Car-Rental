@@ -360,8 +360,10 @@ public sealed class TransactionControl : UserControl
     {
         Load -= TransactionControl_Load;
         _lastHeight = Height;
+        UpdateColumnLayout();
         Resize += async (_, _) =>
         {
+            UpdateColumnLayout();
             if (Math.Abs(Height - _lastHeight) > 50)
             {
                 _lastHeight = Height;
@@ -370,6 +372,43 @@ public sealed class TransactionControl : UserControl
             }
         };
         await LoadTransactionsAsync();
+    }
+
+    private void UpdateColumnLayout()
+    {
+        if (_transactionsGrid.Columns.Count == 0) return;
+
+        int gridWidth = _transactionsGrid.ClientSize.Width;
+        int threshold = 1380; 
+
+        if (gridWidth < threshold && gridWidth > 0)
+        {
+            _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            if (_transactionsGrid.Columns["TransactionCode"] is DataGridViewColumn c1) c1.Width = 120;
+            if (_transactionsGrid.Columns["Customer"] is DataGridViewColumn c2) c2.Width = 140;
+            if (_transactionsGrid.Columns["CarPlate"] is DataGridViewColumn c3) c3.Width = 150;
+            if (_transactionsGrid.Columns["Dates"] is DataGridViewColumn c4) c4.Width = 150;
+            if (_transactionsGrid.Columns["TotalAmount"] is DataGridViewColumn c5) c5.Width = 100;
+            if (_transactionsGrid.Columns["AmountPaid"] is DataGridViewColumn c6) c6.Width = 100;
+            if (_transactionsGrid.Columns["Balance"] is DataGridViewColumn c7) c7.Width = 100;
+            if (_transactionsGrid.Columns["Payment"] is DataGridViewColumn c8) c8.Width = 100;
+            if (_transactionsGrid.Columns["Status"] is DataGridViewColumn c9) c9.Width = 100;
+            if (_transactionsGrid.Columns["Actions"] is DataGridViewColumn c10) c10.Width = 320; 
+        }
+        else
+        {
+            _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            SetColumnSizing("TransactionCode", 145, 105);
+            SetColumnSizing("Customer", 150, 110);
+            SetColumnSizing("CarPlate", 165, 120);
+            SetColumnSizing("Dates", 118, 95);
+            SetColumnSizing("TotalAmount", 106, 86);
+            SetColumnSizing("AmountPaid", 96, 78);
+            SetColumnSizing("Balance", 96, 78);
+            SetColumnSizing("Payment", 104, 86);
+            SetColumnSizing("Status", 100, 82);
+            SetColumnSizing("Actions", 320, 230);
+        }
     }
 
     private async Task LoadTransactionsAsync()
@@ -403,6 +442,7 @@ public sealed class TransactionControl : UserControl
     private void PopulateGrid(IReadOnlyList<TransactionListItem> allTransactions)
     {
         AddGridColumns();
+        UpdateColumnLayout();
         _transactionsGrid.Rows.Clear();
         
         int totalItems = allTransactions.Count;
@@ -535,10 +575,6 @@ public sealed class TransactionControl : UserControl
                 e.Graphics.DrawString(action, font, foreground, rect, format);
 
                 currentX += width + 6;
-                if (currentX > e.CellBounds.Right - 4)
-                {
-                    break;
-                }
             }
         }
         else

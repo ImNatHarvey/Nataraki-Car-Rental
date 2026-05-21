@@ -183,6 +183,8 @@ public sealed class TransactionReturnInspectionForm : Form
             _additionalChargeInput.Enabled = false;
             _chargePaidCheckBox.Checked = false;
             _chargePaidCheckBox.Enabled = false;
+            _selectedProofPath = null;
+            _proofPathLabel.Text = "No file selected";
         }
         else if (isLate)
         {
@@ -263,6 +265,8 @@ public sealed class TransactionReturnInspectionForm : Form
         if (!hasCharge)
         {
             _chargePaidCheckBox.Checked = false;
+            _selectedProofPath = null;
+            _proofPathLabel.Text = "No file selected";
         }
         UpdateProofState();
     }
@@ -430,6 +434,7 @@ public sealed class TransactionReturnInspectionForm : Form
         {
             DecimalPlaces = 2,
             Maximum = 1000000,
+            Increment = 1000,
             ThousandsSeparator = true,
             Font = FontHelper.Regular(10F)
         };

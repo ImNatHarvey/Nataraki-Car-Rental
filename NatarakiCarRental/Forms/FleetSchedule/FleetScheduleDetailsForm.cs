@@ -179,7 +179,7 @@ public sealed class FleetScheduleDetailsForm : Form
 
             if (_sourceSchedule is not null)
             {
-                LoadSchedule(_sourceSchedule);
+                await CheckTransactionLinkAndLoadAsync();
             }
             else
             {
@@ -204,7 +204,7 @@ public sealed class FleetScheduleDetailsForm : Form
         _customerComboBox.SelectedIndex = 0;
 
         _scheduleTypeComboBox.Items.Clear();
-        if (_mode == FleetScheduleFormMode.Add)
+        if (_mode == FleetScheduleFormMode.Add || (_mode == FleetScheduleFormMode.Edit && _sourceSchedule?.ScheduleType != FleetScheduleConstants.Type.Rental))
         {
             _scheduleTypeComboBox.Items.AddRange(new[]
             {
@@ -216,10 +216,70 @@ public sealed class FleetScheduleDetailsForm : Form
         else
         {
             _scheduleTypeComboBox.Items.AddRange(FleetScheduleConstants.Type.All.Cast<object>().ToArray());
-            if (_sourceSchedule is not null) _scheduleTypeComboBox.SelectedItem = _sourceSchedule.ScheduleType;
+        }
+
+        if (_sourceSchedule is not null)
+        {
+            _scheduleTypeComboBox.SelectedItem = _sourceSchedule.ScheduleType;
         }
 
         _scheduleTypeComboBox.SelectedIndexChanged += (_, _) => UpdateStatusText();
+    }
+
+    private async Task CheckTransactionLinkAndLoadAsync()
+    {
+        if (_sourceSchedule is null) return;
+
+        bool isLinked = await _scheduleService.IsLinkedToActiveTransactionAsync(_sourceSchedule.ScheduleId);
+        bool isRental = _sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Rental;
+        
+        if (isLinked || isRental)
+        {
+            SetToViewMode();
+        }
+        else
+        {
+            LoadSchedule(_sourceSchedule);
+        }
+    }
+
+    private void SetToViewMode()
+    {
+        // Actually we need to add View mode to enum if not there, or just disable all controls
+        _carComboBox.Enabled = false;
+        _customerComboBox.Enabled = false;
+        _scheduleTypeComboBox.Enabled = false;
+        _startDatePicker.Enabled = false;
+        _endDatePicker.Enabled = false;
+
+        Label linkLabel = new Label
+        {
+            Text = "Rental lifecycle is managed via the Transaction module.",
+            AutoSize = true,
+            Location = new Point(32, 58),
+            Font = FontHelper.Regular(8.5F),
+            ForeColor = ThemeHelper.TextSecondary
+        };
+        Controls.Add(linkLabel);
+        _validationLabel.Location = new Point(34, 76);
+
+        if (_sourceSchedule is not null)
+        {
+            LoadSchedule(_sourceSchedule);
+            // Hide save button
+            foreach (Control ctrl in Controls)
+            {
+                if (ctrl is Button btn && (btn.Text == "Save Schedule" || btn.Text == "Archive"))
+                {
+                    btn.Visible = false;
+                }
+                if (ctrl is Button cancelBtn && (cancelBtn.Text == "Cancel" || cancelBtn.Text == "Close"))
+                {
+                    cancelBtn.Text = "Close";
+                    cancelBtn.Location = new Point(778, 462);
+                }
+            }
+        }
     }
 
     private void ApplyDefaults()
@@ -387,9 +447,35 @@ public sealed class FleetScheduleDetailsForm : Form
     private TableLayoutPanel CreateDateRangeLayout()
     {
         TableLayoutPanel layout = CreateGrid(2, 1);
+        
+        _startDatePicker.ValueChanged += (_, _) =>
+        {
+            if (_endDatePicker.Value.Date < _startDatePicker.Value.Date)
+            {
+                _endDatePicker.Value = _startDatePicker.Value.Date;
+            }
+            _endDatePicker.MinDate = _startDatePicker.Value.Date;
+        };
+
         layout.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 0);
         layout.Controls.Add(CreateInputPanel("End Date *", _endDatePicker), 1, 0);
-        return layout;
+
+        Label historicalHelperLabel = new()
+        {
+            Text = "Past dates are allowed for missed/historical records.",
+            AutoSize = true,
+            Location = new Point(16, 60),
+            Font = FontHelper.Italic(8.5F),
+            ForeColor = ThemeHelper.TextSecondary
+        };
+        
+        TableLayoutPanel outerLayout = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
+        outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+        outerLayout.Controls.Add(layout, 0, 0);
+        outerLayout.Controls.Add(historicalHelperLabel, 0, 1);
+
+        return outerLayout;
     }
 
     private static GroupBox CreateSection(string title, Control content)

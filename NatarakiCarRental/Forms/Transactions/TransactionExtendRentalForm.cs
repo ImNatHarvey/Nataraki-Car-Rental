@@ -172,7 +172,7 @@ public sealed class TransactionExtendRentalForm : Form
         _amountPaidInput.ValueChanged += (_, _) => UpdateProofState();
 
         Panel amountPanel = new() { Width = 210, Height = 60, Location = new Point(236, 32) };
-        Label amountLabel = ControlFactory.CreateInputLabel("Amount Paid");
+        Label amountLabel = ControlFactory.CreateInputLabel("Amount Paid (₱)");
         amountLabel.Location = new Point(0, 0);
         _amountPaidInput.Location = new Point(0, 24);
         amountPanel.Controls.Add(amountLabel);
@@ -210,9 +210,8 @@ public sealed class TransactionExtendRentalForm : Form
 
     private void UpdateProofState()
     {
-        bool hasPaid = _amountPaidInput.Value > 0;
-        _browseProofButton.Enabled = hasPaid;
-        _openProofButton.Enabled = hasPaid && _selectedProofPath is not null;
+        _browseProofButton.Enabled = true;
+        _openProofButton.Enabled = _selectedProofPath is not null;
     }
 
     private void BrowseProofButton_Click(object? sender, EventArgs e)
@@ -317,6 +316,7 @@ public sealed class TransactionExtendRentalForm : Form
         {
             DecimalPlaces = 2,
             Maximum = 1000000,
+            Increment = 1000,
             ThousandsSeparator = true,
             Font = FontHelper.Regular(10F)
         };

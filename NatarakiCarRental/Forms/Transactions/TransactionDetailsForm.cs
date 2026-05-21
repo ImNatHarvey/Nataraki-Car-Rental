@@ -298,7 +298,7 @@ public sealed class TransactionDetailsForm : Form
         layout.Controls.Add(CreateInputPanel("Car *", _walkInCarComboBox), 1, 0);
         layout.Controls.Add(CreateInputPanel("Start Date *", _walkInStartDatePicker), 0, 1);
         layout.Controls.Add(CreateInputPanel("End Date *", _walkInEndDatePicker), 1, 1);
-        layout.Controls.Add(CreateInputPanel("Daily Rate", _walkInDailyRateInput), 0, 2);
+        layout.Controls.Add(CreateInputPanel("Daily Rate (₱)", _walkInDailyRateInput), 0, 2);
         layout.Controls.Add(CreateInputPanel("Transaction Type *", _walkInTransactionTypeComboBox), 1, 2);
         _walkInDailyRateInput.Enabled = false;
         _walkInTotalLabel.BorderStyle = BorderStyle.None;
@@ -315,10 +315,29 @@ public sealed class TransactionDetailsForm : Form
         _walkInLastNameTextBox.PlaceholderText = "Last name";
         layout.Controls.Add(CreateInputPanel("First Name", _walkInFirstNameTextBox), 0, 4);
         layout.Controls.Add(CreateInputPanel("Last Name", _walkInLastNameTextBox), 1, 4);
+
+        Label historicalHelperLabel = new()
+        {
+            Text = "Past dates are allowed for missed/historical records.",
+            AutoSize = true,
+            Location = new Point(18, 280),
+            Font = FontHelper.Italic(8.5F),
+            ForeColor = ThemeHelper.TextSecondary
+        };
+        tab.Controls.Add(historicalHelperLabel);
+        
         tab.Controls.Add(layout);
 
         _walkInCarComboBox.SelectedIndexChanged += (_, _) => ApplySelectedCarRate();
-        _walkInStartDatePicker.ValueChanged += (_, _) => UpdateWalkInTotal();
+        _walkInStartDatePicker.ValueChanged += (_, _) => 
+        {
+            if (_walkInEndDatePicker.Value.Date < _walkInStartDatePicker.Value.Date)
+            {
+                _walkInEndDatePicker.Value = _walkInStartDatePicker.Value.Date;
+            }
+            _walkInEndDatePicker.MinDate = _walkInStartDatePicker.Value.Date;
+            UpdateWalkInTotal();
+        };
         _walkInEndDatePicker.ValueChanged += (_, _) => UpdateWalkInTotal();
         _walkInDailyRateInput.ValueChanged += (_, _) => UpdateWalkInTotal();
         _walkInTransactionTypeComboBox.SelectedIndexChanged += (_, _) => UpdateWalkInTotal();
@@ -426,7 +445,7 @@ public sealed class TransactionDetailsForm : Form
         _paymentsGrid.Columns.Add("Mode", "Mode");
         _paymentsGrid.Columns.Add("Proof", "Proof");
         _paymentsGrid.Columns.Add("ReceiptFilePath", "ReceiptFilePath");
-        _paymentsGrid.Columns["ReceiptFilePath"].Visible = false;
+        if (_paymentsGrid.Columns["ReceiptFilePath"] is DataGridViewColumn col) col.Visible = false;
 
         SetFillWeight(_paymentsGrid, "Date", 110);
         SetFillWeight(_paymentsGrid, "Amount", 100);
@@ -1200,6 +1219,7 @@ public sealed class TransactionDetailsForm : Form
             Height = 30,
             DecimalPlaces = 2,
             Maximum = 1000000,
+            Increment = 1000,
             ThousandsSeparator = true,
             Font = FontHelper.Regular(10F)
         };

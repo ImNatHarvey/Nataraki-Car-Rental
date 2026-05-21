@@ -79,6 +79,11 @@ public sealed class FleetScheduleService
         return _scheduleRepository.GetEligibleReservationsAsync(referenceDate);
     }
 
+    public Task<bool> IsLinkedToActiveTransactionAsync(int scheduleId)
+    {
+        return _transactionRepository.HasActiveForFleetScheduleAsync(scheduleId);
+    }
+
     public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null)
     {
         Normalize(schedule);

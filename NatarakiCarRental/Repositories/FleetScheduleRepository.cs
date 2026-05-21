@@ -166,7 +166,6 @@ public sealed class FleetScheduleRepository
             WHERE schedules.IsArchived = 0
               AND schedules.ScheduleType = @ReservationType
               AND schedules.Status IN @ReservationStatuses
-              AND schedules.EndDate >= @ReferenceDate
               AND NOT EXISTS (
                     SELECT 1
                     FROM dbo.Transactions AS transactions
