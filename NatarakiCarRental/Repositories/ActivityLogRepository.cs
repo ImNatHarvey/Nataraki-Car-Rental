@@ -23,7 +23,9 @@ public sealed class ActivityLogRepository
         string searchText,
         string? actionType,
         string? entityName,
-        int maxRows = 100)
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null,
+        int maxRows = 500)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
 
@@ -49,6 +51,8 @@ public sealed class ActivityLogRepository
                 ON users.UserId = logs.UserId
             WHERE (@ActionType IS NULL OR logs.ActionType = @ActionType)
               AND (@EntityName IS NULL OR logs.EntityName = @EntityName)
+              AND (@DateFrom IS NULL OR logs.CreatedAt >= @DateFrom)
+              AND (@DateTo IS NULL OR logs.CreatedAt <= @DateTo)
               AND (
                     @SearchText = N''
                     OR users.Username LIKE @SearchPattern
@@ -67,11 +71,13 @@ public sealed class ActivityLogRepository
             sql,
             new
             {
-                MaxRows = Math.Clamp(maxRows, 1, 500),
+                MaxRows = Math.Clamp(maxRows, 1, 1000),
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
                 ActionType = NullIfWhiteSpace(actionType),
-                EntityName = NullIfWhiteSpace(entityName)
+                EntityName = NullIfWhiteSpace(entityName),
+                DateFrom = dateFrom,
+                DateTo = dateTo
             });
 
         return logs.ToList();
@@ -120,7 +126,9 @@ public sealed class ActivityLogRepository
                 TotalLogs = COUNT(1),
                 TodaysLogs = COUNT(CASE WHEN CONVERT(date, CreatedAt) = CONVERT(date, SYSDATETIME()) THEN 1 END),
                 CarActions = COUNT(CASE WHEN EntityName = N'Car' THEN 1 END),
-                CustomerActions = COUNT(CASE WHEN EntityName = N'Customer' THEN 1 END)
+                CustomerActions = COUNT(CASE WHEN EntityName = N'Customer' THEN 1 END),
+                TransactionActions = COUNT(CASE WHEN EntityName = N'Transaction' THEN 1 END),
+                FleetActions = COUNT(CASE WHEN EntityName = N'FleetSchedule' THEN 1 END)
             FROM dbo.ActivityLogs;
             """;
 

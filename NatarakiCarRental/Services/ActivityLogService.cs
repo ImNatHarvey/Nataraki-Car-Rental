@@ -23,9 +23,11 @@ public sealed class ActivityLogService
         string searchText,
         string? actionType = null,
         string? entityName = null,
-        int maxRows = 100)
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null,
+        int maxRows = 500)
     {
-        return _activityLogRepository.SearchLogsAsync(searchText, actionType, entityName, maxRows);
+        return _activityLogRepository.SearchLogsAsync(searchText, actionType, entityName, dateFrom, dateTo, maxRows);
     }
 
     public Task<ActivityLogMetrics> GetMetricsAsync()
