@@ -21,6 +21,9 @@ public sealed class Transaction
     public string PaymentStatus { get; set; } = string.Empty;
     public string TransactionStatus { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    public string? ReturnCondition { get; set; }
+    public string? ReturnNotes { get; set; }
+    public decimal AdditionalCharge { get; set; }
     public int? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

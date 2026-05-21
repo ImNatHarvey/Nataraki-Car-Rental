@@ -238,7 +238,10 @@ public sealed class FleetScheduleControl : UserControl
     private void TimelineCanvas_MouseMove(object? sender, MouseEventArgs e)
     {
         Models.FleetSchedule? schedule = _timelineCanvas.GetScheduleAt(e.Location);
-        _timelineCanvas.Cursor = schedule is null ? Cursors.Default : Cursors.Hand;
+        var cellInfo = _timelineCanvas.GetCellAt(e.Location);
+        bool isEmptyCell = schedule is null && cellInfo.Car is not null && cellInfo.Date.HasValue;
+        
+        _timelineCanvas.Cursor = schedule is not null || isEmptyCell ? Cursors.Hand : Cursors.Default;
         int? nextScheduleId = schedule?.ScheduleId;
 
         if (_hoveredScheduleId != nextScheduleId)
@@ -284,10 +287,10 @@ public sealed class FleetScheduleControl : UserControl
             return;
         }
 
-        (Car? car, DateTime? date) = _timelineCanvas.GetCellAt(e.Location);
-        if (car is not null && date.HasValue)
+        var cellInfo = _timelineCanvas.GetCellAt(e.Location);
+        if (cellInfo.Car is not null && cellInfo.Date.HasValue)
         {
-            await OpenAddFormAsync(car.CarId, date.Value);
+            await OpenAddFormAsync(cellInfo.Car.CarId, cellInfo.Date.Value);
         }
     }
 

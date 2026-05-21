@@ -1,3 +1,4 @@
+using System.Drawing.Drawing2D;
 using FluentValidation;
 using FluentValidation.Results;
 using System.Diagnostics;
@@ -143,6 +144,9 @@ public sealed class TransactionDetailsForm : Form
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
         Controls.Add(_validationLabel);
+
+        // Add blank area click handler to remove focus from inputs
+        Click += (_, _) => ActiveControl = null;
 
         if (_mode == TransactionFormMode.View)
         {
@@ -389,37 +393,50 @@ public sealed class TransactionDetailsForm : Form
         _paymentsGrid.AllowUserToAddRows = false;
         _paymentsGrid.AllowUserToDeleteRows = false;
         _paymentsGrid.AllowUserToResizeRows = false;
+        _paymentsGrid.AllowUserToResizeColumns = false;
         _paymentsGrid.ReadOnly = true;
         _paymentsGrid.RowHeadersVisible = false;
         _paymentsGrid.ScrollBars = ScrollBars.Vertical;
         _paymentsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _paymentsGrid.BackgroundColor = ThemeHelper.Surface;
         _paymentsGrid.BorderStyle = BorderStyle.FixedSingle;
+        _paymentsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
+        _paymentsGrid.GridColor = ThemeHelper.TableGridLine;
+        _paymentsGrid.EnableHeadersVisualStyles = false;
         _paymentsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _paymentsGrid.ColumnHeadersHeight = 30;
-        _paymentsGrid.RowTemplate.Height = 30;
+        _paymentsGrid.ColumnHeadersHeight = 38;
+        _paymentsGrid.RowTemplate.Height = 38;
+        
+        _paymentsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
+        _paymentsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        _paymentsGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
+        _paymentsGrid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
+        _paymentsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
+        _paymentsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        
+        _paymentsGrid.DefaultCellStyle.BackColor = ThemeHelper.Surface;
+        _paymentsGrid.DefaultCellStyle.ForeColor = ThemeHelper.TextPrimary;
+        _paymentsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
+        _paymentsGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
         _paymentsGrid.Font = FontHelper.Regular(9F);
-        _paymentsGrid.CellContentClick += PaymentsGrid_CellContentClick;
 
         _paymentsGrid.Columns.Add("Date", "Date");
         _paymentsGrid.Columns.Add("Amount", "Amount");
+        _paymentsGrid.Columns.Add("Type", "Type");
         _paymentsGrid.Columns.Add("Mode", "Mode");
+        _paymentsGrid.Columns.Add("Proof", "Proof");
         _paymentsGrid.Columns.Add("ReceiptFilePath", "ReceiptFilePath");
-        _paymentsGrid.Columns.Add(new DataGridViewButtonColumn
-        {
-            Name = "ProofAction",
-            HeaderText = "Proof",
-            Text = "View",
-            UseColumnTextForButtonValue = true,
-            FlatStyle = FlatStyle.Flat,
-            Width = 60
-        });
+        _paymentsGrid.Columns["ReceiptFilePath"].Visible = false;
 
-        _paymentsGrid.Columns["Date"]!.FillWeight = 90;
-        _paymentsGrid.Columns["Amount"]!.FillWeight = 80;
-        _paymentsGrid.Columns["Mode"]!.FillWeight = 80;
-        _paymentsGrid.Columns["ReceiptFilePath"]!.Visible = false;
-        _paymentsGrid.Columns["ProofAction"]!.FillWeight = 60;
+        SetFillWeight(_paymentsGrid, "Date", 110);
+        SetFillWeight(_paymentsGrid, "Amount", 100);
+        SetFillWeight(_paymentsGrid, "Type", 120);
+        SetFillWeight(_paymentsGrid, "Mode", 90);
+        SetFillWeight(_paymentsGrid, "Proof", 70);
+
+        _paymentsGrid.CellPainting += PaymentsGrid_CellPainting;
+        _paymentsGrid.CellMouseMove += PaymentsGrid_CellMouseMove;
+        _paymentsGrid.CellMouseClick += PaymentsGrid_CellMouseClick;
 
         paymentPanel.Controls.Add(_paymentsGrid);
         GroupBox section = CreateSection("Payment History", paymentPanel);
@@ -427,6 +444,91 @@ public sealed class TransactionDetailsForm : Form
         section.Size = size;
         section.Dock = DockStyle.None;
         Controls.Add(section);
+    }
+
+    private void PaymentsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+        if (_paymentsGrid.Columns[e.ColumnIndex].Name == "Proof")
+        {
+            e.PaintBackground(e.CellBounds, true);
+            string text = e.Value?.ToString() ?? string.Empty;
+            
+            if (e.Graphics is null) return;
+            
+            if (text == "-")
+            {
+                using StringFormat format = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                using SolidBrush textBrush = new(ThemeHelper.TextSecondary);
+                e.Graphics.DrawString("-", FontHelper.Regular(), textBrush, e.CellBounds, format);
+            }
+            else if (text == "View")
+            {
+                float height = 22;
+                float width = 50;
+                float x = e.CellBounds.X + (e.CellBounds.Width - width) / 2;
+                float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
+                RectangleF rect = new(x, y, width, height);
+
+                using GraphicsPath path = CreateRoundedRect(rect, height / 2);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using SolidBrush bgBrush = new(ThemeHelper.Primary);
+                e.Graphics.FillPath(bgBrush, path);
+                
+                using StringFormat format = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                e.Graphics.DrawString("View", FontHelper.SemiBold(8.5F), Brushes.White, rect, format);
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void PaymentsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        string? val = _paymentsGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
+        _paymentsGrid.Cursor = _paymentsGrid.Columns[e.ColumnIndex].Name == "Proof" && val == "View"
+            ? Cursors.Hand
+            : Cursors.Default;
+    }
+
+    private void PaymentsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
+
+        string? val = _paymentsGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
+        if (_paymentsGrid.Columns[e.ColumnIndex].Name == "Proof" && val == "View")
+        {
+            string? receiptPath = _paymentsGrid.Rows[e.RowIndex].Cells["ReceiptFilePath"].Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(receiptPath))
+            {
+                OpenProofFile(null, receiptPath);
+            }
+        }
+    }
+
+    private static void SetFillWeight(DataGridView grid, string columnName, float weight)
+    {
+        if (grid.Columns[columnName] is DataGridViewColumn column)
+        {
+            column.FillWeight = weight;
+        }
+    }
+
+    private static GraphicsPath CreateRoundedRect(RectangleF rect, float radius)
+    {
+        GraphicsPath path = new();
+        float diameter = radius * 2;
+        RectangleF arc = new(rect.Location, new SizeF(diameter, diameter));
+        path.AddArc(arc, 180, 90);
+        arc.X = rect.Right - diameter;
+        path.AddArc(arc, 270, 90);
+        arc.Y = rect.Bottom - diameter;
+        path.AddArc(arc, 0, 90);
+        arc.X = rect.Left;
+        path.AddArc(arc, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 
     private void CreateAddPaymentSection()
@@ -503,11 +605,12 @@ public sealed class TransactionDetailsForm : Form
             foreach (TransactionPaymentListItem payment in payments)
             {
                 _paymentsGrid.Rows.Add(
-                    payment.PaymentDate.ToString("MMM d, yyyy h:mm tt"),
+                    payment.PaymentDate.ToString("yyyy-MM-dd HH:mm"),
                     FormatPeso(payment.Amount),
+                    payment.PaymentCategory,
                     payment.ModeOfPayment,
-                    payment.ReceiptFilePath ?? string.Empty,
-                    "Open File");
+                    string.IsNullOrWhiteSpace(payment.ReceiptFilePath) ? "-" : "View",
+                    payment.ReceiptFilePath ?? string.Empty);
             }
         }
         catch (Exception exception)

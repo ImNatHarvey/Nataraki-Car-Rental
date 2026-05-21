@@ -418,21 +418,26 @@ public sealed class TransactionControl : UserControl
         foreach (TransactionListItem transaction in pagedTransactions)
         {
             string actions = "View";
+            bool isPaid = transaction.PaymentStatus == TransactionConstants.PaymentStatus.Paid;
+
             if (_showArchived)
             {
                 actions += "|Restore";
             }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Pending)
             {
-                actions += "|Payment|Cancel";
+                if (!isPaid) actions += "|Payment";
+                actions += "|Cancel";
             }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Reserved)
             {
-                actions += "|Payment|Start Rental|Cancel";
+                if (!isPaid) actions += "|Payment";
+                actions += "|Start Rental|Cancel";
             }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Active)
             {
-                actions += "|Payment|Complete|Cancel";
+                if (!isPaid) actions += "|Payment";
+                actions += "|Extend|Complete|Cancel";
             }
             else if (transaction.TransactionStatus is TransactionConstants.Status.Completed or TransactionConstants.Status.Cancelled)
             {
@@ -644,6 +649,9 @@ public sealed class TransactionControl : UserControl
             case "Payment":
                 await EditTransactionAsync(transactionId);
                 break;
+            case "Extend":
+                await ExtendRentalAsync(transactionId);
+                break;
             case "Start Rental":
                 await StartRentalAsync(transactionId);
                 break;
@@ -718,6 +726,43 @@ public sealed class TransactionControl : UserControl
         form.ShowDialog(this);
     }
 
+    private async Task ExtendRentalAsync(int transactionId)
+    {
+        Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
+        if (transaction is null)
+        {
+            return;
+        }
+
+        using TransactionExtendRentalForm form = new(transaction);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            await _transactionService.ExtendRentalAsync(
+                transactionId,
+                form.NewEndDate,
+                form.ModeOfPayment,
+                form.AmountPaid,
+                form.ReceiptFilePath,
+                _currentUserId);
+
+            MessageBoxHelper.ShowSuccess("Rental extended successfully.");
+            await LoadTransactionsAsync();
+        }
+        catch (ValidationException exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Extend Rental");
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Unable to extend rental.\n\n{exception.Message}", "Transactions");
+        }
+    }
+
     private async Task CompleteTransactionAsync(int transactionId)
     {
         Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
@@ -725,19 +770,37 @@ public sealed class TransactionControl : UserControl
         {
             return;
         }
-        if (!MessageBoxHelper.ShowConfirmWarning($"Complete transaction {transaction.TransactionCode}?", "Complete Transaction"))
+
+        using TransactionReturnInspectionForm inspectionForm = new(transaction);
+        if (inspectionForm.ShowDialog(this) != DialogResult.OK)
         {
             return;
         }
+
         try
         {
-            await _transactionService.CompleteTransactionAsync(transactionId, _currentUserId);
-            MessageBoxHelper.ShowSuccess("Transaction completed successfully.");
+            await _transactionService.CompleteTransactionAsync(new CompleteTransactionRequest
+            {
+                TransactionId = transactionId,
+                ReturnCondition = inspectionForm.ReturnCondition,
+                DaysLate = inspectionForm.DaysLate,
+                AdditionalCharge = inspectionForm.AdditionalCharge,
+                ChargePaid = inspectionForm.ChargePaid,
+                ReceiptFilePath = inspectionForm.ReceiptFilePath,
+                BlacklistCustomer = inspectionForm.BlacklistCustomer,
+                BlacklistReason = inspectionForm.BlacklistReason
+            }, _currentUserId);
+
+            MessageBoxHelper.ShowSuccess($"Transaction {transaction.TransactionCode} completed successfully.");
             await LoadTransactionsAsync();
         }
         catch (ValidationException exception)
         {
             MessageBoxHelper.ShowWarning(exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message, "Complete Transaction");
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Unable to complete transaction.\n\n{exception.Message}", "Transactions");
         }
     }
 

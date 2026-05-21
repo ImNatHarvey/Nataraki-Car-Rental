@@ -448,6 +448,26 @@ public static class DatabaseInitializer
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
             BEGIN
+                IF COL_LENGTH(N'dbo.Transactions', N'ReturnCondition') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD ReturnCondition nvarchar(50) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.Transactions', N'ReturnNotes') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD ReturnNotes nvarchar(500) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.Transactions', N'AdditionalCharge') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD AdditionalCharge decimal(18,2) NOT NULL CONSTRAINT DF_Transactions_AdditionalCharge DEFAULT 0;
+                END;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+            BEGIN
                 IF COL_LENGTH(N'dbo.Transactions', N'AmountPaid') IS NULL
                 BEGIN
                     ALTER TABLE dbo.Transactions ADD AmountPaid decimal(18,2) NOT NULL CONSTRAINT DF_Transactions_AmountPaid DEFAULT 0;
@@ -612,13 +632,28 @@ public static class DatabaseInitializer
                     CONSTRAINT FK_TransactionPayments_Transactions FOREIGN KEY (TransactionId) REFERENCES dbo.Transactions(TransactionId),
                     CONSTRAINT FK_TransactionPayments_Users FOREIGN KEY (CreatedByUserId) REFERENCES dbo.Users(UserId),
                     CONSTRAINT CK_TransactionPayments_Amount_Positive CHECK (Amount > 0),
-                    CONSTRAINT CK_TransactionPayments_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'))
+                    CONSTRAINT CK_TransactionPayments_Mode_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'))
                 );
             END;
             """);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.TransactionPayments', N'PaymentCategory') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.TransactionPayments ADD PaymentCategory nvarchar(50) NULL;
+                    
+                    EXEC('UPDATE dbo.TransactionPayments SET PaymentCategory = N''Rental Payment'' WHERE PaymentCategory IS NULL');
+                    
+                    ALTER TABLE dbo.TransactionPayments ALTER COLUMN PaymentCategory nvarchar(50) NOT NULL;
+                    ALTER TABLE dbo.TransactionPayments ADD CONSTRAINT DF_TransactionPayments_PaymentCategory DEFAULT N'Rental Payment' FOR PaymentCategory;
+                END;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
             BEGIN
                 -- Migrate existing AmountPaid from Transactions to TransactionPayments if no non-archived payments exist yet.
                 INSERT INTO dbo.TransactionPayments

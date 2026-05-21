@@ -1,4 +1,5 @@
 using System.Data;
+using Dapper;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Data.SqlClient;
@@ -173,6 +174,7 @@ public sealed class TransactionService
                         PaymentDate = DateTime.Now,
                         Amount = request.AmountPaid,
                         ModeOfPayment = request.ModeOfPayment.Trim(),
+                        PaymentCategory = "Rental Payment",
                         ReceiptFilePath = request.ReceiptFilePath,
                         Notes = "Initial payment",
                         CreatedByUserId = _currentUserId
@@ -279,6 +281,7 @@ public sealed class TransactionService
                         PaymentDate = DateTime.Now,
                         Amount = request.AmountPaid,
                         ModeOfPayment = request.ModeOfPayment.Trim(),
+                        PaymentCategory = "Rental Payment",
                         ReceiptFilePath = request.ReceiptFilePath,
                         Notes = "Initial payment",
                         CreatedByUserId = _currentUserId
@@ -304,9 +307,131 @@ public sealed class TransactionService
         }
     }
 
-    public Task CompleteTransactionAsync(int transactionId, int currentUserId)
+    public async Task CompleteTransactionAsync(CompleteTransactionRequest request, int currentUserId)
     {
-        return CompletePaidTransactionAsync(transactionId, currentUserId);
+        Transaction transaction = await GetActiveTransactionAsync(request.TransactionId);
+
+        if (transaction.TransactionStatus != TransactionConstants.Status.Active)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only active transactions can be completed.");
+        }
+
+        if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid)
+        {
+            throw Validation(nameof(Transaction.PaymentStatus), "Initial payment must be settled before completion.");
+        }
+
+        if (request.AdditionalCharge > 0 && !request.ChargePaid)
+        {
+            throw Validation(nameof(CompleteTransactionRequest.ChargePaid), "Additional charges must be settled before completing this transaction.");
+        }
+
+        FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
+        if (schedule is null || schedule.IsArchived)
+        {
+            throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found or is archived.");
+        }
+
+        schedule.ScheduleType = FleetScheduleConstants.Type.Rental;
+        schedule.Status = FleetScheduleConstants.Status.Completed;
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            decimal finalTotal = transaction.TotalAmount;
+            decimal finalPaid = transaction.AmountPaid;
+
+            if (request.AdditionalCharge > 0)
+            {
+                finalTotal += request.AdditionalCharge;
+                
+                if (request.ChargePaid)
+                {
+                    await _transactionPaymentRepository.AddAsync(new TransactionPayment
+                    {
+                        TransactionId = request.TransactionId,
+                        PaymentDate = DateTime.Now,
+                        Amount = request.AdditionalCharge,
+                        ModeOfPayment = "Other",
+                        PaymentCategory = request.ReturnCondition switch
+                        {
+                            "With Damage" => "Damage Fee",
+                            "Late Return" => "Late Fee",
+                            _ => "Additional Charge"
+                        },
+                        ReceiptFilePath = request.ReceiptFilePath,
+                        Notes = $"Additional charge for {request.ReturnCondition} paid during inspection.",
+                        CreatedByUserId = currentUserId
+                    }, dbTransaction);
+                    
+                    finalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(request.TransactionId, dbTransaction);
+                }
+            }
+
+            string finalPaymentStatus = GetPaymentStatus(finalPaid, finalTotal);
+
+            // Update all commercial fields together to avoid constraint violations
+            await _transactionRepository.UpdateCommercialSummaryAsync(
+                request.TransactionId,
+                finalTotal,
+                finalPaid,
+                finalTotal - finalPaid,
+                finalPaymentStatus,
+                dbTransaction);
+
+            if (finalPaymentStatus != TransactionConstants.PaymentStatus.Paid)
+            {
+                throw Validation(nameof(Transaction.PaymentStatus), "The transaction cannot be completed because there is an outstanding balance.");
+            }
+
+            await _transactionRepository.UpdateStatusAsync(request.TransactionId, TransactionConstants.Status.Completed, dbTransaction);
+            await _transactionRepository.UpdateInspectionDetailsAsync(
+                request.TransactionId,
+                request.ReturnCondition,
+                null,
+                request.AdditionalCharge,
+                dbTransaction);
+            
+            await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
+
+            string description = $"Completed transaction {transaction.TransactionCode}. Condition: {request.ReturnCondition}";
+            if (request.ReturnCondition == "Late Return" && request.DaysLate.HasValue)
+            {
+                description += $" ({request.DaysLate.Value} days)";
+            }
+            if (request.AdditionalCharge > 0)
+            {
+                description += $". Additional charge: ₱{request.AdditionalCharge:N2}";
+            }
+            else
+            {
+                description += ".";
+            }
+
+            await _activityLogService.LogAsync("Complete transaction", "Transaction", request.TransactionId, description, currentUserId, dbTransaction);
+
+            if (request.BlacklistCustomer && !string.IsNullOrWhiteSpace(request.BlacklistReason))
+            {
+                await _customerRepository.ToggleBlacklistAsync(transaction.CustomerId, true, request.BlacklistReason.Trim(), dbTransaction);
+                await _activityLogService.LogAsync(
+                    "Blacklist",
+                    "Customer",
+                    transaction.CustomerId,
+                    $"Blacklisted customer #{transaction.CustomerId} ({transaction.CustomerName}) during return inspection. Reason: {request.BlacklistReason}",
+                    currentUserId,
+                    dbTransaction);
+            }
+
+            dbTransaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
     }
 
     public async Task StartRentalAsync(int transactionId, int currentUserId)
@@ -371,6 +496,123 @@ public sealed class TransactionService
                 $"Archived transaction {transaction.TransactionCode}.",
                 currentUserId,
                 dbTransaction);
+            dbTransaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    public async Task ExtendRentalAsync(
+        int transactionId,
+        DateTime newEndDate,
+        string modeOfPayment,
+        decimal amountPaid,
+        string? receiptFilePath,
+        int currentUserId)
+    {
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        if (transaction.TransactionStatus != TransactionConstants.Status.Active)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only active transactions can be extended.");
+        }
+
+        if (newEndDate.Date <= transaction.EndDate.Date)
+        {
+            throw Validation(nameof(Transaction.EndDate), "New end date must be later than the current end date.");
+        }
+
+        // Check for conflicts in FleetSchedule
+        DateTime extensionStart = transaction.EndDate.Date.AddDays(1);
+        DateTime extensionEnd = newEndDate.Date;
+
+        bool hasConflict = await _scheduleRepository.HasConflictExcludingAsync(
+            transaction.CarId,
+            extensionStart,
+            extensionEnd,
+            transaction.FleetScheduleId);
+
+        if (hasConflict)
+        {
+            throw Validation(nameof(Transaction.EndDate), "This rental cannot be extended because the car is already reserved or booked during the requested extension period.");
+        }
+
+        int extraDays = (newEndDate.Date - transaction.EndDate.Date).Days;
+        decimal extensionCharge = transaction.DailyRate * extraDays;
+        decimal finalTotal = transaction.TotalAmount + extensionCharge;
+
+        FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
+        if (schedule is null || schedule.IsArchived)
+        {
+            throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found.");
+        }
+
+        schedule.EndDate = newEndDate.Date;
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            if (amountPaid > 0)
+            {
+                await _transactionPaymentRepository.AddAsync(new TransactionPayment
+                {
+                    TransactionId = transactionId,
+                    PaymentDate = DateTime.Now,
+                    Amount = amountPaid,
+                    ModeOfPayment = modeOfPayment.Trim(),
+                    PaymentCategory = "Extension Fee",
+                    ReceiptFilePath = receiptFilePath,
+                    Notes = $"Rental extension until {newEndDate:MMM d, yyyy} ({extraDays} extra days).",
+                    CreatedByUserId = currentUserId
+                }, dbTransaction);
+            }
+
+            decimal finalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transactionId, dbTransaction);
+            string finalPaymentStatus = GetPaymentStatus(finalPaid, finalTotal);
+
+            // Update Transaction with new end date and commercial summary
+            const string sqlUpdateTransaction = """
+                UPDATE dbo.Transactions
+                SET EndDate = @EndDate,
+                    TotalDays = TotalDays + @ExtraDays,
+                    TotalAmount = @TotalAmount,
+                    AmountPaid = @AmountPaid,
+                    BalanceAmount = @BalanceAmount,
+                    PaymentStatus = @PaymentStatus,
+                    UpdatedAt = sysdatetime()
+                WHERE TransactionId = @TransactionId;
+                """;
+
+            await connection.ExecuteAsync(
+                sqlUpdateTransaction,
+                new
+                {
+                    TransactionId = transactionId,
+                    EndDate = newEndDate.Date,
+                    ExtraDays = extraDays,
+                    TotalAmount = finalTotal,
+                    AmountPaid = finalPaid,
+                    BalanceAmount = finalTotal - finalPaid,
+                    PaymentStatus = finalPaymentStatus
+                },
+                dbTransaction);
+
+            await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
+
+            await _activityLogService.LogAsync(
+                "Extend rental",
+                "Transaction",
+                transactionId,
+                $"Extended rental for {transaction.TransactionCode} until {newEndDate:yyyy-MM-dd}. Extension charge: ₱{extensionCharge:N2}.",
+                currentUserId,
+                dbTransaction);
+
             dbTransaction.Commit();
         }
         catch
@@ -464,6 +706,7 @@ public sealed class TransactionService
                 PaymentDate = DateTime.Now,
                 Amount = request.Amount,
                 ModeOfPayment = request.ModeOfPayment.Trim(),
+                PaymentCategory = "Rental Payment",
                 ReferenceNumber = string.IsNullOrWhiteSpace(request.ReferenceNumber) ? null : request.ReferenceNumber.Trim(),
                 ReceiptFilePath = request.ReceiptFilePath,
                 Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),

@@ -362,6 +362,83 @@ public sealed class TransactionRepository
         }
     }
 
+    public async Task<int> UpdateInspectionDetailsAsync(
+        int transactionId,
+        string condition,
+        string? notes,
+        decimal additionalCharge,
+        IDbTransaction? dbTransaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.Transactions
+            SET ReturnCondition = @Condition,
+                ReturnNotes = @Notes,
+                AdditionalCharge = @AdditionalCharge,
+                UpdatedAt = sysdatetime()
+            WHERE TransactionId = @TransactionId;
+            """;
+
+        IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.ExecuteAsync(
+                sql,
+                new { TransactionId = transactionId, Condition = condition, Notes = notes, AdditionalCharge = additionalCharge },
+                dbTransaction);
+        }
+        finally
+        {
+            if (dbTransaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
+    public async Task<int> UpdateCommercialSummaryAsync(
+        int transactionId,
+        decimal totalAmount,
+        decimal amountPaid,
+        decimal balanceAmount,
+        string paymentStatus,
+        IDbTransaction? dbTransaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.Transactions
+            SET TotalAmount = @TotalAmount,
+                AmountPaid = @AmountPaid,
+                BalanceAmount = @BalanceAmount,
+                PaymentStatus = @PaymentStatus,
+                UpdatedAt = sysdatetime()
+            WHERE TransactionId = @TransactionId;
+            """;
+
+        IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.ExecuteAsync(
+                sql,
+                new
+                {
+                    TransactionId = transactionId,
+                    TotalAmount = totalAmount,
+                    AmountPaid = amountPaid,
+                    BalanceAmount = balanceAmount,
+                    PaymentStatus = paymentStatus
+                },
+                dbTransaction);
+        }
+        finally
+        {
+            if (dbTransaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
     public async Task<int> ArchiveAsync(int transactionId, IDbTransaction? dbTransaction = null)
     {
         const string sql = """

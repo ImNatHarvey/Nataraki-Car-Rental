@@ -18,4 +18,9 @@ public static class FontHelper
     {
         return new Font(DefaultFontFamily, size, FontStyle.Bold, GraphicsUnit.Point);
     }
+
+    public static Font Italic(float size = 9F)
+    {
+        return new Font(DefaultFontFamily, size, FontStyle.Italic, GraphicsUnit.Point);
+    }
 }

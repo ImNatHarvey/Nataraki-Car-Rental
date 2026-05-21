@@ -323,6 +323,15 @@ public sealed class FleetScheduleRepository
         }
     }
 
+    public Task<bool> HasConflictExcludingAsync(
+        int carId,
+        DateTime startDate,
+        DateTime endDate,
+        int excludedScheduleId)
+    {
+        return HasConflictAsync(carId, startDate, endDate, excludedScheduleId);
+    }
+
     public async Task<bool> HasConflictAsync(
         int carId,
         DateTime startDate,

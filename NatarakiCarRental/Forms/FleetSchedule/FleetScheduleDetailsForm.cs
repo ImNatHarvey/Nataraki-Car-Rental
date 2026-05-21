@@ -79,16 +79,33 @@ public sealed class FleetScheduleDetailsForm : Form
         };
 
         _validationLabel.AutoSize = false;
-        _validationLabel.Location = new Point(34, 58);
         _validationLabel.Size = new Size(856, 24);
         _validationLabel.Font = FontHelper.SemiBold(9F);
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
 
+        if (_mode == FleetScheduleFormMode.Add)
+        {
+            Label helperLabel = new()
+            {
+                Text = "Rental schedules are created from the Transaction module.",
+                AutoSize = true,
+                Location = new Point(32, 58),
+                Font = FontHelper.Regular(8.5F),
+                ForeColor = ThemeHelper.TextSecondary
+            };
+            Controls.Add(helperLabel);
+            _validationLabel.Location = new Point(34, 76);
+        }
+        else
+        {
+            _validationLabel.Location = new Point(34, 58);
+        }
+
         Panel contentPanel = new()
         {
-            Location = new Point(32, 88),
-            Size = new Size(856, 360),
+            Location = new Point(32, _mode == FleetScheduleFormMode.Add ? 104 : 88),
+            Size = new Size(856, _mode == FleetScheduleFormMode.Add ? 344 : 360),
             BackColor = ThemeHelper.Surface
         };
 
@@ -132,7 +149,9 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             Controls.Add(archiveButton);
         }
-        AcceptButton = saveButton;
+        
+        // Add blank area click handler to remove focus from inputs
+        Click += (_, _) => ActiveControl = null;
         CancelButton = cancelButton;
     }
 
@@ -184,7 +203,22 @@ public sealed class FleetScheduleDetailsForm : Form
         _customerComboBox.Items.AddRange(_customers.Select(customer => new LookupOption(customer.CustomerId, $"{customer.FirstName} {customer.LastName}".Trim())).Cast<object>().ToArray());
         _customerComboBox.SelectedIndex = 0;
 
-        _scheduleTypeComboBox.Items.AddRange(FleetScheduleConstants.Type.All.Cast<object>().ToArray());
+        _scheduleTypeComboBox.Items.Clear();
+        if (_mode == FleetScheduleFormMode.Add)
+        {
+            _scheduleTypeComboBox.Items.AddRange(new[]
+            {
+                FleetScheduleConstants.Type.Reservation,
+                FleetScheduleConstants.Type.Maintenance
+            });
+            _scheduleTypeComboBox.SelectedIndex = 0;
+        }
+        else
+        {
+            _scheduleTypeComboBox.Items.AddRange(FleetScheduleConstants.Type.All.Cast<object>().ToArray());
+            if (_sourceSchedule is not null) _scheduleTypeComboBox.SelectedItem = _sourceSchedule.ScheduleType;
+        }
+
         _scheduleTypeComboBox.SelectedIndexChanged += (_, _) => UpdateStatusText();
     }
 
