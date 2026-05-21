@@ -84,10 +84,10 @@ public sealed class FleetScheduleService
         return _transactionRepository.HasActiveForFleetScheduleAsync(scheduleId);
     }
 
-    public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null)
+    public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null, bool isInternalWorkflow = false)
     {
         Normalize(schedule);
-        await ValidateAsync(schedule, excludedScheduleId);
+        await ValidateAsync(schedule, excludedScheduleId, isInternalWorkflow);
         GenerateTitle(schedule);
     }
 
@@ -222,7 +222,7 @@ public sealed class FleetScheduleService
         }
     }
 
-    private async Task ValidateAsync(FleetSchedule schedule, int? excludedScheduleId = null)
+    private async Task ValidateAsync(FleetSchedule schedule, int? excludedScheduleId = null, bool isInternalWorkflow = false)
     {
         List<ValidationFailure> failures = [];
 
@@ -234,6 +234,11 @@ public sealed class FleetScheduleService
         if (!FleetScheduleConstants.Type.All.Contains(schedule.ScheduleType))
         {
             failures.Add(new ValidationFailure(nameof(FleetSchedule.ScheduleType), "Schedule type is invalid."));
+        }
+
+        if (!isInternalWorkflow && schedule.ScheduleType == FleetScheduleConstants.Type.Rental)
+        {
+            failures.Add(new ValidationFailure(nameof(FleetSchedule.ScheduleType), "Rental schedules can only be managed through the Transaction module."));
         }
 
         if (!FleetScheduleConstants.Status.All.Contains(schedule.Status))

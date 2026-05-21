@@ -343,10 +343,11 @@ public sealed class TransactionService
         {
             decimal finalTotal = transaction.TotalAmount;
             decimal finalPaid = transaction.AmountPaid;
+            decimal actualAdditionalCharge = request.ReturnCondition == "Good" ? 0 : request.AdditionalCharge;
 
-            if (request.AdditionalCharge > 0)
+            if (actualAdditionalCharge > 0)
             {
-                finalTotal += request.AdditionalCharge;
+                finalTotal += actualAdditionalCharge;
                 
                 if (request.ChargePaid)
                 {
@@ -354,7 +355,7 @@ public sealed class TransactionService
                     {
                         TransactionId = request.TransactionId,
                         PaymentDate = DateTime.Now,
-                        Amount = request.AdditionalCharge,
+                        Amount = actualAdditionalCharge,
                         ModeOfPayment = "Other",
                         PaymentCategory = request.ReturnCondition switch
                         {
@@ -392,7 +393,7 @@ public sealed class TransactionService
                 request.TransactionId,
                 request.ReturnCondition,
                 null,
-                request.AdditionalCharge,
+                actualAdditionalCharge,
                 dbTransaction);
             
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
@@ -402,9 +403,9 @@ public sealed class TransactionService
             {
                 description += $" ({request.DaysLate.Value} days)";
             }
-            if (request.AdditionalCharge > 0)
+            if (actualAdditionalCharge > 0)
             {
-                description += $". Additional charge: ₱{request.AdditionalCharge:N2}";
+                description += $". Additional charge: ₱{actualAdditionalCharge:N2}";
             }
             else
             {
