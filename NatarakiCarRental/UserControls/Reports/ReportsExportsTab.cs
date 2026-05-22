@@ -34,36 +34,8 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
         _layout.AutoSize = true;
         _layout.FlowDirection = FlowDirection.TopDown;
         _layout.WrapContents = false;
-        _layout.Padding = new Padding(0, 0, 0, 24);
+        _layout.Padding = new Padding(0, 0, 0, 28);
         _layout.BackColor = ThemeHelper.ContentBackground;
-
-        _layout.Controls.Add(CreateExportSection(
-            "Export Financial Reports",
-            "Financial summary, payment breakdowns, outstanding transactions, and revenue tables.",
-            "Financial Reports",
-            _reportExportService.ExportFinancialPdfAsync,
-            _reportExportService.ExportFinancialExcelAsync));
-
-        _layout.Controls.Add(CreateExportSection(
-            "Export Fleet Performance Reports",
-            "Fleet revenue, utilization, top cars, least used cars, and maintenance visibility.",
-            "Fleet Performance Reports",
-            _reportExportService.ExportFleetPdfAsync,
-            _reportExportService.ExportFleetExcelAsync));
-
-        _layout.Controls.Add(CreateExportSection(
-            "Export Operations Reports",
-            "Upcoming returns, late returns, active rentals, reservations, maintenance, and available cars.",
-            "Operations Reports",
-            _reportExportService.ExportOperationsPdfAsync,
-            _reportExportService.ExportOperationsExcelAsync));
-
-        _layout.Controls.Add(CreateExportSection(
-            "Export Customer Reports",
-            "Customer summaries, top customers, balances, late returns, damage fees, and blacklist records.",
-            "Customer Reports",
-            _reportExportService.ExportCustomerPdfAsync,
-            _reportExportService.ExportCustomerExcelAsync));
 
         _layout.Controls.Add(CreateExportSection(
             "Export Full Reports Bundle",
@@ -71,6 +43,34 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
             "Full Reports Bundle",
             _reportExportService.ExportFullPdfAsync,
             _reportExportService.ExportFullExcelAsync));
+
+        _layout.Controls.Add(CreateExportSection(
+            "Export Financial Reports",
+            "Financial summary, payment breakdowns, outstanding transactions, and revenue tables.",
+            "Financial Report",
+            _reportExportService.ExportFinancialPdfAsync,
+            _reportExportService.ExportFinancialExcelAsync));
+
+        _layout.Controls.Add(CreateExportSection(
+            "Export Fleet Performance Reports",
+            "Fleet revenue, utilization, top cars, least used cars, and maintenance visibility.",
+            "Fleet Performance Report",
+            _reportExportService.ExportFleetPdfAsync,
+            _reportExportService.ExportFleetExcelAsync));
+
+        _layout.Controls.Add(CreateExportSection(
+            "Export Operations Reports",
+            "Upcoming returns, late returns, active rentals, reservations, maintenance, and available cars.",
+            "Operations Report",
+            _reportExportService.ExportOperationsPdfAsync,
+            _reportExportService.ExportOperationsExcelAsync));
+
+        _layout.Controls.Add(CreateExportSection(
+            "Export Customer Reports",
+            "Customer summaries, top customers, balances, late returns, damage fees, and blacklist records.",
+            "Customer Report",
+            _reportExportService.ExportCustomerPdfAsync,
+            _reportExportService.ExportCustomerExcelAsync));
 
         Controls.Add(_layout);
         ResizeCards();
@@ -86,7 +86,7 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
         Panel card = ControlFactory.CreateCardPanel(new Size(900, 116));
         card.Height = 116;
         card.Padding = new Padding(20);
-        card.Margin = new Padding(0, 0, 0, 14);
+        card.Margin = new Padding(0, 0, 0, 18);
 
         Label titleLabel = new()
         {
@@ -201,9 +201,15 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
 
     private string BuildExportFileName(string prefix, string extension)
     {
-        string range = $"{_from:yyyyMMdd}_{_to:yyyyMMdd}";
+        string range = $"{_from:yyyy-MM-dd}_to_{_to:yyyy-MM-dd}";
         string safePrefix = new(prefix.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character).ToArray());
         safePrefix = safePrefix.Replace(' ', '_');
+        if (!safePrefix.EndsWith("Reports_Bundle", StringComparison.Ordinal) &&
+            !safePrefix.EndsWith("Report", StringComparison.Ordinal))
+        {
+            safePrefix += "_Report";
+        }
+
         return $"Nataraki_{safePrefix}_{range}.{extension}";
     }
 }

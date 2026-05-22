@@ -58,7 +58,7 @@ public sealed class ReportsFinancialTab : UserControl, IReportTab
         TableLayoutPanel layout = new() { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 5 };
         layout.Controls.Add(CreateMetricPanel());
 
-        TableLayoutPanel breakdownLayout = new() { Dock = DockStyle.Top, Height = 340, ColumnCount = 2, Padding = new Padding(0, 10, 0, 0) };
+        TableLayoutPanel breakdownLayout = new() { Dock = DockStyle.Top, Height = 354, ColumnCount = 2, Padding = new Padding(0, 12, 0, 4) };
         breakdownLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         breakdownLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         breakdownLayout.Controls.Add(ReportLayoutHelper.CreateGridCard("Payment Method Breakdown", _paymentMethodGrid), 0, 0);

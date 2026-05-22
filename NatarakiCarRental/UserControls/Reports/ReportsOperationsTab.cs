@@ -83,7 +83,7 @@ public sealed class ReportsOperationsTab : UserControl, IReportTab
 
     private TableLayoutPanel CreateReturnsLayout()
     {
-        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 360, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 10, 0, 0) };
+        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 374, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 12, 0, 4) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.Controls.Add(ReportLayoutHelper.CreateGridCard("Upcoming Returns", _upcomingReturnsGrid), 0, 0);

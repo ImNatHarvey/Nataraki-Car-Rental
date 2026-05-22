@@ -42,7 +42,8 @@ public static class ControlFactory
             ForeColor = isDanger ? ThemeHelper.Danger : ThemeHelper.TextPrimary,
             Font = FontHelper.Regular(9.5F),
             FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            UseMnemonic = false
         };
 
         button.FlatAppearance.BorderSize = 0;

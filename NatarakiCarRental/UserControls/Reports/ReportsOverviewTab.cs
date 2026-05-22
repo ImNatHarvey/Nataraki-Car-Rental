@@ -95,7 +95,7 @@ public sealed class ReportsOverviewTab : UserControl, IReportTab
             Height = 680,
             ColumnCount = 2,
             RowCount = 2,
-            Padding = new Padding(0, 10, 0, 0)
+            Padding = new Padding(0, 12, 0, 4)
         };
 
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));

@@ -82,7 +82,7 @@ public sealed class ReportsFleetPerformanceTab : UserControl, IReportTab
 
     private TableLayoutPanel CreatePerformanceTablesLayout()
     {
-        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 340, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 10, 0, 0) };
+        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 354, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 12, 0, 4) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));

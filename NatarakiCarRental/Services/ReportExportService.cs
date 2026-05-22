@@ -656,7 +656,7 @@ public sealed class ReportExportService
     {
         if (count > limit)
         {
-            lines.Add($"Showing top {limit} rows. Excel export contains all {count} rows.");
+            lines.Add($"Showing top {limit} rows. Full detailed rows are available in the Excel export.");
         }
     }
 
@@ -807,14 +807,19 @@ public sealed class ReportExportService
 
     private static void WritePdf(string path, IReadOnlyList<string> lines)
     {
-        List<string> pages = [];
-        List<string> currentPage = [];
-
-        foreach (string line in lines.SelectMany(WrapPdfLine))
+        List<string> bodyLines = lines.Skip(6).SelectMany(WrapPdfLine).ToList();
+        if (bodyLines.Count == 0)
         {
-            if (currentPage.Count >= 44)
+            bodyLines.Add("No report data available.");
+        }
+
+        List<IReadOnlyList<string>> pages = [];
+        List<string> currentPage = [];
+        foreach (string line in bodyLines)
+        {
+            if (currentPage.Count >= 34)
             {
-                pages.Add(CreatePdfPageContent(currentPage));
+                pages.Add(currentPage);
                 currentPage = [];
             }
             currentPage.Add(line);
@@ -822,33 +827,31 @@ public sealed class ReportExportService
 
         if (currentPage.Count > 0)
         {
-            pages.Add(CreatePdfPageContent(currentPage));
-        }
-
-        if (pages.Count == 0)
-        {
-            pages.Add(CreatePdfPageContent(["No report data available."]));
+            pages.Add(currentPage);
         }
 
         using FileStream stream = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
         using StreamWriter writer = new(stream, Encoding.ASCII, leaveOpen: true);
         List<long> offsets = [];
         int pageCount = pages.Count;
-        int fontObjectNumber = 3 + (pageCount * 2);
+        int regularFontObjectNumber = 3 + (pageCount * 2);
+        int boldFontObjectNumber = regularFontObjectNumber + 1;
 
         writer.WriteLine("%PDF-1.4");
-        WritePdfObject(writer, offsets, 1, $"<< /Type /Catalog /Pages 2 0 R >>");
+        WritePdfObject(writer, offsets, 1, "<< /Type /Catalog /Pages 2 0 R >>");
         WritePdfObject(writer, offsets, 2, $"<< /Type /Pages /Kids [{string.Join(" ", Enumerable.Range(0, pageCount).Select(index => $"{3 + (index * 2)} 0 R"))}] /Count {pageCount} >>");
 
         for (int index = 0; index < pageCount; index++)
         {
             int pageObject = 3 + (index * 2);
             int contentObject = pageObject + 1;
-            WritePdfObject(writer, offsets, pageObject, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {fontObjectNumber} 0 R >> >> /Contents {contentObject} 0 R >>");
-            WritePdfStreamObject(writer, offsets, contentObject, pages[index]);
+            string content = CreatePdfPageContent(lines, pages[index], index + 1, pageCount);
+            WritePdfObject(writer, offsets, pageObject, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {regularFontObjectNumber} 0 R /F2 {boldFontObjectNumber} 0 R >> >> /Contents {contentObject} 0 R >>");
+            WritePdfStreamObject(writer, offsets, contentObject, content);
         }
 
-        WritePdfObject(writer, offsets, fontObjectNumber, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+        WritePdfObject(writer, offsets, regularFontObjectNumber, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+        WritePdfObject(writer, offsets, boldFontObjectNumber, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
 
         writer.Flush();
         long xrefOffset = stream.Position;
@@ -866,31 +869,62 @@ public sealed class ReportExportService
         writer.WriteLine("%%EOF");
     }
 
-    private static string CreatePdfPageContent(IReadOnlyList<string> lines)
+    private static string CreatePdfPageContent(IReadOnlyList<string> headerLines, IReadOnlyList<string> bodyLines, int pageNumber, int pageCount)
     {
         StringBuilder builder = new();
-        builder.AppendLine("BT");
-        builder.AppendLine("/F1 10 Tf");
-        builder.AppendLine("50 750 Td");
-        for (int index = 0; index < lines.Count; index++)
+        AppendRectangle(builder, 0, 742, 612, 50, "0.145 0.388 0.922");
+        AppendText(builder, headerLines.ElementAtOrDefault(0) ?? "Nataraki Car Rental", 306, 772, 18, bold: true, centered: true, color: "1 1 1");
+        AppendText(builder, headerLines.ElementAtOrDefault(1) ?? "Report", 306, 752, 12, bold: true, centered: true, color: "1 1 1");
+
+        AppendText(builder, headerLines.ElementAtOrDefault(2) ?? string.Empty, 50, 720, 9, bold: false);
+        AppendText(builder, headerLines.ElementAtOrDefault(3) ?? string.Empty, 50, 706, 9, bold: false);
+        AppendText(builder, headerLines.ElementAtOrDefault(4) ?? string.Empty, 50, 692, 9, bold: false);
+        AppendLine(builder, 50, 678, 562, 678, "0.80 0.84 0.90");
+
+        double y = 656;
+        foreach (string line in bodyLines)
         {
-            string line = SanitizePdfText(lines[index]);
-            if (index == 0)
+            if (string.IsNullOrWhiteSpace(line))
             {
-                builder.AppendLine($"({EscapePdfText(line)}) Tj");
+                y -= 8;
+                continue;
             }
-            else
+
+            if (IsPdfSectionHeading(line))
             {
-                builder.AppendLine($"0 -16 Td ({EscapePdfText(line)}) Tj");
+                y -= 4;
+                AppendRectangle(builder, 50, y - 3, 512, 18, "0.145 0.388 0.922");
+                AppendText(builder, line, 58, y + 2, 10, bold: true, color: "1 1 1");
+                y -= 24;
+                continue;
             }
+
+            bool isNote = line.StartsWith("Showing top", StringComparison.Ordinal) ||
+                          line.StartsWith("Full detailed", StringComparison.Ordinal) ||
+                          line.StartsWith("Detailed records", StringComparison.Ordinal);
+            AppendText(builder, line, 58, y, isNote ? 8 : 9, bold: false, color: isNote ? "0.39 0.45 0.55" : "0.12 0.16 0.22");
+            AppendLine(builder, 50, y - 5, 562, y - 5, "0.90 0.93 0.96");
+            y -= 16;
         }
-        builder.AppendLine("ET");
+
+        AppendLine(builder, 50, 42, 562, 42, "0.80 0.84 0.90");
+        AppendText(builder, "Generated by Nataraki Car Rental", 50, 28, 8, bold: false, color: "0.39 0.45 0.55");
+        AppendText(builder, $"Page {pageNumber} of {pageCount}", 562, 28, 8, bold: false, centered: false, rightAligned: true, color: "0.39 0.45 0.55");
         return builder.ToString();
+    }
+
+    private static bool IsPdfSectionHeading(string line)
+    {
+        return !line.Contains(':', StringComparison.Ordinal) &&
+               !line.StartsWith("No records", StringComparison.Ordinal) &&
+               !line.StartsWith("Showing top", StringComparison.Ordinal) &&
+               !line.StartsWith("Full detailed", StringComparison.Ordinal) &&
+               !line.StartsWith("Detailed records", StringComparison.Ordinal);
     }
 
     private static IEnumerable<string> WrapPdfLine(string line)
     {
-        const int maxLength = 96;
+        const int maxLength = 92;
         if (line.Length <= maxLength)
         {
             yield return line;
@@ -912,6 +946,43 @@ public sealed class ReportExportService
 
         yield return remaining;
     }
+
+    private static void AppendText(StringBuilder builder, string text, double x, double y, int size, bool bold, bool centered = false, bool rightAligned = false, string color = "0 0 0")
+    {
+        double textWidth = EstimatePdfTextWidth(text, size);
+        if (centered)
+        {
+            x -= textWidth / 2;
+        }
+        else if (rightAligned)
+        {
+            x -= textWidth;
+        }
+
+        builder.AppendLine($"{color} rg");
+        builder.AppendLine("BT");
+        builder.AppendLine($"/{(bold ? "F2" : "F1")} {size} Tf");
+        builder.AppendLine(FormattableString.Invariant($"{x:0.##} {y:0.##} Td"));
+        builder.AppendLine($"({ToPdfLiteralString(text)}) Tj");
+        builder.AppendLine("ET");
+    }
+
+    private static void AppendRectangle(StringBuilder builder, double x, double y, double width, double height, string color)
+    {
+        builder.AppendLine($"{color} rg");
+        builder.AppendLine(FormattableString.Invariant($"{x:0.##} {y:0.##} {width:0.##} {height:0.##} re f"));
+    }
+
+    private static void AppendLine(StringBuilder builder, double x1, double y1, double x2, double y2, string color)
+    {
+        builder.AppendLine($"{color} RG");
+        builder.AppendLine("0.5 w");
+        builder.AppendLine(FormattableString.Invariant($"{x1:0.##} {y1:0.##} m {x2:0.##} {y2:0.##} l S"));
+    }
+
+    private static double EstimatePdfTextWidth(string text, int size) => text.Length * size * 0.48;
+
+    private static string ToPdfLiteralString(string text) => EscapePdfText(SanitizePdfText(text));
 
     private static void WritePdfObject(StreamWriter writer, List<long> offsets, int objectNumber, string value)
     {
@@ -988,7 +1059,14 @@ public sealed class ReportExportService
 
     private static string SanitizePdfText(string value)
     {
-        return value.Replace("₱", "PHP ", StringComparison.Ordinal);
+        return value
+            .Replace("₱", "PHP ", StringComparison.Ordinal)
+            .Replace("â‚±", "PHP ", StringComparison.Ordinal)
+            .Replace("–", "-", StringComparison.Ordinal)
+            .Replace("—", "-", StringComparison.Ordinal)
+            .Replace("’", "'", StringComparison.Ordinal)
+            .Replace("“", "\"", StringComparison.Ordinal)
+            .Replace("”", "\"", StringComparison.Ordinal);
     }
 
     private static string CarPlate(string carName, string plateNumber) => $"{carName} ({plateNumber})";

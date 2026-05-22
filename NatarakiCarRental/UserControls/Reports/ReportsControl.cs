@@ -49,7 +49,8 @@ public sealed class ReportsControl : UserControl
             Location = new Point(0, 0),
             Size = new Size(300, 34),
             Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
+            ForeColor = ThemeHelper.TextPrimary,
+            UseMnemonic = false
         });
         panel.Controls.Add(new Label
         {

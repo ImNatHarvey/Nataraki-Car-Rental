@@ -82,7 +82,7 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
 
     private TableLayoutPanel CreateTopTablesLayout()
     {
-        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 360, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 10, 0, 0) };
+        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 374, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 12, 0, 4) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.Controls.Add(ReportLayoutHelper.CreateGridCard("Top Customers by Revenue", _revenueGrid), 0, 0);
@@ -92,7 +92,7 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
 
     private TableLayoutPanel CreateRiskTablesLayout()
     {
-        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 360, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 10, 0, 0) };
+        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 374, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 12, 0, 4) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.Controls.Add(ReportLayoutHelper.CreateGridCard("Customers with Late Returns", _lateReturnsGrid), 0, 0);

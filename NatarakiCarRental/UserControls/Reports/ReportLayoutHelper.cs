@@ -9,7 +9,7 @@ public static class ReportLayoutHelper
     public static void ConfigureReportPage(Control page)
     {
         page.BackColor = ThemeHelper.ContentBackground;
-        page.Padding = new Padding(14, 20, 14, 24);
+        page.Padding = new Padding(16, 20, 16, 24);
     }
 
     public static FlowLayoutPanel CreateMetricPanel()
@@ -21,7 +21,7 @@ public static class ReportLayoutHelper
             WrapContents = true,
             FlowDirection = FlowDirection.LeftToRight,
             Padding = new Padding(8, 8, 0, 0),
-            Margin = new Padding(0, 0, 0, 10),
+            Margin = new Padding(0, 0, 0, 16),
             BackColor = ThemeHelper.ContentBackground,
             Visible = true
         };
@@ -109,7 +109,7 @@ public static class ReportLayoutHelper
         Panel card = ControlFactory.CreateCardPanel(new Size(0, height));
         card.Dock = height > 0 ? DockStyle.Top : DockStyle.Fill;
         card.Padding = new Padding(16);
-        card.Margin = new Padding(0, 0, 0, 14);
+        card.Margin = new Padding(0, 0, 14, 18);
 
         Label titleLabel = new()
         {
