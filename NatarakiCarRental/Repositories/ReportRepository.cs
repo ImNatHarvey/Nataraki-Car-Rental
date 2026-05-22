@@ -590,4 +590,252 @@ public sealed class ReportRepository
         var results = await connection.QueryAsync<FleetMaintenanceItem>(sql, new { From = from, To = to });
         return results.ToList();
     }
+
+    public async Task<OperationsMetrics> GetOperationsMetricsAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                UpcomingReturns = (
+                    SELECT COUNT(1)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Active'
+                      AND EndDate >= CONVERT(date, @From)
+                      AND EndDate <= CONVERT(date, @To)
+                ),
+                LateReturns = (
+                    SELECT COUNT(1)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Active'
+                      AND EndDate < CONVERT(date, @Today)
+                ),
+                ActiveRentals = (
+                    SELECT COUNT(1)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Active'
+                      AND StartDate <= CONVERT(date, @To)
+                      AND EndDate >= CONVERT(date, @From)
+                ),
+                UpcomingReservations = (
+                    SELECT COUNT(1)
+                    FROM dbo.FleetSchedules
+                    WHERE IsArchived = 0
+                      AND ScheduleType = N'Reservation'
+                      AND Status IN (N'Pending', N'Reserved')
+                      AND StartDate >= CONVERT(date, @From)
+                      AND StartDate <= CONVERT(date, @To)
+                ),
+                ReservedCars = (
+                    SELECT COUNT(DISTINCT CarId)
+                    FROM dbo.FleetSchedules
+                    WHERE IsArchived = 0
+                      AND ScheduleType = N'Reservation'
+                      AND Status = N'Reserved'
+                      AND StartDate <= CONVERT(date, @To)
+                      AND EndDate >= CONVERT(date, @From)
+                ),
+                CarsUnderMaintenance = (
+                    SELECT COUNT(DISTINCT CarId)
+                    FROM dbo.FleetSchedules
+                    WHERE IsArchived = 0
+                      AND ScheduleType = N'Maintenance'
+                      AND Status = N'Ongoing'
+                      AND StartDate <= CONVERT(date, @To)
+                      AND EndDate >= CONVERT(date, @From)
+                ),
+                AvailableCars = (
+                    SELECT COUNT(1)
+                    FROM dbo.Cars AS cars
+                    WHERE cars.IsArchived = 0
+                      AND NOT EXISTS (
+                            SELECT 1
+                            FROM dbo.FleetSchedules AS schedules
+                            WHERE schedules.CarId = cars.CarId
+                              AND schedules.IsArchived = 0
+                              AND schedules.Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing')
+                              AND schedules.StartDate <= CONVERT(date, @To)
+                              AND schedules.EndDate >= CONVERT(date, @From)
+                      )
+                ),
+                CompletedReturns = (
+                    SELECT COUNT(1)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Completed'
+                      AND EndDate >= CONVERT(date, @From)
+                      AND EndDate <= CONVERT(date, @To)
+                );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<OperationsMetrics>(
+            sql,
+            new { From = from, To = to, Today = DateTime.Today })
+            ?? new OperationsMetrics();
+    }
+
+    public async Task<IReadOnlyList<OperationsReturnItem>> GetUpcomingReturnsAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                ExpectedReturn = transactions.EndDate,
+                transactions.TransactionCode,
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                cars.CarName,
+                cars.PlateNumber,
+                transactions.PaymentStatus
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE transactions.IsArchived = 0
+              AND transactions.TransactionStatus = N'Active'
+              AND transactions.EndDate >= CONVERT(date, @From)
+              AND transactions.EndDate <= CONVERT(date, @To)
+            ORDER BY transactions.EndDate, transactions.TransactionCode;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<OperationsReturnItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<OperationsReturnItem>> GetLateReturnsAsync(DateTime today)
+    {
+        const string sql = """
+            SELECT
+                ExpectedReturn = transactions.EndDate,
+                DaysLate = DATEDIFF(day, transactions.EndDate, CONVERT(date, @Today)),
+                EstimatedLateFee = transactions.DailyRate * DATEDIFF(day, transactions.EndDate, CONVERT(date, @Today)),
+                transactions.TransactionCode,
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                cars.CarName,
+                cars.PlateNumber,
+                transactions.PaymentStatus
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE transactions.IsArchived = 0
+              AND transactions.TransactionStatus = N'Active'
+              AND transactions.EndDate < CONVERT(date, @Today)
+            ORDER BY DaysLate DESC, transactions.EndDate;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<OperationsReturnItem>(sql, new { Today = today.Date });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<OperationsActiveRentalItem>> GetActiveRentalsReportAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                transactions.TransactionCode,
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                cars.CarName,
+                cars.PlateNumber,
+                transactions.StartDate,
+                transactions.EndDate,
+                transactions.PaymentStatus
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE transactions.IsArchived = 0
+              AND transactions.TransactionStatus = N'Active'
+              AND transactions.StartDate <= CONVERT(date, @To)
+              AND transactions.EndDate >= CONVERT(date, @From)
+            ORDER BY transactions.EndDate, transactions.TransactionCode;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<OperationsActiveRentalItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<OperationsReservationItem>> GetUpcomingReservationsAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                ScheduleDate = schedules.StartDate,
+                CustomerName = ISNULL(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'-'),
+                Contact = ISNULL(customers.PhoneNumber, N'-'),
+                cars.CarName,
+                cars.PlateNumber,
+                schedules.Status,
+                PaymentStatus = ISNULL(transactions.PaymentStatus, N'-')
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
+            LEFT JOIN dbo.Transactions AS transactions
+                ON transactions.FleetScheduleId = schedules.ScheduleId
+               AND transactions.IsArchived = 0
+            WHERE schedules.IsArchived = 0
+              AND schedules.ScheduleType = N'Reservation'
+              AND schedules.Status IN (N'Pending', N'Reserved')
+              AND schedules.StartDate >= CONVERT(date, @From)
+              AND schedules.StartDate <= CONVERT(date, @To)
+            ORDER BY schedules.StartDate, schedules.ScheduleId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<OperationsReservationItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<OperationsMaintenanceItem>> GetMaintenanceVisibilityAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                schedules.StartDate,
+                schedules.EndDate,
+                cars.CarName,
+                cars.PlateNumber,
+                schedules.Status,
+                Source = N'Fleet Schedule'
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            WHERE schedules.IsArchived = 0
+              AND cars.IsArchived = 0
+              AND schedules.ScheduleType = N'Maintenance'
+              AND schedules.StartDate <= CONVERT(date, @To)
+              AND schedules.EndDate >= CONVERT(date, @From)
+            ORDER BY schedules.StartDate, cars.CarName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<OperationsMaintenanceItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<OperationsAvailableCarItem>> GetAvailableCarsReportAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                cars.CarName,
+                cars.PlateNumber,
+                cars.Status,
+                cars.RatePerDay,
+                cars.SeatingCapacity
+            FROM dbo.Cars AS cars
+            WHERE cars.IsArchived = 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.FleetSchedules AS schedules
+                    WHERE schedules.CarId = cars.CarId
+                      AND schedules.IsArchived = 0
+                      AND schedules.Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing')
+                      AND schedules.StartDate <= CONVERT(date, @To)
+                      AND schedules.EndDate >= CONVERT(date, @From)
+              )
+            ORDER BY cars.CarName, cars.PlateNumber;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<OperationsAvailableCarItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
 }

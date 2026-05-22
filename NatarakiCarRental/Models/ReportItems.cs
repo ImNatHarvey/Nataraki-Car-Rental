@@ -85,3 +85,70 @@ public sealed class FleetMaintenanceItem
     public DateTime EndDate { get; set; }
     public string Status { get; set; } = string.Empty;
 }
+
+public sealed class OperationsMetrics
+{
+    public int UpcomingReturns { get; set; }
+    public int LateReturns { get; set; }
+    public int ActiveRentals { get; set; }
+    public int UpcomingReservations { get; set; }
+    public int ReservedCars { get; set; }
+    public int CarsUnderMaintenance { get; set; }
+    public int AvailableCars { get; set; }
+    public int CompletedReturns { get; set; }
+}
+
+public sealed class OperationsReturnItem
+{
+    public DateTime ExpectedReturn { get; set; }
+    public int DaysLate { get; set; }
+    public decimal EstimatedLateFee { get; set; }
+    public string TransactionCode { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
+}
+
+public sealed class OperationsActiveRentalItem
+{
+    public string TransactionCode { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+}
+
+public sealed class OperationsReservationItem
+{
+    public DateTime ScheduleDate { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
+}
+
+public sealed class OperationsMaintenanceItem
+{
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Source { get; set; } = string.Empty;
+}
+
+public sealed class OperationsAvailableCarItem
+{
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public decimal RatePerDay { get; set; }
+    public int? SeatingCapacity { get; set; }
+}

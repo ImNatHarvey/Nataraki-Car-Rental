@@ -73,9 +73,27 @@ public sealed class ReportsControl : UserControl
     private readonly DataGridView _fleetLeastUsedGrid = CreateSummaryGrid();
     private readonly DataGridView _fleetMaintenanceGrid = CreateSummaryGrid();
 
+    // Operations Tab
+    private readonly MetricCardControl _opsUpcomingReturnsCard = new();
+    private readonly MetricCardControl _opsLateReturnsCard = new();
+    private readonly MetricCardControl _opsActiveRentalsCard = new();
+    private readonly MetricCardControl _opsUpcomingReservationsCard = new();
+    private readonly MetricCardControl _opsReservedCarsCard = new();
+    private readonly MetricCardControl _opsMaintenanceCard = new();
+    private readonly MetricCardControl _opsAvailableCarsCard = new();
+    private readonly MetricCardControl _opsCompletedReturnsCard = new();
+
+    private readonly DataGridView _opsUpcomingReturnsGrid = CreateSummaryGrid();
+    private readonly DataGridView _opsLateReturnsGrid = CreateSummaryGrid();
+    private readonly DataGridView _opsActiveRentalsGrid = CreateSummaryGrid();
+    private readonly DataGridView _opsUpcomingReservationsGrid = CreateSummaryGrid();
+    private readonly DataGridView _opsMaintenanceGrid = CreateSummaryGrid();
+    private readonly DataGridView _opsAvailableCarsGrid = CreateSummaryGrid();
+
     private readonly FlowLayoutPanel _overviewMetricPanel = new();
     private readonly FlowLayoutPanel _financialMetricPanel = new();
     private readonly FlowLayoutPanel _fleetMetricPanel = new();
+    private readonly FlowLayoutPanel _operationsMetricPanel = new();
 
     public ReportsControl()
     {
@@ -94,6 +112,7 @@ public sealed class ReportsControl : UserControl
         LayoutReportMetricCards(_overviewMetricPanel, GetOverviewCards());
         LayoutReportMetricCards(_financialMetricPanel, GetFinancialCards());
         LayoutReportMetricCards(_fleetMetricPanel, GetFleetCards());
+        LayoutReportMetricCards(_operationsMetricPanel, GetOperationsCards());
     }
 
     private static void LayoutReportMetricCards(FlowLayoutPanel panel, IReadOnlyList<Control> cards)
@@ -146,6 +165,12 @@ public sealed class ReportsControl : UserControl
     [
         _fleetTotalRevenueCard, _fleetAverageRevenueCard, _fleetTopEarningCarCard, _fleetMostRentedCarCard,
         _fleetAverageUtilizationCard, _fleetActiveRentalsCard, _fleetCompletedRentalsCard, _fleetMaintenanceCard
+    ];
+
+    private List<Control> GetOperationsCards() =>
+    [
+        _opsUpcomingReturnsCard, _opsLateReturnsCard, _opsActiveRentalsCard, _opsUpcomingReservationsCard,
+        _opsReservedCarsCard, _opsMaintenanceCard, _opsAvailableCarsCard, _opsCompletedReturnsCard
     ];
 
     private void InitializeControl()
@@ -236,7 +261,7 @@ public sealed class ReportsControl : UserControl
         SetupOverviewTab();
         SetupFinancialTab();
         SetupFleetTab();
-        SetupPlaceholderTab(_operationsPage, "Operational reports");
+        SetupOperationsTab();
         SetupPlaceholderTab(_customersPage, "Customer reports");
         SetupPlaceholderTab(_exportsPage, "Export options");
 
@@ -316,6 +341,30 @@ public sealed class ReportsControl : UserControl
         _fleetPage.Controls.Add(layout);
     }
 
+    private void SetupOperationsTab()
+    {
+        _operationsPage.BackColor = ThemeHelper.ContentBackground;
+        _operationsPage.AutoScroll = true;
+        _operationsPage.Padding = new Padding(0, 20, 0, 0);
+
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 6
+        };
+
+        layout.Controls.Add(CreateOperationsMetricPanel());
+        layout.Controls.Add(CreateOperationsReturnsLayout());
+        layout.Controls.Add(CreateGridCard("Active Rentals", _opsActiveRentalsGrid, 340));
+        layout.Controls.Add(CreateGridCard("Upcoming Reservations", _opsUpcomingReservationsGrid, 340));
+        layout.Controls.Add(CreateGridCard("Maintenance Visibility", _opsMaintenanceGrid, 300));
+        layout.Controls.Add(CreateGridCard("Available Cars", _opsAvailableCarsGrid, 320));
+
+        _operationsPage.Controls.Add(layout);
+    }
+
     private FlowLayoutPanel CreateOverviewMetricPanel()
     {
         ConfigureMetricPanel(_overviewMetricPanel);
@@ -368,6 +417,23 @@ public sealed class ReportsControl : UserControl
         LayoutReportMetricCards(_fleetMetricPanel, GetFleetCards());
 
         return _fleetMetricPanel;
+    }
+
+    private FlowLayoutPanel CreateOperationsMetricPanel()
+    {
+        ConfigureMetricPanel(_operationsMetricPanel);
+
+        AddMetricCard(_operationsMetricPanel, _opsUpcomingReturnsCard, IconChar.CalendarCheck, "Upcoming Returns", "0", "Expected back in range", ThemeHelper.Primary);
+        AddMetricCard(_operationsMetricPanel, _opsLateReturnsCard, IconChar.TriangleExclamation, "Late Returns", "0", "Past expected return", ThemeHelper.Danger);
+        AddMetricCard(_operationsMetricPanel, _opsActiveRentalsCard, IconChar.Key, "Active Rentals", "0", "Ongoing rentals", ThemeHelper.Success);
+        AddMetricCard(_operationsMetricPanel, _opsUpcomingReservationsCard, IconChar.CalendarDays, "Upcoming Reservations", "0", "Starts in range", ThemeHelper.Warning);
+        AddMetricCard(_operationsMetricPanel, _opsReservedCarsCard, IconChar.Bookmark, "Reserved Cars", "0", "Reserved in range", ThemeHelper.Primary);
+        AddMetricCard(_operationsMetricPanel, _opsMaintenanceCard, IconChar.ScrewdriverWrench, "Cars Under Maintenance", "0", "Schedule-based", ThemeHelper.Warning);
+        AddMetricCard(_operationsMetricPanel, _opsAvailableCarsCard, IconChar.CircleCheck, "Available Cars", "0", "No blocking schedule", ThemeHelper.Success);
+        AddMetricCard(_operationsMetricPanel, _opsCompletedReturnsCard, IconChar.FlagCheckered, "Completed Returns", "0", "Closed in range", ThemeHelper.GrayIcon);
+        LayoutReportMetricCards(_operationsMetricPanel, GetOperationsCards());
+
+        return _operationsMetricPanel;
     }
 
     private static void ConfigureMetricPanel(FlowLayoutPanel panel)
@@ -423,6 +489,24 @@ public sealed class ReportsControl : UserControl
         grid.Controls.Add(CreateGridCard("Top 5 Earning Cars", _fleetTopEarningGrid), 0, 0);
         grid.Controls.Add(CreateGridCard("Top 5 Most Rented Cars", _fleetMostRentedGrid), 1, 0);
         grid.Controls.Add(CreateGridCard("Least Used Cars", _fleetLeastUsedGrid), 2, 0);
+        return grid;
+    }
+
+    private TableLayoutPanel CreateOperationsReturnsLayout()
+    {
+        TableLayoutPanel grid = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 360,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.Controls.Add(CreateGridCard("Upcoming Returns", _opsUpcomingReturnsGrid), 0, 0);
+        grid.Controls.Add(CreateGridCard("Late Returns", _opsLateReturnsGrid), 1, 0);
         return grid;
     }
 
@@ -578,6 +662,27 @@ public sealed class ReportsControl : UserControl
 
             var maintenanceCars = await _reportService.GetCarsUnderMaintenanceAsync(from, to);
             PopulateFleetMaintenance(maintenanceCars);
+
+            OperationsMetrics operationsMetrics = await _reportService.GetOperationsMetricsAsync(from, to);
+            UpdateOperationsSummaryCards(operationsMetrics);
+
+            var upcomingReturns = await _reportService.GetUpcomingReturnsAsync(from, to);
+            PopulateUpcomingReturns(upcomingReturns);
+
+            var lateReturns = await _reportService.GetLateReturnsAsync(DateTime.Today);
+            PopulateLateReturns(lateReturns);
+
+            var activeRentals = await _reportService.GetActiveRentalsReportAsync(from, to);
+            PopulateActiveRentals(activeRentals);
+
+            var upcomingReservations = await _reportService.GetUpcomingReservationsAsync(from, to);
+            PopulateUpcomingReservations(upcomingReservations);
+
+            var operationsMaintenance = await _reportService.GetMaintenanceVisibilityAsync(from, to);
+            PopulateOperationsMaintenance(operationsMaintenance);
+
+            var availableCars = await _reportService.GetAvailableCarsReportAsync(from, to);
+            PopulateAvailableCars(availableCars);
         }
         catch (Exception exception)
         {
@@ -624,6 +729,18 @@ public sealed class ReportsControl : UserControl
         _fleetActiveRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveRentals.ToString(), "Currently released", ThemeHelper.Success);
         _fleetCompletedRentalsCard.SetMetric(IconChar.FlagCheckered, "Completed Rentals", metrics.CompletedRentals.ToString(), "Closed rentals in range", ThemeHelper.GrayIcon);
         _fleetMaintenanceCard.SetMetric(IconChar.ScrewdriverWrench, "Cars Under Maintenance", metrics.CarsUnderMaintenance.ToString(), "Ongoing maintenance", ThemeHelper.Warning);
+    }
+
+    private void UpdateOperationsSummaryCards(OperationsMetrics metrics)
+    {
+        _opsUpcomingReturnsCard.SetMetric(IconChar.CalendarCheck, "Upcoming Returns", metrics.UpcomingReturns.ToString(), "Expected back in range", ThemeHelper.Primary);
+        _opsLateReturnsCard.SetMetric(IconChar.TriangleExclamation, "Late Returns", metrics.LateReturns.ToString(), "Past expected return", ThemeHelper.Danger);
+        _opsActiveRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveRentals.ToString(), "Ongoing rentals", ThemeHelper.Success);
+        _opsUpcomingReservationsCard.SetMetric(IconChar.CalendarDays, "Upcoming Reservations", metrics.UpcomingReservations.ToString(), "Starts in range", ThemeHelper.Warning);
+        _opsReservedCarsCard.SetMetric(IconChar.Bookmark, "Reserved Cars", metrics.ReservedCars.ToString(), "Reserved in range", ThemeHelper.Primary);
+        _opsMaintenanceCard.SetMetric(IconChar.ScrewdriverWrench, "Cars Under Maintenance", metrics.CarsUnderMaintenance.ToString(), "Schedule-based", ThemeHelper.Warning);
+        _opsAvailableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", metrics.AvailableCars.ToString(), "No blocking schedule", ThemeHelper.Success);
+        _opsCompletedReturnsCard.SetMetric(IconChar.FlagCheckered, "Completed Returns", metrics.CompletedReturns.ToString(), "Closed in range", ThemeHelper.GrayIcon);
     }
 
     private void PopulatePaymentMethods(DataGridView grid, IReadOnlyList<PaymentMethodBreakdownItem> items)
@@ -807,7 +924,143 @@ public sealed class ReportsControl : UserControl
         }
     }
 
+    private void PopulateUpcomingReturns(IReadOnlyList<OperationsReturnItem> items)
+    {
+        _opsUpcomingReturnsGrid.Columns.Clear();
+        _opsUpcomingReturnsGrid.Rows.Clear();
+        _opsUpcomingReturnsGrid.Columns.Add("ExpectedReturn", "Expected Return");
+        _opsUpcomingReturnsGrid.Columns.Add("Code", "Transaction Code");
+        _opsUpcomingReturnsGrid.Columns.Add("Customer", "Customer");
+        _opsUpcomingReturnsGrid.Columns.Add("Contact", "Contact");
+        _opsUpcomingReturnsGrid.Columns.Add("Car", "Car / Plate");
+        _opsUpcomingReturnsGrid.Columns.Add("Payment", "Payment Status");
+
+        foreach (OperationsReturnItem item in items)
+        {
+            _opsUpcomingReturnsGrid.Rows.Add(
+                FormatDate(item.ExpectedReturn),
+                item.TransactionCode,
+                item.CustomerName,
+                item.Contact,
+                $"{item.CarName} ({item.PlateNumber})",
+                item.PaymentStatus);
+        }
+    }
+
+    private void PopulateLateReturns(IReadOnlyList<OperationsReturnItem> items)
+    {
+        _opsLateReturnsGrid.Columns.Clear();
+        _opsLateReturnsGrid.Rows.Clear();
+        _opsLateReturnsGrid.Columns.Add("ExpectedReturn", "Expected Return");
+        _opsLateReturnsGrid.Columns.Add("DaysLate", "Days Late");
+        _opsLateReturnsGrid.Columns.Add("LateFee", "Estimated Late Fee");
+        _opsLateReturnsGrid.Columns.Add("Code", "Transaction Code");
+        _opsLateReturnsGrid.Columns.Add("Customer", "Customer");
+        _opsLateReturnsGrid.Columns.Add("Contact", "Contact");
+        _opsLateReturnsGrid.Columns.Add("Car", "Car / Plate");
+
+        foreach (OperationsReturnItem item in items)
+        {
+            _opsLateReturnsGrid.Rows.Add(
+                FormatDate(item.ExpectedReturn),
+                item.DaysLate,
+                FormatPeso(item.EstimatedLateFee),
+                item.TransactionCode,
+                item.CustomerName,
+                item.Contact,
+                $"{item.CarName} ({item.PlateNumber})");
+        }
+    }
+
+    private void PopulateActiveRentals(IReadOnlyList<OperationsActiveRentalItem> items)
+    {
+        _opsActiveRentalsGrid.Columns.Clear();
+        _opsActiveRentalsGrid.Rows.Clear();
+        _opsActiveRentalsGrid.Columns.Add("Code", "Transaction Code");
+        _opsActiveRentalsGrid.Columns.Add("Customer", "Customer");
+        _opsActiveRentalsGrid.Columns.Add("Contact", "Contact");
+        _opsActiveRentalsGrid.Columns.Add("Car", "Car / Plate");
+        _opsActiveRentalsGrid.Columns.Add("Start", "Start Date");
+        _opsActiveRentalsGrid.Columns.Add("End", "End Date");
+        _opsActiveRentalsGrid.Columns.Add("Payment", "Payment Status");
+
+        foreach (OperationsActiveRentalItem item in items)
+        {
+            _opsActiveRentalsGrid.Rows.Add(
+                item.TransactionCode,
+                item.CustomerName,
+                item.Contact,
+                $"{item.CarName} ({item.PlateNumber})",
+                FormatDate(item.StartDate),
+                FormatDate(item.EndDate),
+                item.PaymentStatus);
+        }
+    }
+
+    private void PopulateUpcomingReservations(IReadOnlyList<OperationsReservationItem> items)
+    {
+        _opsUpcomingReservationsGrid.Columns.Clear();
+        _opsUpcomingReservationsGrid.Rows.Clear();
+        _opsUpcomingReservationsGrid.Columns.Add("Date", "Schedule Date");
+        _opsUpcomingReservationsGrid.Columns.Add("Customer", "Customer");
+        _opsUpcomingReservationsGrid.Columns.Add("Contact", "Contact");
+        _opsUpcomingReservationsGrid.Columns.Add("Car", "Car / Plate");
+        _opsUpcomingReservationsGrid.Columns.Add("Status", "Status");
+        _opsUpcomingReservationsGrid.Columns.Add("Payment", "Payment Status");
+
+        foreach (OperationsReservationItem item in items)
+        {
+            _opsUpcomingReservationsGrid.Rows.Add(
+                FormatDate(item.ScheduleDate),
+                item.CustomerName,
+                item.Contact,
+                $"{item.CarName} ({item.PlateNumber})",
+                item.Status,
+                item.PaymentStatus);
+        }
+    }
+
+    private void PopulateOperationsMaintenance(IReadOnlyList<OperationsMaintenanceItem> items)
+    {
+        _opsMaintenanceGrid.Columns.Clear();
+        _opsMaintenanceGrid.Rows.Clear();
+        _opsMaintenanceGrid.Columns.Add("DateRange", "Date Range");
+        _opsMaintenanceGrid.Columns.Add("Car", "Car / Plate");
+        _opsMaintenanceGrid.Columns.Add("Status", "Status");
+        _opsMaintenanceGrid.Columns.Add("Source", "Source");
+
+        foreach (OperationsMaintenanceItem item in items)
+        {
+            _opsMaintenanceGrid.Rows.Add(
+                $"{FormatDate(item.StartDate)} - {FormatDate(item.EndDate)}",
+                $"{item.CarName} ({item.PlateNumber})",
+                item.Status,
+                item.Source);
+        }
+    }
+
+    private void PopulateAvailableCars(IReadOnlyList<OperationsAvailableCarItem> items)
+    {
+        _opsAvailableCarsGrid.Columns.Clear();
+        _opsAvailableCarsGrid.Rows.Clear();
+        _opsAvailableCarsGrid.Columns.Add("Car", "Car / Plate");
+        _opsAvailableCarsGrid.Columns.Add("Status", "Status");
+        _opsAvailableCarsGrid.Columns.Add("Rate", "Rate Per Day");
+        _opsAvailableCarsGrid.Columns.Add("Seats", "Seating Capacity");
+
+        foreach (OperationsAvailableCarItem item in items)
+        {
+            _opsAvailableCarsGrid.Rows.Add(
+                $"{item.CarName} ({item.PlateNumber})",
+                item.Status,
+                FormatPeso(item.RatePerDay),
+                item.SeatingCapacity?.ToString() ?? "-");
+        }
+    }
+
     private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
 
     private static string FormatPercent(decimal value) => $"{value:N1}%";
+
+    private static string FormatDate(DateTime date) => $"{date:MMM d, yyyy}";
 }

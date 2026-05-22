@@ -83,4 +83,39 @@ public sealed class ReportService
     {
         return _reportRepository.GetCarsUnderMaintenanceAsync(from, to);
     }
+
+    public Task<OperationsMetrics> GetOperationsMetricsAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetOperationsMetricsAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<OperationsReturnItem>> GetUpcomingReturnsAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetUpcomingReturnsAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<OperationsReturnItem>> GetLateReturnsAsync(DateTime today)
+    {
+        return _reportRepository.GetLateReturnsAsync(today);
+    }
+
+    public Task<IReadOnlyList<OperationsActiveRentalItem>> GetActiveRentalsReportAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetActiveRentalsReportAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<OperationsReservationItem>> GetUpcomingReservationsAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetUpcomingReservationsAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<OperationsMaintenanceItem>> GetMaintenanceVisibilityAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetMaintenanceVisibilityAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<OperationsAvailableCarItem>> GetAvailableCarsReportAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetAvailableCarsReportAsync(from, to);
+    }
 }
