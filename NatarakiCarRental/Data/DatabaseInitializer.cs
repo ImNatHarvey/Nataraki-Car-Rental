@@ -1125,6 +1125,89 @@ public static class DatabaseInitializer
                 ON dbo.TransactionPayments (IsArchived);
             END;
             """);
+
+        // 12. Offsite Records
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.OffsiteRecords
+                (
+                    OffsiteRecordId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    CarId int NOT NULL,
+                    FleetScheduleId int NULL,
+                    OffsiteType nvarchar(50) NOT NULL,
+                    Status nvarchar(50) NOT NULL,
+                    LocationName nvarchar(150) NULL,
+                    ContactPerson nvarchar(100) NULL,
+                    ContactNumber nvarchar(30) NULL,
+                    StartDate date NOT NULL,
+                    ExpectedReturnDate date NULL,
+                    CompletedDate date NULL,
+                    EstimatedCost decimal(18,2) NOT NULL DEFAULT 0,
+                    ActualCost decimal(18,2) NOT NULL DEFAULT 0,
+                    Notes nvarchar(500) NULL,
+                    CreatedByUserId int NULL,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
+                    UpdatedAt datetime2 NULL,
+                    IsArchived bit NOT NULL DEFAULT 0,
+                    CONSTRAINT FK_OffsiteRecords_Cars FOREIGN KEY (CarId) REFERENCES dbo.Cars(CarId),
+                    CONSTRAINT FK_OffsiteRecords_FleetSchedules FOREIGN KEY (FleetScheduleId) REFERENCES dbo.FleetSchedules(ScheduleId),
+                    CONSTRAINT FK_OffsiteRecords_Users FOREIGN KEY (CreatedByUserId) REFERENCES dbo.Users(UserId),
+                    CONSTRAINT CK_OffsiteRecords_ExpectedReturnDate_Valid CHECK (ExpectedReturnDate IS NULL OR ExpectedReturnDate >= StartDate),
+                    CONSTRAINT CK_OffsiteRecords_CompletedDate_Valid CHECK (CompletedDate IS NULL OR CompletedDate >= StartDate),
+                    CONSTRAINT CK_OffsiteRecords_EstimatedCost_NonNegative CHECK (EstimatedCost >= 0),
+                    CONSTRAINT CK_OffsiteRecords_ActualCost_NonNegative CHECK (ActualCost >= 0),
+                    CONSTRAINT CK_OffsiteRecords_Type_Valid CHECK (OffsiteType IN (N'Maintenance', N'Repair', N'Cleaning', N'Inspection', N'Other')),
+                    CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Ongoing', N'Completed', N'Cancelled'))
+                );
+            END;
+
+            IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'ProofFilePath') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD ProofFilePath nvarchar(500) NULL;
+                END;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_OffsiteRecords_CarId_Status'
+                      AND object_id = OBJECT_ID(N'dbo.OffsiteRecords')
+                )
+                BEGIN
+                    CREATE NONCLUSTERED INDEX IX_OffsiteRecords_CarId_Status
+                    ON dbo.OffsiteRecords (CarId, Status);
+                END;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_OffsiteRecords_Dates'
+                      AND object_id = OBJECT_ID(N'dbo.OffsiteRecords')
+                )
+                BEGIN
+                    CREATE NONCLUSTERED INDEX IX_OffsiteRecords_Dates
+                    ON dbo.OffsiteRecords (StartDate, ExpectedReturnDate);
+                END;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_OffsiteRecords_IsArchived'
+                      AND object_id = OBJECT_ID(N'dbo.OffsiteRecords')
+                )
+                BEGIN
+                    CREATE NONCLUSTERED INDEX IX_OffsiteRecords_IsArchived
+                    ON dbo.OffsiteRecords (IsArchived);
+                END;
+            END;
+            """);
     }
 
     private static void SeedRoles()

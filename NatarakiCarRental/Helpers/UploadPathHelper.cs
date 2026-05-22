@@ -46,6 +46,26 @@ public static class UploadPathHelper
             DocumentExtensions);
     }
 
+    public static async Task<string?> SaveOffsiteProofAsync(string? sourcePath)
+    {
+        // Offsite service uses async for other things, but file operations here are simple.
+        // We wrap it for consistency if needed or just use the synchronous helper.
+        return SaveUploadedFileIfSelected(
+            sourcePath,
+            null,
+            AppConstants.OffsiteUploadFolder,
+            DocumentExtensions);
+    }
+
+    public static string? SaveOffsiteProofIfSelected(string? sourcePath, string? existingPath)
+    {
+        return SaveUploadedFileIfSelected(
+            sourcePath,
+            existingPath,
+            AppConstants.OffsiteUploadFolder,
+            DocumentExtensions);
+    }
+
     public static string? ResolveCarFilePath(string? storedPath)
     {
         return ResolveExistingFilePath(storedPath, AppConstants.CarsUploadFolder);
@@ -59,6 +79,11 @@ public static class UploadPathHelper
     public static string? ResolvePaymentReceiptPath(string? storedPath)
     {
         return ResolveExistingFilePath(storedPath, AppConstants.PaymentsUploadFolder);
+    }
+
+    public static string? ResolveOffsiteProofPath(string? storedPath)
+    {
+        return ResolveExistingFilePath(storedPath, AppConstants.OffsiteUploadFolder);
     }
 
     public static void DeleteNewCarUploadIfSaveFailed(string? storedPath, string? previousPath)

@@ -230,7 +230,7 @@ public sealed class MainForm : Form
 
     private void ShowOffsite()
     {
-        LoadContent(new OffsiteControl());
+        LoadContent(new OffsiteControl(CurrentUser.UserId));
         SetActiveNavigation("Offsite");
     }
 
