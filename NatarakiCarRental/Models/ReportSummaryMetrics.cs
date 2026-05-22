@@ -7,9 +7,11 @@ public sealed class ReportSummaryMetrics
     public decimal ExtensionFees { get; set; }
     public decimal DamageFees { get; set; }
     public decimal LateReturnFees { get; set; }
+    public decimal OutstandingBalance { get; set; }
     
     public int PaidTransactions { get; set; }
-    public int PartialUnpaidTransactions { get; set; }
+    public int PartialTransactions { get; set; }
+    public int UnpaidTransactions { get; set; }
     
     public int ActiveRentals { get; set; }
     public int CompletedRentals { get; set; }

@@ -43,4 +43,19 @@ public sealed class ReportService
     {
         return _reportRepository.GetMostRentedCarsAsync(from, to, limit);
     }
+
+    public Task<IReadOnlyList<TransactionListItem>> GetOutstandingTransactionsAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetOutstandingTransactionsAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<TopCarItem>> GetRevenueByCarAsync(DateTime from, DateTime to, int limit = 10)
+    {
+        return _reportRepository.GetRevenueByCarAsync(from, to, limit);
+    }
+
+    public Task<IReadOnlyList<RevenueByCustomerItem>> GetRevenueByCustomerAsync(DateTime from, DateTime to, int limit = 10)
+    {
+        return _reportRepository.GetRevenueByCustomerAsync(from, to, limit);
+    }
 }

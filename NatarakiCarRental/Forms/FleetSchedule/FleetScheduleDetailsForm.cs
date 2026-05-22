@@ -204,23 +204,29 @@ public sealed class FleetScheduleDetailsForm : Form
         _customerComboBox.SelectedIndex = 0;
 
         _scheduleTypeComboBox.Items.Clear();
-        if (_mode == FleetScheduleFormMode.Add || (_mode == FleetScheduleFormMode.Edit && _sourceSchedule?.ScheduleType != FleetScheduleConstants.Type.Rental))
+        
+        if (_sourceSchedule?.ScheduleType == FleetScheduleConstants.Type.Rental)
         {
+            // View-only mode for Rentals
+            _scheduleTypeComboBox.Items.Add(FleetScheduleConstants.Type.Rental);
+        }
+        else
+        {
+            // Normal Add/Edit mode
             _scheduleTypeComboBox.Items.AddRange(new[]
             {
                 FleetScheduleConstants.Type.Reservation,
                 FleetScheduleConstants.Type.Maintenance
             });
-            _scheduleTypeComboBox.SelectedIndex = 0;
-        }
-        else
-        {
-            _scheduleTypeComboBox.Items.AddRange(FleetScheduleConstants.Type.All.Cast<object>().ToArray());
         }
 
-        if (_sourceSchedule is not null)
+        if (_sourceSchedule is not null && _scheduleTypeComboBox.Items.Contains(_sourceSchedule.ScheduleType))
         {
             _scheduleTypeComboBox.SelectedItem = _sourceSchedule.ScheduleType;
+        }
+        else if (_scheduleTypeComboBox.Items.Count > 0)
+        {
+            _scheduleTypeComboBox.SelectedIndex = 0;
         }
 
         _scheduleTypeComboBox.SelectedIndexChanged += (_, _) => UpdateStatusText();

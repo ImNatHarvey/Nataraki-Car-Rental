@@ -40,11 +40,88 @@ public sealed class ReportsControl : UserControl
     private readonly DataGridView _statusBreakdownGrid = CreateSummaryGrid();
     private readonly DataGridView _topCarsGrid = CreateSummaryGrid();
 
+    // Financial Tab Specific
+    private readonly MetricCardControl _fTotalRevenueCard = new();
+    private readonly MetricCardControl _fOutstandingCard = new();
+    private readonly MetricCardControl _fPaidTxCard = new();
+    private readonly MetricCardControl _fPartialTxCard = new();
+    private readonly MetricCardControl _fUnpaidTxCard = new();
+    private readonly MetricCardControl _fRentalRevenueCard = new();
+    private readonly MetricCardControl _fExtensionFeesCard = new();
+    private readonly MetricCardControl _fDamageLateFeesCard = new();
+    
+    private readonly DataGridView _fPaymentMethodGrid = CreateSummaryGrid();
+    private readonly DataGridView _fRevenueCategoryGrid = CreateSummaryGrid();
+    private readonly DataGridView _fOutstandingGrid = CreateSummaryGrid();
+    private readonly DataGridView _fCarRevenueGrid = CreateSummaryGrid();
+    private readonly DataGridView _fCustomerRevenueGrid = CreateSummaryGrid();
+
+    private readonly FlowLayoutPanel _overviewMetricPanel = new();
+    private readonly FlowLayoutPanel _financialMetricPanel = new();
+
     public ReportsControl()
     {
         InitializeControl();
         Load += ReportsControl_Load;
+        Resize += ReportsControl_Resize;
     }
+
+    private void ReportsControl_Resize(object? sender, EventArgs e)
+    {
+        LayoutReportMetricSections();
+    }
+
+    private void LayoutReportMetricSections()
+    {
+        LayoutReportMetricCards(_overviewMetricPanel, GetOverviewCards());
+        LayoutReportMetricCards(_financialMetricPanel, GetFinancialCards());
+    }
+
+    private static void LayoutReportMetricCards(FlowLayoutPanel panel, IReadOnlyList<Control> cards)
+    {
+        if (panel.IsDisposed || cards.Count == 0)
+        {
+            return;
+        }
+
+        int availableWidth = Math.Max(panel.ClientSize.Width, panel.Parent?.ClientSize.Width ?? 0);
+        if (availableWidth <= 0)
+        {
+            availableWidth = 1000;
+        }
+
+        int columns = availableWidth < 1150 ? 3 : 4;
+        int gap = 14;
+        int cardHeight = 132;
+        int horizontalPadding = panel.Padding.Left + panel.Padding.Right;
+        int cardWidth = Math.Max(220, (availableWidth - horizontalPadding - (gap * columns)) / columns);
+        int rows = (int)Math.Ceiling(cards.Count / (double)columns);
+        int height = panel.Padding.Top + panel.Padding.Bottom + (rows * cardHeight) + ((rows - 1) * gap);
+
+        panel.SuspendLayout();
+        panel.Visible = true;
+        panel.Height = height;
+        foreach (Control card in cards)
+        {
+            card.Dock = DockStyle.None;
+            card.Margin = new Padding(0, 0, gap, gap);
+            card.Size = new Size(cardWidth, cardHeight);
+        }
+        panel.ResumeLayout(true);
+    }
+
+    private List<Control> GetOverviewCards() =>
+    [
+        _totalRevenueCard, _rentalRevenueCard, _extensionFeesCard, _damageFeesCard,
+        _lateReturnFeesCard, _paidTransactionsCard, _partialUnpaidTransactionsCard, _activeRentalsCard,
+        _completedRentalsCard, _topEarningCarCard, _mostRentedCarCard
+    ];
+
+    private List<Control> GetFinancialCards() =>
+    [
+        _fTotalRevenueCard, _fOutstandingCard, _fPaidTxCard, _fPartialTxCard,
+        _fUnpaidTxCard, _fRentalRevenueCard, _fExtensionFeesCard, _fDamageLateFeesCard
+    ];
 
     private void InitializeControl()
     {
@@ -122,6 +199,7 @@ public sealed class ReportsControl : UserControl
     {
         _reportTabs.Dock = DockStyle.Fill;
         _reportTabs.Font = FontHelper.SemiBold(10F);
+        _reportTabs.SelectedIndexChanged += (_, _) => LayoutReportMetricSections();
         
         _reportTabs.TabPages.Add(_overviewPage);
         _reportTabs.TabPages.Add(_financialPage);
@@ -131,7 +209,7 @@ public sealed class ReportsControl : UserControl
         _reportTabs.TabPages.Add(_exportsPage);
 
         SetupOverviewTab();
-        SetupPlaceholderTab(_financialPage, "Financial reports");
+        SetupFinancialTab();
         SetupPlaceholderTab(_fleetPage, "Fleet performance reports");
         SetupPlaceholderTab(_operationsPage, "Operational reports");
         SetupPlaceholderTab(_customersPage, "Customer reports");
@@ -154,41 +232,89 @@ public sealed class ReportsControl : UserControl
             RowCount = 3
         };
 
-        layout.Controls.Add(CreateOverviewMetricGrid());
+        layout.Controls.Add(CreateOverviewMetricPanel());
         layout.Controls.Add(CreateOverviewChartsLayout());
         
         _overviewPage.Controls.Add(layout);
     }
 
-    private TableLayoutPanel CreateOverviewMetricGrid()
+    private void SetupFinancialTab()
     {
-        TableLayoutPanel grid = new()
+        _financialPage.BackColor = ThemeHelper.ContentBackground;
+        _financialPage.AutoScroll = true;
+        _financialPage.Padding = new Padding(0, 20, 0, 0);
+
+        TableLayoutPanel layout = new()
         {
             Dock = DockStyle.Top,
-            Height = 430,
-            ColumnCount = 4,
-            RowCount = 3,
-            Padding = new Padding(0, 0, 0, 10)
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 5
         };
 
-        for (int i = 0; i < 4; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
-        for (int i = 0; i < 3; i++) grid.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        layout.Controls.Add(CreateFinancialMetricPanel());
+        
+        TableLayoutPanel breakdownLayout = new() { Dock = DockStyle.Top, Height = 340, ColumnCount = 2, Padding = new Padding(0, 10, 0, 0) };
+        breakdownLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        breakdownLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        breakdownLayout.Controls.Add(CreateGridCard("Payment Method Breakdown", _fPaymentMethodGrid), 0, 0);
+        breakdownLayout.Controls.Add(CreateGridCard("Revenue by Category", _fRevenueCategoryGrid), 1, 0);
+        layout.Controls.Add(breakdownLayout);
 
-        AddMetricCard(grid, _totalRevenueCard, IconChar.MoneyBillTrendUp, "Total Revenue", "₱0.00", "Combined payments", ThemeHelper.Primary, 0, 0);
-        AddMetricCard(grid, _rentalRevenueCard, IconChar.CarSide, "Rental Revenue", "₱0.00", "Base rental charges", ThemeHelper.Success, 1, 0);
-        AddMetricCard(grid, _extensionFeesCard, IconChar.CalendarPlus, "Extension Fees", "₱0.00", "Extended rental days", ThemeHelper.Warning, 2, 0);
-        AddMetricCard(grid, _damageFeesCard, IconChar.Hammer, "Damage Fees", "₱0.00", "Vehicle damage charges", ThemeHelper.Danger, 3, 0);
+        layout.Controls.Add(CreateGridCard("Outstanding Transactions (Unpaid/Partial)", _fOutstandingGrid, 340));
+        layout.Controls.Add(CreateGridCard("Revenue by Car Performance", _fCarRevenueGrid, 340));
+        layout.Controls.Add(CreateGridCard("Revenue by Customer", _fCustomerRevenueGrid, 340));
 
-        AddMetricCard(grid, _lateReturnFeesCard, IconChar.Clock, "Late Return Fees", "₱0.00", "Overdue return penalties", ThemeHelper.Warning, 0, 1);
-        AddMetricCard(grid, _paidTransactionsCard, IconChar.CheckCircle, "Paid Transactions", "0", "Fully settled", ThemeHelper.Success, 1, 1);
-        AddMetricCard(grid, _partialUnpaidTransactionsCard, IconChar.Wallet, "Outstanding Transactions", "0", "Partial or unpaid", ThemeHelper.Warning, 2, 1);
-        AddMetricCard(grid, _activeRentalsCard, IconChar.Key, "Active Rentals", "0", "Vehicles currently out", ThemeHelper.Primary, 3, 1);
+        _financialPage.Controls.Add(layout);
+    }
 
-        AddMetricCard(grid, _completedRentalsCard, IconChar.FlagCheckered, "Completed Rentals", "0", "Rentals closed in range", ThemeHelper.GrayIcon, 0, 2);
-        AddMetricCard(grid, _topEarningCarCard, IconChar.Trophy, "Top Earning Car", "-", "Highest revenue generated", ThemeHelper.Success, 1, 2);
-        AddMetricCard(grid, _mostRentedCarCard, IconChar.Star, "Most Rented Car", "-", "Highest rental frequency", ThemeHelper.Primary, 2, 2);
+    private FlowLayoutPanel CreateOverviewMetricPanel()
+    {
+        ConfigureMetricPanel(_overviewMetricPanel);
 
-        return grid;
+        AddMetricCard(_overviewMetricPanel, _totalRevenueCard, IconChar.MoneyBillTrendUp, "Total Revenue", "₱0.00", "Combined payments", ThemeHelper.Primary);
+        AddMetricCard(_overviewMetricPanel, _rentalRevenueCard, IconChar.CarSide, "Rental Revenue", "₱0.00", "Base rental charges", ThemeHelper.Success);
+        AddMetricCard(_overviewMetricPanel, _extensionFeesCard, IconChar.CalendarPlus, "Extension Fees", "₱0.00", "Extended rental days", ThemeHelper.Warning);
+        AddMetricCard(_overviewMetricPanel, _damageFeesCard, IconChar.Hammer, "Damage Fees", "₱0.00", "Vehicle damage charges", ThemeHelper.Danger);
+        AddMetricCard(_overviewMetricPanel, _lateReturnFeesCard, IconChar.Clock, "Late Return Fees", "₱0.00", "Overdue return penalties", ThemeHelper.Warning);
+        AddMetricCard(_overviewMetricPanel, _paidTransactionsCard, IconChar.CheckCircle, "Paid Transactions", "0", "Fully settled", ThemeHelper.Success);
+        AddMetricCard(_overviewMetricPanel, _partialUnpaidTransactionsCard, IconChar.Wallet, "Outstanding Transactions", "0", "Partial or unpaid", ThemeHelper.Warning);
+        AddMetricCard(_overviewMetricPanel, _activeRentalsCard, IconChar.Key, "Active Rentals", "0", "Vehicles currently out", ThemeHelper.Primary);
+        AddMetricCard(_overviewMetricPanel, _completedRentalsCard, IconChar.FlagCheckered, "Completed Rentals", "0", "Rentals closed in range", ThemeHelper.GrayIcon);
+        AddMetricCard(_overviewMetricPanel, _topEarningCarCard, IconChar.Trophy, "Top Earning Car", "-", "Highest revenue generated", ThemeHelper.Success);
+        AddMetricCard(_overviewMetricPanel, _mostRentedCarCard, IconChar.Star, "Most Rented Car", "-", "Highest rental frequency", ThemeHelper.Primary);
+        LayoutReportMetricCards(_overviewMetricPanel, GetOverviewCards());
+
+        return _overviewMetricPanel;
+    }
+
+    private FlowLayoutPanel CreateFinancialMetricPanel()
+    {
+        ConfigureMetricPanel(_financialMetricPanel);
+
+        AddMetricCard(_financialMetricPanel, _fTotalRevenueCard, IconChar.MoneyBillTrendUp, "Total Revenue", "₱0.00", "Actual payments received", ThemeHelper.Primary);
+        AddMetricCard(_financialMetricPanel, _fOutstandingCard, IconChar.HandHoldingDollar, "Total Outstanding", "₱0.00", "Uncollected balance", ThemeHelper.Danger);
+        AddMetricCard(_financialMetricPanel, _fPaidTxCard, IconChar.CheckDouble, "Fully Paid", "0", "Settled transactions", ThemeHelper.Success);
+        AddMetricCard(_financialMetricPanel, _fPartialTxCard, IconChar.ScaleUnbalanced, "Partial", "0", "Some payment received", ThemeHelper.Warning);
+        AddMetricCard(_financialMetricPanel, _fUnpaidTxCard, IconChar.FileInvoiceDollar, "Unpaid", "0", "No payments yet", ThemeHelper.Danger);
+        AddMetricCard(_financialMetricPanel, _fRentalRevenueCard, IconChar.CarSide, "Rental Revenue", "₱0.00", "Base charges", ThemeHelper.Success);
+        AddMetricCard(_financialMetricPanel, _fExtensionFeesCard, IconChar.CalendarPlus, "Extension Fees", "₱0.00", "Rental extensions", ThemeHelper.Warning);
+        AddMetricCard(_financialMetricPanel, _fDamageLateFeesCard, IconChar.CircleExclamation, "Damage/Late Fees", "₱0.00", "Return penalties", ThemeHelper.Danger);
+        LayoutReportMetricCards(_financialMetricPanel, GetFinancialCards());
+
+        return _financialMetricPanel;
+    }
+
+    private static void ConfigureMetricPanel(FlowLayoutPanel panel)
+    {
+        panel.Dock = DockStyle.Top;
+        panel.AutoSize = false;
+        panel.WrapContents = true;
+        panel.FlowDirection = FlowDirection.LeftToRight;
+        panel.Padding = new Padding(8, 8, 0, 0);
+        panel.Margin = new Padding(0, 0, 0, 10);
+        panel.BackColor = ThemeHelper.ContentBackground;
+        panel.Visible = true;
     }
 
     private TableLayoutPanel CreateOverviewChartsLayout()
@@ -196,7 +322,7 @@ public sealed class ReportsControl : UserControl
         TableLayoutPanel grid = new()
         {
             Dock = DockStyle.Top,
-            Height = 320,
+            Height = 680,
             ColumnCount = 2,
             RowCount = 2,
             Padding = new Padding(0, 10, 0, 0)
@@ -215,10 +341,10 @@ public sealed class ReportsControl : UserControl
         return grid;
     }
 
-    private static Panel CreateGridCard(string title, DataGridView grid)
+    private static Panel CreateGridCard(string title, DataGridView grid, int height = 0)
     {
-        Panel card = ControlFactory.CreateCardPanel(new Size(0, 0));
-        card.Dock = DockStyle.Fill;
+        Panel card = ControlFactory.CreateCardPanel(new Size(0, height));
+        card.Dock = height > 0 ? DockStyle.Top : DockStyle.Fill;
         card.Padding = new Padding(16);
         card.Margin = new Padding(0, 0, 14, 14);
 
@@ -250,12 +376,14 @@ public sealed class ReportsControl : UserControl
         page.Controls.Add(label);
     }
 
-    private static void AddMetricCard(TableLayoutPanel grid, MetricCardControl card, IconChar icon, string title, string value, string helperText, Color iconColor, int column, int row)
+    private static void AddMetricCard(FlowLayoutPanel panel, MetricCardControl card, IconChar icon, string title, string value, string helperText, Color iconColor)
     {
-        card.Dock = DockStyle.Fill;
-        card.Margin = new Padding(0, 0, column == 3 ? 0 : 14, 14);
+        card.Dock = DockStyle.None;
         card.SetMetric(icon, title, value, helperText, iconColor);
-        grid.Controls.Add(card, column, row);
+        if (!panel.Controls.Contains(card))
+        {
+            panel.Controls.Add(card);
+        }
     }
 
     private static DateTimePicker CreateDatePicker()
@@ -281,20 +409,23 @@ public sealed class ReportsControl : UserControl
             BackgroundColor = ThemeHelper.Surface,
             BorderStyle = BorderStyle.None,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-            ColumnHeadersHeight = 32,
+            ColumnHeadersHeight = 36,
             EnableHeadersVisualStyles = false,
             GridColor = ThemeHelper.TableGridLine,
             ReadOnly = true,
             RowHeadersVisible = false,
-            RowTemplate = { Height = 30 },
+            RowTemplate = { Height = 34 },
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             ScrollBars = ScrollBars.Vertical
         };
 
         grid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
         grid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Surface;
-        grid.ColumnHeadersDefaultCellStyle.ForeColor = ThemeHelper.TextSecondary;
+        
+        grid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
+        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
         grid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
         grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         return grid;
@@ -303,6 +434,7 @@ public sealed class ReportsControl : UserControl
     private async void ReportsControl_Load(object? sender, EventArgs e)
     {
         Load -= ReportsControl_Load;
+        LayoutReportMetricSections();
         await RefreshReportsAsync();
     }
 
@@ -315,18 +447,31 @@ public sealed class ReportsControl : UserControl
 
             ReportSummaryMetrics summary = await _reportService.GetSummaryMetricsAsync(from, to);
             UpdateSummaryCards(summary);
+            UpdateFinancialSummaryCards(summary);
 
             var paymentMethods = await _reportService.GetPaymentMethodBreakdownAsync(from, to);
-            PopulatePaymentMethods(paymentMethods);
+            PopulatePaymentMethods(_paymentMethodGrid, paymentMethods);
+            PopulatePaymentMethods(_fPaymentMethodGrid, paymentMethods);
 
             var revenueCategories = await _reportService.GetRevenueByCategoryAsync(from, to);
-            PopulateRevenueCategories(revenueCategories);
+            PopulateRevenueCategories(_revenueCategoryGrid, revenueCategories);
+            PopulateRevenueCategories(_fRevenueCategoryGrid, revenueCategories);
 
             var statusBreakdown = await _reportService.GetTransactionStatusBreakdownAsync(from, to);
             PopulateStatusBreakdown(statusBreakdown);
 
-            var topCars = await _reportService.GetTopCarsByRevenueAsync(from, to);
-            PopulateTopCars(topCars);
+            var topCars = await _reportService.GetTopCarsByRevenueAsync(from, to, 5);
+            PopulateTopCars(_topCarsGrid, topCars);
+
+            // Financial Tab Specific
+            var outstanding = await _reportService.GetOutstandingTransactionsAsync(from, to);
+            PopulateOutstandingTransactions(outstanding);
+
+            var carRevenue = await _reportService.GetRevenueByCarAsync(from, to, 10);
+            PopulateCarRevenue(carRevenue);
+
+            var customerRevenue = await _reportService.GetRevenueByCustomerAsync(from, to, 10);
+            PopulateCustomerRevenue(customerRevenue);
         }
         catch (Exception exception)
         {
@@ -343,7 +488,7 @@ public sealed class ReportsControl : UserControl
         
         _lateReturnFeesCard.SetMetric(IconChar.Clock, "Late Return Fees", FormatPeso(metrics.LateReturnFees), "Overdue return penalties", ThemeHelper.Warning);
         _paidTransactionsCard.SetMetric(IconChar.CheckCircle, "Paid Transactions", metrics.PaidTransactions.ToString(), "Fully settled", ThemeHelper.Success);
-        _partialUnpaidTransactionsCard.SetMetric(IconChar.Wallet, "Outstanding Transactions", metrics.PartialUnpaidTransactions.ToString(), "Partial or unpaid", ThemeHelper.Warning);
+        _partialUnpaidTransactionsCard.SetMetric(IconChar.Wallet, "Outstanding Transactions", (metrics.PartialTransactions + metrics.UnpaidTransactions).ToString(), "Partial or unpaid", ThemeHelper.Warning);
         _activeRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveRentals.ToString(), "Vehicles currently out", ThemeHelper.Primary);
         
         _completedRentalsCard.SetMetric(IconChar.FlagCheckered, "Completed Rentals", metrics.CompletedRentals.ToString(), "Rentals closed in range", ThemeHelper.GrayIcon);
@@ -351,30 +496,45 @@ public sealed class ReportsControl : UserControl
         _mostRentedCarCard.SetMetric(IconChar.Star, "Most Rented Car", metrics.MostRentedCar ?? "-", $"{metrics.MostRentedCarCount} rental(s)", ThemeHelper.Primary);
     }
 
-    private void PopulatePaymentMethods(IReadOnlyList<PaymentMethodBreakdownItem> items)
+    private void UpdateFinancialSummaryCards(ReportSummaryMetrics metrics)
     {
-        _paymentMethodGrid.Columns.Clear();
-        _paymentMethodGrid.Rows.Clear();
-        _paymentMethodGrid.Columns.Add("Method", "Method");
-        _paymentMethodGrid.Columns.Add("Count", "TXs");
-        _paymentMethodGrid.Columns.Add("Amount", "Amount");
+        _fTotalRevenueCard.SetMetric(IconChar.MoneyBillTrendUp, "Total Revenue", FormatPeso(metrics.TotalRevenue), "Actual payments received", ThemeHelper.Primary);
+        _fOutstandingCard.SetMetric(IconChar.HandHoldingDollar, "Total Outstanding", FormatPeso(metrics.OutstandingBalance), "Uncollected balance", ThemeHelper.Danger);
+        _fPaidTxCard.SetMetric(IconChar.CheckDouble, "Fully Paid", metrics.PaidTransactions.ToString(), "Settled transactions", ThemeHelper.Success);
+        _fPartialTxCard.SetMetric(IconChar.ScaleUnbalanced, "Partial", metrics.PartialTransactions.ToString(), "Some payment received", ThemeHelper.Warning);
+        _fUnpaidTxCard.SetMetric(IconChar.FileInvoiceDollar, "Unpaid", metrics.UnpaidTransactions.ToString(), "No payments yet", ThemeHelper.Danger);
+        _fRentalRevenueCard.SetMetric(IconChar.CarSide, "Rental Revenue", FormatPeso(metrics.RentalRevenue), "Base charges", ThemeHelper.Success);
+        _fExtensionFeesCard.SetMetric(IconChar.CalendarPlus, "Extension Fees", FormatPeso(metrics.ExtensionFees), "Rental extensions", ThemeHelper.Warning);
+        _fDamageLateFeesCard.SetMetric(IconChar.CircleExclamation, "Damage/Late Fees", FormatPeso(metrics.DamageFees + metrics.LateReturnFees), "Return penalties", ThemeHelper.Danger);
+    }
+
+    private void PopulatePaymentMethods(DataGridView grid, IReadOnlyList<PaymentMethodBreakdownItem> items)
+    {
+        grid.Columns.Clear();
+        grid.Rows.Clear();
+        grid.Columns.Add("Method", "Method");
+        grid.Columns.Add("Count", "Count");
+        grid.Columns.Add("Amount", "Amount");
+        grid.Columns.Add("Percent", "%");
 
         foreach (var item in items)
         {
-            _paymentMethodGrid.Rows.Add(item.ModeOfPayment, item.TransactionCount, FormatPeso(item.TotalAmount));
+            grid.Rows.Add(item.ModeOfPayment, item.PaymentCount, FormatPeso(item.TotalAmount), $"{item.Percentage:N1}%");
         }
     }
 
-    private void PopulateRevenueCategories(IReadOnlyList<RevenueByCategoryItem> items)
+    private void PopulateRevenueCategories(DataGridView grid, IReadOnlyList<RevenueByCategoryItem> items)
     {
-        _revenueCategoryGrid.Columns.Clear();
-        _revenueCategoryGrid.Rows.Clear();
-        _revenueCategoryGrid.Columns.Add("Category", "Category");
-        _revenueCategoryGrid.Columns.Add("Amount", "Amount");
+        grid.Columns.Clear();
+        grid.Rows.Clear();
+        grid.Columns.Add("Category", "Category");
+        grid.Columns.Add("Count", "Count");
+        grid.Columns.Add("Amount", "Amount");
+        grid.Columns.Add("Percent", "%");
 
         foreach (var item in items)
         {
-            _revenueCategoryGrid.Rows.Add(item.PaymentCategory, FormatPeso(item.TotalAmount));
+            grid.Rows.Add(item.PaymentCategory, item.PaymentCount, FormatPeso(item.TotalAmount), $"{item.Percentage:N1}%");
         }
     }
 
@@ -391,17 +551,74 @@ public sealed class ReportsControl : UserControl
         }
     }
 
-    private void PopulateTopCars(IReadOnlyList<TopCarItem> items)
+    private void PopulateTopCars(DataGridView grid, IReadOnlyList<TopCarItem> items)
     {
-        _topCarsGrid.Columns.Clear();
-        _topCarsGrid.Rows.Clear();
-        _topCarsGrid.Columns.Add("Car", "Car");
-        _topCarsGrid.Columns.Add("Rentals", "Count");
-        _topCarsGrid.Columns.Add("Revenue", "Revenue");
+        grid.Columns.Clear();
+        grid.Rows.Clear();
+        grid.Columns.Add("Car", "Car");
+        grid.Columns.Add("Rentals", "Count");
+        grid.Columns.Add("Revenue", "Revenue");
 
         foreach (var item in items)
         {
-            _topCarsGrid.Rows.Add($"{item.CarName} ({item.PlateNumber})", item.RentalCount, FormatPeso(item.Revenue));
+            grid.Rows.Add($"{item.CarName} ({item.PlateNumber})", item.RentalCount, FormatPeso(item.Revenue));
+        }
+    }
+
+    private void PopulateOutstandingTransactions(IReadOnlyList<TransactionListItem> items)
+    {
+        _fOutstandingGrid.Columns.Clear();
+        _fOutstandingGrid.Rows.Clear();
+        _fOutstandingGrid.Columns.Add("Code", "Code");
+        _fOutstandingGrid.Columns.Add("Customer", "Customer");
+        _fOutstandingGrid.Columns.Add("Car", "Car");
+        _fOutstandingGrid.Columns.Add("Total", "Total");
+        _fOutstandingGrid.Columns.Add("Paid", "Paid");
+        _fOutstandingGrid.Columns.Add("Balance", "Balance");
+        _fOutstandingGrid.Columns.Add("PayStatus", "Payment");
+        _fOutstandingGrid.Columns.Add("TxStatus", "Status");
+
+        foreach (var item in items)
+        {
+            _fOutstandingGrid.Rows.Add(
+                item.TransactionCode,
+                item.CustomerName,
+                $"{item.CarName} ({item.PlateNumber})",
+                FormatPeso(item.TotalAmount),
+                FormatPeso(item.AmountPaid),
+                FormatPeso(item.BalanceAmount),
+                item.PaymentStatus,
+                item.TransactionStatus);
+        }
+    }
+
+    private void PopulateCarRevenue(IReadOnlyList<TopCarItem> items)
+    {
+        _fCarRevenueGrid.Columns.Clear();
+        _fCarRevenueGrid.Rows.Clear();
+        _fCarRevenueGrid.Columns.Add("Car", "Car / Plate");
+        _fCarRevenueGrid.Columns.Add("Rentals", "Count");
+        _fCarRevenueGrid.Columns.Add("Total", "Total Revenue");
+        _fCarRevenueGrid.Columns.Add("Avg", "Average / Rental");
+
+        foreach (var item in items)
+        {
+            _fCarRevenueGrid.Rows.Add($"{item.CarName} ({item.PlateNumber})", item.RentalCount, FormatPeso(item.Revenue), FormatPeso(item.AverageRevenue));
+        }
+    }
+
+    private void PopulateCustomerRevenue(IReadOnlyList<RevenueByCustomerItem> items)
+    {
+        _fCustomerRevenueGrid.Columns.Clear();
+        _fCustomerRevenueGrid.Rows.Clear();
+        _fCustomerRevenueGrid.Columns.Add("Customer", "Customer");
+        _fCustomerRevenueGrid.Columns.Add("TXs", "Count");
+        _fCustomerRevenueGrid.Columns.Add("Paid", "Total Paid");
+        _fCustomerRevenueGrid.Columns.Add("Balance", "Outstanding");
+
+        foreach (var item in items)
+        {
+            _fCustomerRevenueGrid.Rows.Add(item.CustomerName, item.TransactionCount, FormatPeso(item.TotalPaid), FormatPeso(item.OutstandingBalance));
         }
     }
 
