@@ -198,7 +198,57 @@ public static class DatabaseInitializer
             END;
             """);
 
-        // 4. Activity Logs
+        // 4. Vehicle Locations
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.VehicleLocations', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.VehicleLocations
+                (
+                    VehicleLocationId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    CarId int NOT NULL,
+                    Latitude decimal(10,7) NOT NULL,
+                    Longitude decimal(10,7) NOT NULL,
+                    SpeedKph decimal(10,2) NULL,
+                    Heading decimal(10,2) NULL,
+                    Source nvarchar(50) NOT NULL CONSTRAINT DF_VehicleLocations_Source DEFAULT N'Simulator',
+                    RecordedAt datetime2 NOT NULL CONSTRAINT DF_VehicleLocations_RecordedAt DEFAULT sysdatetime(),
+                    IsArchived bit NOT NULL CONSTRAINT DF_VehicleLocations_IsArchived DEFAULT 0,
+                    CONSTRAINT FK_VehicleLocations_Cars FOREIGN KEY (CarId) REFERENCES dbo.Cars(CarId),
+                    CONSTRAINT CK_VehicleLocations_Latitude CHECK (Latitude BETWEEN -90 AND 90),
+                    CONSTRAINT CK_VehicleLocations_Longitude CHECK (Longitude BETWEEN -180 AND 180)
+                );
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.VehicleLocations', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_VehicleLocations_CarId_RecordedAt'
+                      AND object_id = OBJECT_ID(N'dbo.VehicleLocations')
+                )
+                BEGIN
+                    CREATE NONCLUSTERED INDEX IX_VehicleLocations_CarId_RecordedAt
+                    ON dbo.VehicleLocations (CarId, RecordedAt DESC);
+                END;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE name = N'IX_VehicleLocations_Active'
+                      AND object_id = OBJECT_ID(N'dbo.VehicleLocations')
+                )
+                BEGIN
+                    CREATE NONCLUSTERED INDEX IX_VehicleLocations_Active
+                    ON dbo.VehicleLocations (CarId, RecordedAt DESC)
+                    WHERE IsArchived = 0;
+                END;
+            END;
+            """);
+
+        // 5. Activity Logs
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.ActivityLogs', N'U') IS NULL
             BEGIN
