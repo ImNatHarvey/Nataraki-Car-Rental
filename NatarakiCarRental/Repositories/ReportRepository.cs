@@ -838,4 +838,261 @@ public sealed class ReportRepository
         var results = await connection.QueryAsync<OperationsAvailableCarItem>(sql, new { From = from, To = to });
         return results.ToList();
     }
+
+    public async Task<CustomerAnalyticsMetrics> GetCustomerAnalyticsMetricsAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            WITH CustomerRevenue AS
+            (
+                SELECT
+                    customers.CustomerId,
+                    CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                    TotalPaid = SUM(payments.Amount)
+                FROM dbo.Customers AS customers
+                INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
+                INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
+                WHERE customers.PhoneNumber <> N'00000000000'
+                  AND transactions.IsArchived = 0
+                  AND payments.IsArchived = 0
+                  AND payments.PaymentDate >= @From
+                  AND payments.PaymentDate <= @To
+                GROUP BY customers.CustomerId, customers.FirstName, customers.LastName
+            ),
+            CustomerRentals AS
+            (
+                SELECT
+                    customers.CustomerId,
+                    CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                    RentalCount = COUNT(1)
+                FROM dbo.Customers AS customers
+                INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
+                WHERE customers.PhoneNumber <> N'00000000000'
+                  AND transactions.IsArchived = 0
+                  AND transactions.StartDate <= CONVERT(date, @To)
+                  AND transactions.EndDate >= CONVERT(date, @From)
+                GROUP BY customers.CustomerId, customers.FirstName, customers.LastName
+            )
+            SELECT
+                TotalActiveCustomers = (
+                    SELECT COUNT(1)
+                    FROM dbo.Customers
+                    WHERE IsArchived = 0
+                      AND IsBlacklisted = 0
+                      AND PhoneNumber <> N'00000000000'
+                ),
+                NewCustomers = (
+                    SELECT COUNT(1)
+                    FROM dbo.Customers
+                    WHERE IsArchived = 0
+                      AND PhoneNumber <> N'00000000000'
+                      AND CreatedAt >= @From
+                      AND CreatedAt <= @To
+                ),
+                TopCustomerByRevenue = (SELECT TOP 1 CustomerName FROM CustomerRevenue ORDER BY TotalPaid DESC, CustomerName),
+                TopCustomerRevenue = ISNULL((SELECT TOP 1 TotalPaid FROM CustomerRevenue ORDER BY TotalPaid DESC), 0),
+                TopCustomerByRentals = (SELECT TOP 1 CustomerName FROM CustomerRentals ORDER BY RentalCount DESC, CustomerName),
+                TopCustomerRentalCount = ISNULL((SELECT TOP 1 RentalCount FROM CustomerRentals ORDER BY RentalCount DESC), 0),
+                BlacklistedCustomers = (
+                    SELECT COUNT(1)
+                    FROM dbo.Customers
+                    WHERE IsArchived = 0
+                      AND IsBlacklisted = 1
+                      AND PhoneNumber <> N'00000000000'
+                ),
+                CustomersWithLateReturns = (
+                    SELECT COUNT(DISTINCT CustomerId)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Active'
+                      AND EndDate < CONVERT(date, @Today)
+                ),
+                CustomersWithDamageFees = (
+                    SELECT COUNT(DISTINCT transactions.CustomerId)
+                    FROM dbo.Transactions AS transactions
+                    INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
+                    WHERE transactions.IsArchived = 0
+                      AND payments.IsArchived = 0
+                      AND payments.PaymentCategory = N'Damage Fee'
+                      AND payments.PaymentDate >= @From
+                      AND payments.PaymentDate <= @To
+                ),
+                AverageRevenuePerCustomer = CASE
+                    WHEN (SELECT COUNT(1) FROM CustomerRevenue) > 0
+                        THEN ISNULL((SELECT SUM(TotalPaid) FROM CustomerRevenue), 0) / (SELECT COUNT(1) FROM CustomerRevenue)
+                    ELSE 0
+                END;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<CustomerAnalyticsMetrics>(
+            sql,
+            new { From = from, To = to, Today = DateTime.Today })
+            ?? new CustomerAnalyticsMetrics();
+    }
+
+    public async Task<IReadOnlyList<CustomerRevenueReportItem>> GetTopCustomersByRevenueAsync(DateTime from, DateTime to, int limit)
+    {
+        const string sql = """
+            SELECT TOP (@Limit)
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                TransactionCount = COUNT(DISTINCT transactions.TransactionId),
+                TotalPaid = SUM(payments.Amount),
+                OutstandingBalance = (
+                    SELECT ISNULL(SUM(openTransactions.BalanceAmount), 0)
+                    FROM dbo.Transactions AS openTransactions
+                    WHERE openTransactions.CustomerId = customers.CustomerId
+                      AND openTransactions.IsArchived = 0
+                      AND openTransactions.CreatedAt >= @From
+                      AND openTransactions.CreatedAt <= @To
+                )
+            FROM dbo.Customers AS customers
+            INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
+            INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
+            WHERE customers.PhoneNumber <> N'00000000000'
+              AND transactions.IsArchived = 0
+              AND payments.IsArchived = 0
+              AND payments.PaymentDate >= @From
+              AND payments.PaymentDate <= @To
+            GROUP BY customers.CustomerId, customers.FirstName, customers.LastName, customers.PhoneNumber
+            ORDER BY TotalPaid DESC, CustomerName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<CustomerRevenueReportItem>(sql, new { From = from, To = to, Limit = limit });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<CustomerRentalCountReportItem>> GetTopCustomersByRentalCountAsync(DateTime from, DateTime to, int limit)
+    {
+        const string sql = """
+            SELECT TOP (@Limit)
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                RentalCount = COUNT(1),
+                CompletedRentals = SUM(CASE WHEN transactions.TransactionStatus = N'Completed' THEN 1 ELSE 0 END),
+                ActiveRentals = SUM(CASE WHEN transactions.TransactionStatus = N'Active' THEN 1 ELSE 0 END),
+                LastRentalDate = MAX(transactions.StartDate)
+            FROM dbo.Customers AS customers
+            INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
+            WHERE customers.PhoneNumber <> N'00000000000'
+              AND transactions.IsArchived = 0
+              AND transactions.StartDate <= CONVERT(date, @To)
+              AND transactions.EndDate >= CONVERT(date, @From)
+            GROUP BY customers.CustomerId, customers.FirstName, customers.LastName, customers.PhoneNumber
+            ORDER BY RentalCount DESC, LastRentalDate DESC, CustomerName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<CustomerRentalCountReportItem>(sql, new { From = from, To = to, Limit = limit });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<CustomerOutstandingBalanceReportItem>> GetCustomersWithOutstandingBalancesAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                transactions.TransactionCode,
+                transactions.TotalAmount,
+                transactions.AmountPaid,
+                Balance = transactions.BalanceAmount,
+                transactions.PaymentStatus
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            WHERE customers.PhoneNumber <> N'00000000000'
+              AND transactions.IsArchived = 0
+              AND transactions.PaymentStatus IN (N'Unpaid', N'Partial')
+              AND transactions.CreatedAt >= @From
+              AND transactions.CreatedAt <= @To
+            ORDER BY transactions.BalanceAmount DESC, transactions.TransactionCode;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<CustomerOutstandingBalanceReportItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<CustomerLateReturnReportItem>> GetCustomersWithLateReturnsAsync(DateTime today)
+    {
+        const string sql = """
+            SELECT
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                transactions.TransactionCode,
+                cars.CarName,
+                cars.PlateNumber,
+                DaysLate = DATEDIFF(day, transactions.EndDate, CONVERT(date, @Today)),
+                EstimatedLateFee = transactions.DailyRate * DATEDIFF(day, transactions.EndDate, CONVERT(date, @Today))
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE customers.PhoneNumber <> N'00000000000'
+              AND transactions.IsArchived = 0
+              AND transactions.TransactionStatus = N'Active'
+              AND transactions.EndDate < CONVERT(date, @Today)
+            ORDER BY DaysLate DESC, transactions.EndDate;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<CustomerLateReturnReportItem>(sql, new { Today = today.Date });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<CustomerDamageFeeReportItem>> GetCustomersWithDamageFeesAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                transactions.TransactionCode,
+                cars.CarName,
+                cars.PlateNumber,
+                DamageFee = payments.Amount,
+                payments.PaymentDate
+            FROM dbo.TransactionPayments AS payments
+            INNER JOIN dbo.Transactions AS transactions ON transactions.TransactionId = payments.TransactionId
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE customers.PhoneNumber <> N'00000000000'
+              AND transactions.IsArchived = 0
+              AND payments.IsArchived = 0
+              AND payments.PaymentCategory = N'Damage Fee'
+              AND payments.PaymentDate >= @From
+              AND payments.PaymentDate <= @To
+            ORDER BY payments.PaymentDate DESC, DamageFee DESC;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<CustomerDamageFeeReportItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<BlacklistedCustomerReportItem>> GetBlacklistedCustomersReportAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                Contact = customers.PhoneNumber,
+                BlacklistReason = ISNULL(customers.BlacklistReason, N'-'),
+                [Status] = N'Blacklisted',
+                LastTransaction = ISNULL((
+                    SELECT TOP 1 transactions.TransactionCode
+                    FROM dbo.Transactions AS transactions
+                    WHERE transactions.CustomerId = customers.CustomerId
+                      AND transactions.IsArchived = 0
+                    ORDER BY transactions.CreatedAt DESC, transactions.TransactionId DESC
+                ), N'-')
+            FROM dbo.Customers AS customers
+            WHERE customers.IsArchived = 0
+              AND customers.IsBlacklisted = 1
+              AND customers.PhoneNumber <> N'00000000000'
+            ORDER BY customers.LastName, customers.FirstName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<BlacklistedCustomerReportItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
 }

@@ -118,4 +118,39 @@ public sealed class ReportService
     {
         return _reportRepository.GetAvailableCarsReportAsync(from, to);
     }
+
+    public Task<CustomerAnalyticsMetrics> GetCustomerAnalyticsMetricsAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetCustomerAnalyticsMetricsAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<CustomerRevenueReportItem>> GetTopCustomersByRevenueAsync(DateTime from, DateTime to, int limit = 10)
+    {
+        return _reportRepository.GetTopCustomersByRevenueAsync(from, to, limit);
+    }
+
+    public Task<IReadOnlyList<CustomerRentalCountReportItem>> GetTopCustomersByRentalCountAsync(DateTime from, DateTime to, int limit = 10)
+    {
+        return _reportRepository.GetTopCustomersByRentalCountAsync(from, to, limit);
+    }
+
+    public Task<IReadOnlyList<CustomerOutstandingBalanceReportItem>> GetCustomersWithOutstandingBalancesAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetCustomersWithOutstandingBalancesAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<CustomerLateReturnReportItem>> GetCustomersWithLateReturnsAsync(DateTime today)
+    {
+        return _reportRepository.GetCustomersWithLateReturnsAsync(today);
+    }
+
+    public Task<IReadOnlyList<CustomerDamageFeeReportItem>> GetCustomersWithDamageFeesAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetCustomersWithDamageFeesAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<BlacklistedCustomerReportItem>> GetBlacklistedCustomersReportAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetBlacklistedCustomersReportAsync(from, to);
+    }
 }

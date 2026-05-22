@@ -90,10 +90,28 @@ public sealed class ReportsControl : UserControl
     private readonly DataGridView _opsMaintenanceGrid = CreateSummaryGrid();
     private readonly DataGridView _opsAvailableCarsGrid = CreateSummaryGrid();
 
+    // Customer Analytics Tab
+    private readonly MetricCardControl _customerActiveCard = new();
+    private readonly MetricCardControl _customerNewCard = new();
+    private readonly MetricCardControl _customerTopRevenueCard = new();
+    private readonly MetricCardControl _customerTopRentalsCard = new();
+    private readonly MetricCardControl _customerBlacklistedCard = new();
+    private readonly MetricCardControl _customerLateReturnsCard = new();
+    private readonly MetricCardControl _customerDamageFeesCard = new();
+    private readonly MetricCardControl _customerAverageRevenueCard = new();
+
+    private readonly DataGridView _customerRevenueGrid = CreateSummaryGrid();
+    private readonly DataGridView _customerRentalCountGrid = CreateSummaryGrid();
+    private readonly DataGridView _customerOutstandingGrid = CreateSummaryGrid();
+    private readonly DataGridView _customerLateReturnsGrid = CreateSummaryGrid();
+    private readonly DataGridView _customerDamageFeesGrid = CreateSummaryGrid();
+    private readonly DataGridView _customerBlacklistedGrid = CreateSummaryGrid();
+
     private readonly FlowLayoutPanel _overviewMetricPanel = new();
     private readonly FlowLayoutPanel _financialMetricPanel = new();
     private readonly FlowLayoutPanel _fleetMetricPanel = new();
     private readonly FlowLayoutPanel _operationsMetricPanel = new();
+    private readonly FlowLayoutPanel _customersMetricPanel = new();
 
     public ReportsControl()
     {
@@ -113,6 +131,7 @@ public sealed class ReportsControl : UserControl
         LayoutReportMetricCards(_financialMetricPanel, GetFinancialCards());
         LayoutReportMetricCards(_fleetMetricPanel, GetFleetCards());
         LayoutReportMetricCards(_operationsMetricPanel, GetOperationsCards());
+        LayoutReportMetricCards(_customersMetricPanel, GetCustomerCards());
     }
 
     private static void LayoutReportMetricCards(FlowLayoutPanel panel, IReadOnlyList<Control> cards)
@@ -171,6 +190,12 @@ public sealed class ReportsControl : UserControl
     [
         _opsUpcomingReturnsCard, _opsLateReturnsCard, _opsActiveRentalsCard, _opsUpcomingReservationsCard,
         _opsReservedCarsCard, _opsMaintenanceCard, _opsAvailableCarsCard, _opsCompletedReturnsCard
+    ];
+
+    private List<Control> GetCustomerCards() =>
+    [
+        _customerActiveCard, _customerNewCard, _customerTopRevenueCard, _customerTopRentalsCard,
+        _customerBlacklistedCard, _customerLateReturnsCard, _customerDamageFeesCard, _customerAverageRevenueCard
     ];
 
     private void InitializeControl()
@@ -262,7 +287,7 @@ public sealed class ReportsControl : UserControl
         SetupFinancialTab();
         SetupFleetTab();
         SetupOperationsTab();
-        SetupPlaceholderTab(_customersPage, "Customer reports");
+        SetupCustomersTab();
         SetupPlaceholderTab(_exportsPage, "Export options");
 
         return _reportTabs;
@@ -365,6 +390,29 @@ public sealed class ReportsControl : UserControl
         _operationsPage.Controls.Add(layout);
     }
 
+    private void SetupCustomersTab()
+    {
+        _customersPage.BackColor = ThemeHelper.ContentBackground;
+        _customersPage.AutoScroll = true;
+        _customersPage.Padding = new Padding(0, 20, 0, 0);
+
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 5
+        };
+
+        layout.Controls.Add(CreateCustomersMetricPanel());
+        layout.Controls.Add(CreateCustomerTopTablesLayout());
+        layout.Controls.Add(CreateGridCard("Customers with Outstanding Balances", _customerOutstandingGrid, 340));
+        layout.Controls.Add(CreateCustomerRiskTablesLayout());
+        layout.Controls.Add(CreateGridCard("Blacklisted Customers (Current)", _customerBlacklistedGrid, 320));
+
+        _customersPage.Controls.Add(layout);
+    }
+
     private FlowLayoutPanel CreateOverviewMetricPanel()
     {
         ConfigureMetricPanel(_overviewMetricPanel);
@@ -434,6 +482,23 @@ public sealed class ReportsControl : UserControl
         LayoutReportMetricCards(_operationsMetricPanel, GetOperationsCards());
 
         return _operationsMetricPanel;
+    }
+
+    private FlowLayoutPanel CreateCustomersMetricPanel()
+    {
+        ConfigureMetricPanel(_customersMetricPanel);
+
+        AddMetricCard(_customersMetricPanel, _customerActiveCard, IconChar.Users, "Active Customers", "0", "Current non-blacklisted", ThemeHelper.Success);
+        AddMetricCard(_customersMetricPanel, _customerNewCard, IconChar.UserPlus, "New Customers", "0", "Created in range", ThemeHelper.Primary);
+        AddMetricCard(_customersMetricPanel, _customerTopRevenueCard, IconChar.Trophy, "Top Customer by Revenue", "-", "Highest total paid", ThemeHelper.Success);
+        AddMetricCard(_customersMetricPanel, _customerTopRentalsCard, IconChar.Star, "Top Customer by Rentals", "-", "Highest rental count", ThemeHelper.Primary);
+        AddMetricCard(_customersMetricPanel, _customerBlacklistedCard, IconChar.UserSlash, "Blacklisted Customers", "0", "Current blocked list", ThemeHelper.Danger);
+        AddMetricCard(_customersMetricPanel, _customerLateReturnsCard, IconChar.Clock, "Late Return Customers", "0", "Currently overdue", ThemeHelper.Warning);
+        AddMetricCard(_customersMetricPanel, _customerDamageFeesCard, IconChar.Hammer, "Damage Fee Customers", "0", "Damage fees in range", ThemeHelper.Danger);
+        AddMetricCard(_customersMetricPanel, _customerAverageRevenueCard, IconChar.ChartLine, "Avg Revenue / Customer", "₱0.00", "Customers with payments", ThemeHelper.Success);
+        LayoutReportMetricCards(_customersMetricPanel, GetCustomerCards());
+
+        return _customersMetricPanel;
     }
 
     private static void ConfigureMetricPanel(FlowLayoutPanel panel)
@@ -507,6 +572,42 @@ public sealed class ReportsControl : UserControl
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.Controls.Add(CreateGridCard("Upcoming Returns", _opsUpcomingReturnsGrid), 0, 0);
         grid.Controls.Add(CreateGridCard("Late Returns", _opsLateReturnsGrid), 1, 0);
+        return grid;
+    }
+
+    private TableLayoutPanel CreateCustomerTopTablesLayout()
+    {
+        TableLayoutPanel grid = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 360,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.Controls.Add(CreateGridCard("Top Customers by Revenue", _customerRevenueGrid), 0, 0);
+        grid.Controls.Add(CreateGridCard("Top Customers by Rental Count", _customerRentalCountGrid), 1, 0);
+        return grid;
+    }
+
+    private TableLayoutPanel CreateCustomerRiskTablesLayout()
+    {
+        TableLayoutPanel grid = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 360,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.Controls.Add(CreateGridCard("Customers with Late Returns", _customerLateReturnsGrid), 0, 0);
+        grid.Controls.Add(CreateGridCard("Customers with Damage Fees", _customerDamageFeesGrid), 1, 0);
         return grid;
     }
 
@@ -683,6 +784,27 @@ public sealed class ReportsControl : UserControl
 
             var availableCars = await _reportService.GetAvailableCarsReportAsync(from, to);
             PopulateAvailableCars(availableCars);
+
+            CustomerAnalyticsMetrics customerMetrics = await _reportService.GetCustomerAnalyticsMetricsAsync(from, to);
+            UpdateCustomerSummaryCards(customerMetrics);
+
+            var topCustomerRevenue = await _reportService.GetTopCustomersByRevenueAsync(from, to, 10);
+            PopulateTopCustomersByRevenue(topCustomerRevenue);
+
+            var topCustomerRentals = await _reportService.GetTopCustomersByRentalCountAsync(from, to, 10);
+            PopulateTopCustomersByRentalCount(topCustomerRentals);
+
+            var customerOutstanding = await _reportService.GetCustomersWithOutstandingBalancesAsync(from, to);
+            PopulateCustomerOutstandingBalances(customerOutstanding);
+
+            var customerLateReturns = await _reportService.GetCustomersWithLateReturnsAsync(DateTime.Today);
+            PopulateCustomerLateReturns(customerLateReturns);
+
+            var customerDamageFees = await _reportService.GetCustomersWithDamageFeesAsync(from, to);
+            PopulateCustomerDamageFees(customerDamageFees);
+
+            var blacklistedCustomers = await _reportService.GetBlacklistedCustomersReportAsync(from, to);
+            PopulateBlacklistedCustomers(blacklistedCustomers);
         }
         catch (Exception exception)
         {
@@ -741,6 +863,18 @@ public sealed class ReportsControl : UserControl
         _opsMaintenanceCard.SetMetric(IconChar.ScrewdriverWrench, "Cars Under Maintenance", metrics.CarsUnderMaintenance.ToString(), "Schedule-based", ThemeHelper.Warning);
         _opsAvailableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", metrics.AvailableCars.ToString(), "No blocking schedule", ThemeHelper.Success);
         _opsCompletedReturnsCard.SetMetric(IconChar.FlagCheckered, "Completed Returns", metrics.CompletedReturns.ToString(), "Closed in range", ThemeHelper.GrayIcon);
+    }
+
+    private void UpdateCustomerSummaryCards(CustomerAnalyticsMetrics metrics)
+    {
+        _customerActiveCard.SetMetric(IconChar.Users, "Active Customers", metrics.TotalActiveCustomers.ToString(), "Current non-blacklisted", ThemeHelper.Success);
+        _customerNewCard.SetMetric(IconChar.UserPlus, "New Customers", metrics.NewCustomers.ToString(), "Created in range", ThemeHelper.Primary);
+        _customerTopRevenueCard.SetMetric(IconChar.Trophy, "Top Customer by Revenue", metrics.TopCustomerByRevenue ?? "-", $"Paid: {FormatPeso(metrics.TopCustomerRevenue)}", ThemeHelper.Success);
+        _customerTopRentalsCard.SetMetric(IconChar.Star, "Top Customer by Rentals", metrics.TopCustomerByRentals ?? "-", $"{metrics.TopCustomerRentalCount} rental(s)", ThemeHelper.Primary);
+        _customerBlacklistedCard.SetMetric(IconChar.UserSlash, "Blacklisted Customers", metrics.BlacklistedCustomers.ToString(), "Current blocked list", ThemeHelper.Danger);
+        _customerLateReturnsCard.SetMetric(IconChar.Clock, "Late Return Customers", metrics.CustomersWithLateReturns.ToString(), "Currently overdue", ThemeHelper.Warning);
+        _customerDamageFeesCard.SetMetric(IconChar.Hammer, "Damage Fee Customers", metrics.CustomersWithDamageFees.ToString(), "Damage fees in range", ThemeHelper.Danger);
+        _customerAverageRevenueCard.SetMetric(IconChar.ChartLine, "Avg Revenue / Customer", FormatPeso(metrics.AverageRevenuePerCustomer), "Customers with payments", ThemeHelper.Success);
     }
 
     private void PopulatePaymentMethods(DataGridView grid, IReadOnlyList<PaymentMethodBreakdownItem> items)
@@ -1055,6 +1189,142 @@ public sealed class ReportsControl : UserControl
                 item.Status,
                 FormatPeso(item.RatePerDay),
                 item.SeatingCapacity?.ToString() ?? "-");
+        }
+    }
+
+    private void PopulateTopCustomersByRevenue(IReadOnlyList<CustomerRevenueReportItem> items)
+    {
+        _customerRevenueGrid.Columns.Clear();
+        _customerRevenueGrid.Rows.Clear();
+        _customerRevenueGrid.Columns.Add("Customer", "Customer");
+        _customerRevenueGrid.Columns.Add("Contact", "Contact");
+        _customerRevenueGrid.Columns.Add("Transactions", "Transaction Count");
+        _customerRevenueGrid.Columns.Add("Paid", "Total Paid");
+        _customerRevenueGrid.Columns.Add("Outstanding", "Outstanding Balance");
+
+        foreach (CustomerRevenueReportItem item in items)
+        {
+            _customerRevenueGrid.Rows.Add(
+                item.CustomerName,
+                item.Contact,
+                item.TransactionCount,
+                FormatPeso(item.TotalPaid),
+                FormatPeso(item.OutstandingBalance));
+        }
+    }
+
+    private void PopulateTopCustomersByRentalCount(IReadOnlyList<CustomerRentalCountReportItem> items)
+    {
+        _customerRentalCountGrid.Columns.Clear();
+        _customerRentalCountGrid.Rows.Clear();
+        _customerRentalCountGrid.Columns.Add("Customer", "Customer");
+        _customerRentalCountGrid.Columns.Add("Contact", "Contact");
+        _customerRentalCountGrid.Columns.Add("Rentals", "Rental Count");
+        _customerRentalCountGrid.Columns.Add("Completed", "Completed Rentals");
+        _customerRentalCountGrid.Columns.Add("Active", "Active Rentals");
+        _customerRentalCountGrid.Columns.Add("LastRental", "Last Rental Date");
+
+        foreach (CustomerRentalCountReportItem item in items)
+        {
+            _customerRentalCountGrid.Rows.Add(
+                item.CustomerName,
+                item.Contact,
+                item.RentalCount,
+                item.CompletedRentals,
+                item.ActiveRentals,
+                item.LastRentalDate.HasValue ? FormatDate(item.LastRentalDate.Value) : "-");
+        }
+    }
+
+    private void PopulateCustomerOutstandingBalances(IReadOnlyList<CustomerOutstandingBalanceReportItem> items)
+    {
+        _customerOutstandingGrid.Columns.Clear();
+        _customerOutstandingGrid.Rows.Clear();
+        _customerOutstandingGrid.Columns.Add("Customer", "Customer");
+        _customerOutstandingGrid.Columns.Add("Contact", "Contact");
+        _customerOutstandingGrid.Columns.Add("Code", "Transaction Code");
+        _customerOutstandingGrid.Columns.Add("Total", "Total Amount");
+        _customerOutstandingGrid.Columns.Add("Paid", "Amount Paid");
+        _customerOutstandingGrid.Columns.Add("Balance", "Balance");
+        _customerOutstandingGrid.Columns.Add("Status", "Payment Status");
+
+        foreach (CustomerOutstandingBalanceReportItem item in items)
+        {
+            _customerOutstandingGrid.Rows.Add(
+                item.CustomerName,
+                item.Contact,
+                item.TransactionCode,
+                FormatPeso(item.TotalAmount),
+                FormatPeso(item.AmountPaid),
+                FormatPeso(item.Balance),
+                item.PaymentStatus);
+        }
+    }
+
+    private void PopulateCustomerLateReturns(IReadOnlyList<CustomerLateReturnReportItem> items)
+    {
+        _customerLateReturnsGrid.Columns.Clear();
+        _customerLateReturnsGrid.Rows.Clear();
+        _customerLateReturnsGrid.Columns.Add("Customer", "Customer");
+        _customerLateReturnsGrid.Columns.Add("Contact", "Contact");
+        _customerLateReturnsGrid.Columns.Add("Code", "Transaction Code");
+        _customerLateReturnsGrid.Columns.Add("Car", "Car / Plate");
+        _customerLateReturnsGrid.Columns.Add("DaysLate", "Days Late");
+        _customerLateReturnsGrid.Columns.Add("LateFee", "Estimated Late Fee");
+
+        foreach (CustomerLateReturnReportItem item in items)
+        {
+            _customerLateReturnsGrid.Rows.Add(
+                item.CustomerName,
+                item.Contact,
+                item.TransactionCode,
+                $"{item.CarName} ({item.PlateNumber})",
+                item.DaysLate,
+                FormatPeso(item.EstimatedLateFee));
+        }
+    }
+
+    private void PopulateCustomerDamageFees(IReadOnlyList<CustomerDamageFeeReportItem> items)
+    {
+        _customerDamageFeesGrid.Columns.Clear();
+        _customerDamageFeesGrid.Rows.Clear();
+        _customerDamageFeesGrid.Columns.Add("Customer", "Customer");
+        _customerDamageFeesGrid.Columns.Add("Contact", "Contact");
+        _customerDamageFeesGrid.Columns.Add("Code", "Transaction Code");
+        _customerDamageFeesGrid.Columns.Add("Car", "Car / Plate");
+        _customerDamageFeesGrid.Columns.Add("Damage", "Damage Fee");
+        _customerDamageFeesGrid.Columns.Add("Date", "Payment Date");
+
+        foreach (CustomerDamageFeeReportItem item in items)
+        {
+            _customerDamageFeesGrid.Rows.Add(
+                item.CustomerName,
+                item.Contact,
+                item.TransactionCode,
+                $"{item.CarName} ({item.PlateNumber})",
+                FormatPeso(item.DamageFee),
+                FormatDate(item.PaymentDate));
+        }
+    }
+
+    private void PopulateBlacklistedCustomers(IReadOnlyList<BlacklistedCustomerReportItem> items)
+    {
+        _customerBlacklistedGrid.Columns.Clear();
+        _customerBlacklistedGrid.Rows.Clear();
+        _customerBlacklistedGrid.Columns.Add("Customer", "Customer");
+        _customerBlacklistedGrid.Columns.Add("Contact", "Contact");
+        _customerBlacklistedGrid.Columns.Add("Reason", "Blacklist Reason");
+        _customerBlacklistedGrid.Columns.Add("Status", "Status");
+        _customerBlacklistedGrid.Columns.Add("LastTransaction", "Last Transaction");
+
+        foreach (BlacklistedCustomerReportItem item in items)
+        {
+            _customerBlacklistedGrid.Rows.Add(
+                item.CustomerName,
+                item.Contact,
+                item.BlacklistReason,
+                item.Status,
+                item.LastTransaction);
         }
     }
 

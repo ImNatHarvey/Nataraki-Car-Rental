@@ -152,3 +152,78 @@ public sealed class OperationsAvailableCarItem
     public decimal RatePerDay { get; set; }
     public int? SeatingCapacity { get; set; }
 }
+
+public sealed class CustomerAnalyticsMetrics
+{
+    public int TotalActiveCustomers { get; set; }
+    public int NewCustomers { get; set; }
+    public string? TopCustomerByRevenue { get; set; }
+    public decimal TopCustomerRevenue { get; set; }
+    public string? TopCustomerByRentals { get; set; }
+    public int TopCustomerRentalCount { get; set; }
+    public int BlacklistedCustomers { get; set; }
+    public int CustomersWithLateReturns { get; set; }
+    public int CustomersWithDamageFees { get; set; }
+    public decimal AverageRevenuePerCustomer { get; set; }
+}
+
+public sealed class CustomerRevenueReportItem
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public int TransactionCount { get; set; }
+    public decimal TotalPaid { get; set; }
+    public decimal OutstandingBalance { get; set; }
+}
+
+public sealed class CustomerRentalCountReportItem
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public int RentalCount { get; set; }
+    public int CompletedRentals { get; set; }
+    public int ActiveRentals { get; set; }
+    public DateTime? LastRentalDate { get; set; }
+}
+
+public sealed class CustomerOutstandingBalanceReportItem
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string TransactionCode { get; set; } = string.Empty;
+    public decimal TotalAmount { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal Balance { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+}
+
+public sealed class CustomerLateReturnReportItem
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string TransactionCode { get; set; } = string.Empty;
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public int DaysLate { get; set; }
+    public decimal EstimatedLateFee { get; set; }
+}
+
+public sealed class CustomerDamageFeeReportItem
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string TransactionCode { get; set; } = string.Empty;
+    public string CarName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public decimal DamageFee { get; set; }
+    public DateTime PaymentDate { get; set; }
+}
+
+public sealed class BlacklistedCustomerReportItem
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string Contact { get; set; } = string.Empty;
+    public string BlacklistReason { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string LastTransaction { get; set; } = string.Empty;
+}
