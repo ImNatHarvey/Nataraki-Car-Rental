@@ -56,8 +56,26 @@ public sealed class ReportsControl : UserControl
     private readonly DataGridView _fCarRevenueGrid = CreateSummaryGrid();
     private readonly DataGridView _fCustomerRevenueGrid = CreateSummaryGrid();
 
+    // Fleet Performance Tab
+    private readonly MetricCardControl _fleetTotalRevenueCard = new();
+    private readonly MetricCardControl _fleetAverageRevenueCard = new();
+    private readonly MetricCardControl _fleetTopEarningCarCard = new();
+    private readonly MetricCardControl _fleetMostRentedCarCard = new();
+    private readonly MetricCardControl _fleetAverageUtilizationCard = new();
+    private readonly MetricCardControl _fleetActiveRentalsCard = new();
+    private readonly MetricCardControl _fleetCompletedRentalsCard = new();
+    private readonly MetricCardControl _fleetMaintenanceCard = new();
+
+    private readonly DataGridView _fleetUtilizationGrid = CreateSummaryGrid();
+    private readonly DataGridView _fleetRevenueGrid = CreateSummaryGrid();
+    private readonly DataGridView _fleetTopEarningGrid = CreateSummaryGrid();
+    private readonly DataGridView _fleetMostRentedGrid = CreateSummaryGrid();
+    private readonly DataGridView _fleetLeastUsedGrid = CreateSummaryGrid();
+    private readonly DataGridView _fleetMaintenanceGrid = CreateSummaryGrid();
+
     private readonly FlowLayoutPanel _overviewMetricPanel = new();
     private readonly FlowLayoutPanel _financialMetricPanel = new();
+    private readonly FlowLayoutPanel _fleetMetricPanel = new();
 
     public ReportsControl()
     {
@@ -75,6 +93,7 @@ public sealed class ReportsControl : UserControl
     {
         LayoutReportMetricCards(_overviewMetricPanel, GetOverviewCards());
         LayoutReportMetricCards(_financialMetricPanel, GetFinancialCards());
+        LayoutReportMetricCards(_fleetMetricPanel, GetFleetCards());
     }
 
     private static void LayoutReportMetricCards(FlowLayoutPanel panel, IReadOnlyList<Control> cards)
@@ -121,6 +140,12 @@ public sealed class ReportsControl : UserControl
     [
         _fTotalRevenueCard, _fOutstandingCard, _fPaidTxCard, _fPartialTxCard,
         _fUnpaidTxCard, _fRentalRevenueCard, _fExtensionFeesCard, _fDamageLateFeesCard
+    ];
+
+    private List<Control> GetFleetCards() =>
+    [
+        _fleetTotalRevenueCard, _fleetAverageRevenueCard, _fleetTopEarningCarCard, _fleetMostRentedCarCard,
+        _fleetAverageUtilizationCard, _fleetActiveRentalsCard, _fleetCompletedRentalsCard, _fleetMaintenanceCard
     ];
 
     private void InitializeControl()
@@ -210,7 +235,7 @@ public sealed class ReportsControl : UserControl
 
         SetupOverviewTab();
         SetupFinancialTab();
-        SetupPlaceholderTab(_fleetPage, "Fleet performance reports");
+        SetupFleetTab();
         SetupPlaceholderTab(_operationsPage, "Operational reports");
         SetupPlaceholderTab(_customersPage, "Customer reports");
         SetupPlaceholderTab(_exportsPage, "Export options");
@@ -268,6 +293,29 @@ public sealed class ReportsControl : UserControl
         _financialPage.Controls.Add(layout);
     }
 
+    private void SetupFleetTab()
+    {
+        _fleetPage.BackColor = ThemeHelper.ContentBackground;
+        _fleetPage.AutoScroll = true;
+        _fleetPage.Padding = new Padding(0, 20, 0, 0);
+
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 5
+        };
+
+        layout.Controls.Add(CreateFleetMetricPanel());
+        layout.Controls.Add(CreateGridCard("Fleet Utilization", _fleetUtilizationGrid, 360));
+        layout.Controls.Add(CreateGridCard("Revenue Per Unit", _fleetRevenueGrid, 360));
+        layout.Controls.Add(CreateFleetPerformanceTablesLayout());
+        layout.Controls.Add(CreateGridCard("Current Maintenance Schedules", _fleetMaintenanceGrid, 300));
+
+        _fleetPage.Controls.Add(layout);
+    }
+
     private FlowLayoutPanel CreateOverviewMetricPanel()
     {
         ConfigureMetricPanel(_overviewMetricPanel);
@@ -305,6 +353,23 @@ public sealed class ReportsControl : UserControl
         return _financialMetricPanel;
     }
 
+    private FlowLayoutPanel CreateFleetMetricPanel()
+    {
+        ConfigureMetricPanel(_fleetMetricPanel);
+
+        AddMetricCard(_fleetMetricPanel, _fleetTotalRevenueCard, IconChar.MoneyBillTrendUp, "Total Fleet Revenue", "₱0.00", "Payments by fleet unit", ThemeHelper.Primary);
+        AddMetricCard(_fleetMetricPanel, _fleetAverageRevenueCard, IconChar.ChartLine, "Avg Revenue / Car", "₱0.00", "Across active fleet", ThemeHelper.Success);
+        AddMetricCard(_fleetMetricPanel, _fleetTopEarningCarCard, IconChar.Trophy, "Top Earning Car", "-", "Highest paid revenue", ThemeHelper.Success);
+        AddMetricCard(_fleetMetricPanel, _fleetMostRentedCarCard, IconChar.Star, "Most Rented Car", "-", "Highest rental count", ThemeHelper.Primary);
+        AddMetricCard(_fleetMetricPanel, _fleetAverageUtilizationCard, IconChar.GaugeHigh, "Avg Utilization", "0.0%", "Rental days in range", ThemeHelper.Warning);
+        AddMetricCard(_fleetMetricPanel, _fleetActiveRentalsCard, IconChar.Key, "Active Rentals", "0", "Currently released", ThemeHelper.Success);
+        AddMetricCard(_fleetMetricPanel, _fleetCompletedRentalsCard, IconChar.FlagCheckered, "Completed Rentals", "0", "Closed rentals in range", ThemeHelper.GrayIcon);
+        AddMetricCard(_fleetMetricPanel, _fleetMaintenanceCard, IconChar.ScrewdriverWrench, "Cars Under Maintenance", "0", "Ongoing maintenance", ThemeHelper.Warning);
+        LayoutReportMetricCards(_fleetMetricPanel, GetFleetCards());
+
+        return _fleetMetricPanel;
+    }
+
     private static void ConfigureMetricPanel(FlowLayoutPanel panel)
     {
         panel.Dock = DockStyle.Top;
@@ -338,6 +403,26 @@ public sealed class ReportsControl : UserControl
         grid.Controls.Add(CreateGridCard("Transaction Status", _statusBreakdownGrid), 0, 1);
         grid.Controls.Add(CreateGridCard("Top 5 Performance (Revenue)", _topCarsGrid), 1, 1);
 
+        return grid;
+    }
+
+    private TableLayoutPanel CreateFleetPerformanceTablesLayout()
+    {
+        TableLayoutPanel grid = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 340,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
+        grid.Controls.Add(CreateGridCard("Top 5 Earning Cars", _fleetTopEarningGrid), 0, 0);
+        grid.Controls.Add(CreateGridCard("Top 5 Most Rented Cars", _fleetMostRentedGrid), 1, 0);
+        grid.Controls.Add(CreateGridCard("Least Used Cars", _fleetLeastUsedGrid), 2, 0);
         return grid;
     }
 
@@ -472,6 +557,27 @@ public sealed class ReportsControl : UserControl
 
             var customerRevenue = await _reportService.GetRevenueByCustomerAsync(from, to, 10);
             PopulateCustomerRevenue(customerRevenue);
+
+            FleetPerformanceMetrics fleetMetrics = await _reportService.GetFleetPerformanceMetricsAsync(from, to);
+            UpdateFleetSummaryCards(fleetMetrics);
+
+            var fleetUtilization = await _reportService.GetFleetUtilizationAsync(from, to);
+            PopulateFleetUtilization(fleetUtilization);
+
+            var fleetRevenue = await _reportService.GetFleetRevenuePerCarAsync(from, to);
+            PopulateFleetRevenue(fleetRevenue);
+
+            var fleetTopEarning = await _reportService.GetTopCarsByRevenueAsync(from, to, 5);
+            PopulateTopCars(_fleetTopEarningGrid, fleetTopEarning);
+
+            var fleetMostRented = await _reportService.GetMostRentedCarsAsync(from, to, 5);
+            PopulateTopCars(_fleetMostRentedGrid, fleetMostRented);
+
+            var fleetLeastUsed = await _reportService.GetLeastUsedCarsAsync(from, to, 5);
+            PopulateTopCars(_fleetLeastUsedGrid, fleetLeastUsed);
+
+            var maintenanceCars = await _reportService.GetCarsUnderMaintenanceAsync(from, to);
+            PopulateFleetMaintenance(maintenanceCars);
         }
         catch (Exception exception)
         {
@@ -506,6 +612,18 @@ public sealed class ReportsControl : UserControl
         _fRentalRevenueCard.SetMetric(IconChar.CarSide, "Rental Revenue", FormatPeso(metrics.RentalRevenue), "Base charges", ThemeHelper.Success);
         _fExtensionFeesCard.SetMetric(IconChar.CalendarPlus, "Extension Fees", FormatPeso(metrics.ExtensionFees), "Rental extensions", ThemeHelper.Warning);
         _fDamageLateFeesCard.SetMetric(IconChar.CircleExclamation, "Damage/Late Fees", FormatPeso(metrics.DamageFees + metrics.LateReturnFees), "Return penalties", ThemeHelper.Danger);
+    }
+
+    private void UpdateFleetSummaryCards(FleetPerformanceMetrics metrics)
+    {
+        _fleetTotalRevenueCard.SetMetric(IconChar.MoneyBillTrendUp, "Total Fleet Revenue", FormatPeso(metrics.TotalFleetRevenue), "Payments by fleet unit", ThemeHelper.Primary);
+        _fleetAverageRevenueCard.SetMetric(IconChar.ChartLine, "Avg Revenue / Car", FormatPeso(metrics.AverageRevenuePerCar), "Across active fleet", ThemeHelper.Success);
+        _fleetTopEarningCarCard.SetMetric(IconChar.Trophy, "Top Earning Car", metrics.TopEarningCar ?? "-", $"Revenue: {FormatPeso(metrics.TopEarningCarRevenue)}", ThemeHelper.Success);
+        _fleetMostRentedCarCard.SetMetric(IconChar.Star, "Most Rented Car", metrics.MostRentedCar ?? "-", $"{metrics.MostRentedCarCount} rental(s)", ThemeHelper.Primary);
+        _fleetAverageUtilizationCard.SetMetric(IconChar.GaugeHigh, "Avg Utilization", FormatPercent(metrics.AverageUtilizationRate), "Rental days in range", ThemeHelper.Warning);
+        _fleetActiveRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveRentals.ToString(), "Currently released", ThemeHelper.Success);
+        _fleetCompletedRentalsCard.SetMetric(IconChar.FlagCheckered, "Completed Rentals", metrics.CompletedRentals.ToString(), "Closed rentals in range", ThemeHelper.GrayIcon);
+        _fleetMaintenanceCard.SetMetric(IconChar.ScrewdriverWrench, "Cars Under Maintenance", metrics.CarsUnderMaintenance.ToString(), "Ongoing maintenance", ThemeHelper.Warning);
     }
 
     private void PopulatePaymentMethods(DataGridView grid, IReadOnlyList<PaymentMethodBreakdownItem> items)
@@ -622,5 +740,74 @@ public sealed class ReportsControl : UserControl
         }
     }
 
+    private void PopulateFleetUtilization(IReadOnlyList<FleetUtilizationItem> items)
+    {
+        _fleetUtilizationGrid.Columns.Clear();
+        _fleetUtilizationGrid.Rows.Clear();
+        _fleetUtilizationGrid.Columns.Add("Car", "Car / Plate");
+        _fleetUtilizationGrid.Columns.Add("RentedDays", "Rented Days");
+        _fleetUtilizationGrid.Columns.Add("AvailableDays", "Available Days");
+        _fleetUtilizationGrid.Columns.Add("Utilization", "Utilization Rate");
+        _fleetUtilizationGrid.Columns.Add("RentalCount", "Rental Count");
+        _fleetUtilizationGrid.Columns.Add("Status", "Status");
+
+        foreach (FleetUtilizationItem item in items)
+        {
+            _fleetUtilizationGrid.Rows.Add(
+                $"{item.CarName} ({item.PlateNumber})",
+                item.RentedDays,
+                item.AvailableDays,
+                FormatPercent(item.UtilizationRate),
+                item.RentalCount,
+                item.Status);
+        }
+    }
+
+    private void PopulateFleetRevenue(IReadOnlyList<FleetRevenuePerCarItem> items)
+    {
+        _fleetRevenueGrid.Columns.Clear();
+        _fleetRevenueGrid.Rows.Clear();
+        _fleetRevenueGrid.Columns.Add("Car", "Car / Plate");
+        _fleetRevenueGrid.Columns.Add("Rental", "Rental Revenue");
+        _fleetRevenueGrid.Columns.Add("Extension", "Extension Fees");
+        _fleetRevenueGrid.Columns.Add("Damage", "Damage Fees");
+        _fleetRevenueGrid.Columns.Add("Late", "Late Fees");
+        _fleetRevenueGrid.Columns.Add("Total", "Total Revenue");
+        _fleetRevenueGrid.Columns.Add("Average", "Avg / Rental");
+
+        foreach (FleetRevenuePerCarItem item in items)
+        {
+            _fleetRevenueGrid.Rows.Add(
+                $"{item.CarName} ({item.PlateNumber})",
+                FormatPeso(item.RentalRevenue),
+                FormatPeso(item.ExtensionFees),
+                FormatPeso(item.DamageFees),
+                FormatPeso(item.LateFees),
+                FormatPeso(item.TotalRevenue),
+                FormatPeso(item.AverageRevenuePerRental));
+        }
+    }
+
+    private void PopulateFleetMaintenance(IReadOnlyList<FleetMaintenanceItem> items)
+    {
+        _fleetMaintenanceGrid.Columns.Clear();
+        _fleetMaintenanceGrid.Rows.Clear();
+        _fleetMaintenanceGrid.Columns.Add("Car", "Car / Plate");
+        _fleetMaintenanceGrid.Columns.Add("Schedule", "Schedule");
+        _fleetMaintenanceGrid.Columns.Add("Dates", "Dates");
+        _fleetMaintenanceGrid.Columns.Add("Status", "Status");
+
+        foreach (FleetMaintenanceItem item in items)
+        {
+            _fleetMaintenanceGrid.Rows.Add(
+                $"{item.CarName} ({item.PlateNumber})",
+                item.Title,
+                $"{item.StartDate:MMM d, yyyy} - {item.EndDate:MMM d, yyyy}",
+                item.Status);
+        }
+    }
+
     private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
+
+    private static string FormatPercent(decimal value) => $"{value:N1}%";
 }

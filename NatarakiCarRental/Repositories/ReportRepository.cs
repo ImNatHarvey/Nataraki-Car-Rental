@@ -320,4 +320,274 @@ public sealed class ReportRepository
         var results = await connection.QueryAsync<TopCarItem>(sql, new { From = from, To = to, Limit = limit });
         return results.ToList();
     }
+
+    public async Task<FleetPerformanceMetrics> GetFleetPerformanceMetricsAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            DECLARE @RangeDays int = DATEDIFF(day, CONVERT(date, @From), CONVERT(date, @To)) + 1;
+
+            WITH ActiveCars AS
+            (
+                SELECT CarId, CarName, PlateNumber
+                FROM dbo.Cars
+                WHERE IsArchived = 0
+            ),
+            RentalSchedules AS
+            (
+                SELECT
+                    CarId,
+                    RentedDays = DATEDIFF(
+                        day,
+                        CASE WHEN StartDate < CONVERT(date, @From) THEN CONVERT(date, @From) ELSE StartDate END,
+                        CASE WHEN EndDate > CONVERT(date, @To) THEN CONVERT(date, @To) ELSE EndDate END
+                    ) + 1
+                FROM dbo.FleetSchedules
+                WHERE IsArchived = 0
+                  AND ScheduleType = N'Rental'
+                  AND Status IN (N'Rented', N'Completed')
+                  AND StartDate <= CONVERT(date, @To)
+                  AND EndDate >= CONVERT(date, @From)
+            ),
+            Utilization AS
+            (
+                SELECT
+                    cars.CarId,
+                    RentedDays = ISNULL(SUM(schedules.RentedDays), 0)
+                FROM ActiveCars AS cars
+                LEFT JOIN RentalSchedules AS schedules ON schedules.CarId = cars.CarId
+                GROUP BY cars.CarId
+            ),
+            Revenue AS
+            (
+                SELECT
+                    transactions.CarId,
+                    TotalRevenue = SUM(payments.Amount),
+                    RentalCount = COUNT(DISTINCT transactions.TransactionId)
+                FROM dbo.Transactions AS transactions
+                INNER JOIN dbo.TransactionPayments AS payments
+                    ON payments.TransactionId = transactions.TransactionId
+                WHERE transactions.IsArchived = 0
+                  AND payments.IsArchived = 0
+                  AND payments.PaymentDate >= @From
+                  AND payments.PaymentDate <= @To
+                GROUP BY transactions.CarId
+            ),
+            Rentals AS
+            (
+                SELECT CarId, RentalCount = COUNT(1)
+                FROM dbo.Transactions
+                WHERE IsArchived = 0
+                  AND StartDate <= CONVERT(date, @To)
+                  AND EndDate >= CONVERT(date, @From)
+                  AND TransactionStatus IN (N'Active', N'Completed')
+                GROUP BY CarId
+            )
+            SELECT
+                TotalFleetRevenue = ISNULL((SELECT SUM(TotalRevenue) FROM Revenue), 0),
+                AverageRevenuePerCar = CASE
+                    WHEN (SELECT COUNT(1) FROM ActiveCars) > 0
+                        THEN ISNULL((SELECT SUM(TotalRevenue) FROM Revenue), 0) / (SELECT COUNT(1) FROM ActiveCars)
+                    ELSE 0
+                END,
+                TopEarningCar = (
+                    SELECT TOP 1 CONCAT(cars.CarName, N' (', cars.PlateNumber, N')')
+                    FROM ActiveCars AS cars
+                    INNER JOIN Revenue AS revenue ON revenue.CarId = cars.CarId
+                    ORDER BY revenue.TotalRevenue DESC, cars.CarName
+                ),
+                TopEarningCarRevenue = ISNULL((SELECT TOP 1 TotalRevenue FROM Revenue ORDER BY TotalRevenue DESC), 0),
+                MostRentedCar = (
+                    SELECT TOP 1 CONCAT(cars.CarName, N' (', cars.PlateNumber, N')')
+                    FROM ActiveCars AS cars
+                    INNER JOIN Rentals AS rentals ON rentals.CarId = cars.CarId
+                    ORDER BY rentals.RentalCount DESC, cars.CarName
+                ),
+                MostRentedCarCount = ISNULL((SELECT TOP 1 RentalCount FROM Rentals ORDER BY RentalCount DESC), 0),
+                AverageUtilizationRate = CASE
+                    WHEN @RangeDays > 0 AND (SELECT COUNT(1) FROM ActiveCars) > 0
+                        THEN ISNULL((SELECT SUM(RentedDays) FROM Utilization), 0) * 100.0 / (@RangeDays * (SELECT COUNT(1) FROM ActiveCars))
+                    ELSE 0
+                END,
+                ActiveRentals = (
+                    SELECT COUNT(1)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Active'
+                      AND StartDate <= CONVERT(date, @To)
+                      AND EndDate >= CONVERT(date, @From)
+                ),
+                CompletedRentals = (
+                    SELECT COUNT(1)
+                    FROM dbo.Transactions
+                    WHERE IsArchived = 0
+                      AND TransactionStatus = N'Completed'
+                      AND StartDate <= CONVERT(date, @To)
+                      AND EndDate >= CONVERT(date, @From)
+                ),
+                CarsUnderMaintenance = (
+                    SELECT COUNT(DISTINCT CarId)
+                    FROM dbo.FleetSchedules
+                    WHERE IsArchived = 0
+                      AND ScheduleType = N'Maintenance'
+                      AND Status = N'Ongoing'
+                      AND StartDate <= CONVERT(date, @To)
+                      AND EndDate >= CONVERT(date, @From)
+                );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<FleetPerformanceMetrics>(sql, new { From = from, To = to })
+            ?? new FleetPerformanceMetrics();
+    }
+
+    public async Task<IReadOnlyList<FleetUtilizationItem>> GetFleetUtilizationAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            DECLARE @RangeDays int = DATEDIFF(day, CONVERT(date, @From), CONVERT(date, @To)) + 1;
+
+            WITH RentalSchedules AS
+            (
+                SELECT
+                    CarId,
+                    RentedDays = DATEDIFF(
+                        day,
+                        CASE WHEN StartDate < CONVERT(date, @From) THEN CONVERT(date, @From) ELSE StartDate END,
+                        CASE WHEN EndDate > CONVERT(date, @To) THEN CONVERT(date, @To) ELSE EndDate END
+                    ) + 1
+                FROM dbo.FleetSchedules
+                WHERE IsArchived = 0
+                  AND ScheduleType = N'Rental'
+                  AND Status IN (N'Rented', N'Completed')
+                  AND StartDate <= CONVERT(date, @To)
+                  AND EndDate >= CONVERT(date, @From)
+            ),
+            RentalCounts AS
+            (
+                SELECT CarId, RentalCount = COUNT(1)
+                FROM dbo.Transactions
+                WHERE IsArchived = 0
+                  AND StartDate <= CONVERT(date, @To)
+                  AND EndDate >= CONVERT(date, @From)
+                  AND TransactionStatus IN (N'Active', N'Completed')
+                GROUP BY CarId
+            )
+            SELECT
+                cars.CarName,
+                cars.PlateNumber,
+                RentedDays = ISNULL(SUM(schedules.RentedDays), 0),
+                AvailableDays = @RangeDays,
+                UtilizationRate = CASE
+                    WHEN @RangeDays > 0 THEN ISNULL(SUM(schedules.RentedDays), 0) * 100.0 / @RangeDays
+                    ELSE 0
+                END,
+                RentalCount = ISNULL(MAX(counts.RentalCount), 0),
+                cars.Status
+            FROM dbo.Cars AS cars
+            LEFT JOIN RentalSchedules AS schedules ON schedules.CarId = cars.CarId
+            LEFT JOIN RentalCounts AS counts ON counts.CarId = cars.CarId
+            WHERE cars.IsArchived = 0
+            GROUP BY cars.CarId, cars.CarName, cars.PlateNumber, cars.Status
+            ORDER BY UtilizationRate DESC, RentedDays DESC, cars.CarName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<FleetUtilizationItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<FleetRevenuePerCarItem>> GetFleetRevenuePerCarAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                cars.CarName,
+                cars.PlateNumber,
+                RentalRevenue = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Rental Payment' THEN payments.Amount ELSE 0 END), 0),
+                ExtensionFees = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Extension Fee' THEN payments.Amount ELSE 0 END), 0),
+                DamageFees = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Damage Fee' THEN payments.Amount ELSE 0 END), 0),
+                LateFees = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Late Fee' THEN payments.Amount ELSE 0 END), 0),
+                TotalRevenue = ISNULL(SUM(payments.Amount), 0),
+                AverageRevenuePerRental = CASE
+                    WHEN COUNT(DISTINCT transactions.TransactionId) > 0
+                        THEN ISNULL(SUM(payments.Amount), 0) / COUNT(DISTINCT transactions.TransactionId)
+                    ELSE 0
+                END
+            FROM dbo.Cars AS cars
+            LEFT JOIN dbo.Transactions AS transactions
+                ON transactions.CarId = cars.CarId
+               AND transactions.IsArchived = 0
+            LEFT JOIN dbo.TransactionPayments AS payments
+                ON payments.TransactionId = transactions.TransactionId
+               AND payments.IsArchived = 0
+               AND payments.PaymentDate >= @From
+               AND payments.PaymentDate <= @To
+            WHERE cars.IsArchived = 0
+            GROUP BY cars.CarId, cars.CarName, cars.PlateNumber
+            ORDER BY TotalRevenue DESC, cars.CarName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<FleetRevenuePerCarItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<TopCarItem>> GetLeastUsedCarsAsync(DateTime from, DateTime to, int limit)
+    {
+        const string sql = """
+            SELECT TOP (@Limit)
+                cars.CarName,
+                cars.PlateNumber,
+                Revenue = ISNULL(SUM(payments.Amount), 0),
+                RentalCount = COUNT(DISTINCT transactions.TransactionId),
+                AverageRevenue = CASE
+                    WHEN COUNT(DISTINCT transactions.TransactionId) > 0
+                        THEN ISNULL(SUM(payments.Amount), 0) / COUNT(DISTINCT transactions.TransactionId)
+                    ELSE 0
+                END
+            FROM dbo.Cars AS cars
+            LEFT JOIN dbo.Transactions AS transactions
+                ON transactions.CarId = cars.CarId
+               AND transactions.IsArchived = 0
+               AND transactions.StartDate <= CONVERT(date, @To)
+               AND transactions.EndDate >= CONVERT(date, @From)
+               AND transactions.TransactionStatus IN (N'Active', N'Completed')
+            LEFT JOIN dbo.TransactionPayments AS payments
+                ON payments.TransactionId = transactions.TransactionId
+               AND payments.IsArchived = 0
+               AND payments.PaymentDate >= @From
+               AND payments.PaymentDate <= @To
+            WHERE cars.IsArchived = 0
+            GROUP BY cars.CarId, cars.CarName, cars.PlateNumber
+            ORDER BY RentalCount ASC, Revenue ASC, cars.CarName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<TopCarItem>(sql, new { From = from, To = to, Limit = limit });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<FleetMaintenanceItem>> GetCarsUnderMaintenanceAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                cars.CarName,
+                cars.PlateNumber,
+                schedules.Title,
+                schedules.StartDate,
+                schedules.EndDate,
+                schedules.Status
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            WHERE schedules.IsArchived = 0
+              AND cars.IsArchived = 0
+              AND schedules.ScheduleType = N'Maintenance'
+              AND schedules.Status = N'Ongoing'
+              AND schedules.StartDate <= CONVERT(date, @To)
+              AND schedules.EndDate >= CONVERT(date, @From)
+            ORDER BY schedules.StartDate, cars.CarName;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<FleetMaintenanceItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
 }

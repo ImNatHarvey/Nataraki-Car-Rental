@@ -58,4 +58,29 @@ public sealed class ReportService
     {
         return _reportRepository.GetRevenueByCustomerAsync(from, to, limit);
     }
+
+    public Task<FleetPerformanceMetrics> GetFleetPerformanceMetricsAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetFleetPerformanceMetricsAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<FleetUtilizationItem>> GetFleetUtilizationAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetFleetUtilizationAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<FleetRevenuePerCarItem>> GetFleetRevenuePerCarAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetFleetRevenuePerCarAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<TopCarItem>> GetLeastUsedCarsAsync(DateTime from, DateTime to, int limit = 5)
+    {
+        return _reportRepository.GetLeastUsedCarsAsync(from, to, limit);
+    }
+
+    public Task<IReadOnlyList<FleetMaintenanceItem>> GetCarsUnderMaintenanceAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetCarsUnderMaintenanceAsync(from, to);
+    }
 }
