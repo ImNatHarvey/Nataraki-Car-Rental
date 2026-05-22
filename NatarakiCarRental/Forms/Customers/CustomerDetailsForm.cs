@@ -35,14 +35,22 @@ public sealed class CustomerDetailsForm : Form
     private readonly TextBox _streetAddressTextBox = ControlFactory.CreateTextBox(280);
     private readonly Label _driverLicensePathLabel = new();
     private readonly Label _proofOfBillingPathLabel = new();
+    private readonly Label _validIdPathLabel = new();
+    private readonly Label _selfieWithValidIdPathLabel = new();
     private readonly Button _driverLicenseBrowseButton = CreateSecondaryButton("Browse", 90, 30);
     private readonly Button _proofOfBillingBrowseButton = CreateSecondaryButton("Browse", 90, 30);
+    private readonly Button _validIdBrowseButton = CreateSecondaryButton("Browse", 90, 30);
+    private readonly Button _selfieWithValidIdBrowseButton = CreateSecondaryButton("Browse", 90, 30);
     private readonly Button _driverLicenseOpenButton = CreateSecondaryButton("Open File", 90, 30);
     private readonly Button _proofOfBillingOpenButton = CreateSecondaryButton("Open File", 90, 30);
+    private readonly Button _validIdOpenButton = CreateSecondaryButton("Open File", 90, 30);
+    private readonly Button _selfieWithValidIdOpenButton = CreateSecondaryButton("Open File", 90, 30);
     private readonly Label _validationLabel = new();
 
     private string? _selectedDriverLicenseSourcePath;
     private string? _selectedProofOfBillingSourcePath;
+    private string? _selectedValidIdSourcePath;
+    private string? _selectedSelfieWithValidIdSourcePath;
     private bool _isInitializingAddress;
 
     public CustomerDetailsForm(CustomerFormMode mode, Customer? customer = null, int? currentUserId = null)
@@ -81,7 +89,7 @@ public sealed class CustomerDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(1060, 760);
+        ClientSize = new Size(1060, 840);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -124,7 +132,7 @@ public sealed class CustomerDetailsForm : Form
         Panel contentPanel = new()
         {
             Location = new Point(32, 116),
-            Size = new Size(996, 540),
+            Size = new Size(996, 620),
             BackColor = ThemeHelper.Surface
         };
 
@@ -137,7 +145,7 @@ public sealed class CustomerDetailsForm : Form
 
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 260F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 205F));
 
         contentLayout.Controls.Add(CreateSection("Required Information", CreateRequiredLayout()), 0, 0);
         contentLayout.Controls.Add(CreateSection("Contact & Address", CreateContactLayout()), 0, 1);
@@ -145,14 +153,14 @@ public sealed class CustomerDetailsForm : Form
         contentPanel.Controls.Add(contentLayout);
 
         Button cancelButton = CreateSecondaryButton(IsViewMode ? "Close" : "Cancel", 118, 38);
-        cancelButton.Location = new Point(IsViewMode ? 910 : 756, 680);
+        cancelButton.Location = new Point(IsViewMode ? 910 : 756, 760);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button? saveButton = null;
         if (!IsViewMode)
         {
             saveButton = ControlFactory.CreatePrimaryButton(_mode == CustomerFormMode.Edit ? "Save Changes" : "Add Customer", 140, 38);
-            saveButton.Location = new Point(888, 680);
+            saveButton.Location = new Point(888, 760);
             saveButton.Click += SaveButton_Click;
             AcceptButton = saveButton;
         }
@@ -213,13 +221,17 @@ public sealed class CustomerDetailsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 1
+            RowCount = 2
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
 
         layout.Controls.Add(CreateFilePickerPanel("Driver's License Document", _driverLicensePathLabel, _driverLicenseBrowseButton, _driverLicenseOpenButton), 0, 0);
         layout.Controls.Add(CreateFilePickerPanel("Proof of Billing Document", _proofOfBillingPathLabel, _proofOfBillingBrowseButton, _proofOfBillingOpenButton), 1, 0);
+        layout.Controls.Add(CreateFilePickerPanel("Valid ID Document", _validIdPathLabel, _validIdBrowseButton, _validIdOpenButton), 0, 1);
+        layout.Controls.Add(CreateFilePickerPanel("Selfie Holding Valid ID Proof", _selfieWithValidIdPathLabel, _selfieWithValidIdBrowseButton, _selfieWithValidIdOpenButton), 1, 1);
         return layout;
     }
 
@@ -343,8 +355,32 @@ public sealed class CustomerDetailsForm : Form
                 _proofOfBillingOpenButton.Enabled = true;
             });
 
+        _validIdBrowseButton.Click += (_, _) => BrowseFile(
+            "Select valid ID document",
+            "Supported files|*.jpg;*.jpeg;*.png;*.webp;*.pdf",
+            path =>
+            {
+                _selectedValidIdSourcePath = path;
+                _validIdPathLabel.Text = Path.GetFileName(path);
+                _validIdPathLabel.ForeColor = ThemeHelper.Primary;
+                _validIdOpenButton.Enabled = true;
+            });
+
+        _selfieWithValidIdBrowseButton.Click += (_, _) => BrowseFile(
+            "Select selfie holding valid ID proof",
+            "Supported files|*.jpg;*.jpeg;*.png;*.webp;*.pdf",
+            path =>
+            {
+                _selectedSelfieWithValidIdSourcePath = path;
+                _selfieWithValidIdPathLabel.Text = Path.GetFileName(path);
+                _selfieWithValidIdPathLabel.ForeColor = ThemeHelper.Primary;
+                _selfieWithValidIdOpenButton.Enabled = true;
+            });
+
         _driverLicenseOpenButton.Enabled = false;
         _proofOfBillingOpenButton.Enabled = false;
+        _validIdOpenButton.Enabled = false;
+        _selfieWithValidIdOpenButton.Enabled = false;
         _driverLicenseOpenButton.Click += (_, _) => OpenAttachment(
             _selectedDriverLicenseSourcePath,
             _sourceCustomer?.DriverLicensePath,
@@ -353,6 +389,14 @@ public sealed class CustomerDetailsForm : Form
             _selectedProofOfBillingSourcePath,
             _sourceCustomer?.ProofOfBillingPath,
             "proof of billing document");
+        _validIdOpenButton.Click += (_, _) => OpenAttachment(
+            _selectedValidIdSourcePath,
+            _sourceCustomer?.ValidIdFilePath,
+            "valid ID document");
+        _selfieWithValidIdOpenButton.Click += (_, _) => OpenAttachment(
+            _selectedSelfieWithValidIdSourcePath,
+            _sourceCustomer?.SelfieWithValidIdFilePath,
+            "selfie holding valid ID proof");
     }
 
     private void LoadCustomer(Customer customer)
@@ -368,8 +412,16 @@ public sealed class CustomerDetailsForm : Form
         _proofOfBillingPathLabel.Text = string.IsNullOrWhiteSpace(customer.ProofOfBillingPath)
             ? "No file attached"
             : Path.GetFileName(customer.ProofOfBillingPath);
+        _validIdPathLabel.Text = string.IsNullOrWhiteSpace(customer.ValidIdFilePath)
+            ? "No file attached"
+            : Path.GetFileName(customer.ValidIdFilePath);
+        _selfieWithValidIdPathLabel.Text = string.IsNullOrWhiteSpace(customer.SelfieWithValidIdFilePath)
+            ? "No file attached"
+            : Path.GetFileName(customer.SelfieWithValidIdFilePath);
         _driverLicenseOpenButton.Enabled = !string.IsNullOrWhiteSpace(customer.DriverLicensePath);
         _proofOfBillingOpenButton.Enabled = !string.IsNullOrWhiteSpace(customer.ProofOfBillingPath);
+        _validIdOpenButton.Enabled = !string.IsNullOrWhiteSpace(customer.ValidIdFilePath);
+        _selfieWithValidIdOpenButton.Enabled = !string.IsNullOrWhiteSpace(customer.SelfieWithValidIdFilePath);
     }
 
     private void ApplyViewMode()
@@ -385,6 +437,8 @@ public sealed class CustomerDetailsForm : Form
 
         _driverLicenseBrowseButton.Enabled = false;
         _proofOfBillingBrowseButton.Enabled = false;
+        _validIdBrowseButton.Enabled = false;
+        _selfieWithValidIdBrowseButton.Enabled = false;
         _regionComboBox.Enabled = false;
         _provinceComboBox.Enabled = false;
         _cityComboBox.Enabled = false;
@@ -400,6 +454,8 @@ public sealed class CustomerDetailsForm : Form
 
         string? newDriverLicensePath = null;
         string? newProofOfBillingPath = null;
+        string? newValidIdPath = null;
+        string? newSelfieWithValidIdPath = null;
 
         try
         {
@@ -409,8 +465,12 @@ public sealed class CustomerDetailsForm : Form
             Customer customer = BuildCustomerFromInputs();
             newDriverLicensePath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedDriverLicenseSourcePath, _sourceCustomer?.DriverLicensePath);
             newProofOfBillingPath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedProofOfBillingSourcePath, _sourceCustomer?.ProofOfBillingPath);
+            newValidIdPath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedValidIdSourcePath, _sourceCustomer?.ValidIdFilePath);
+            newSelfieWithValidIdPath = UploadPathHelper.SaveCustomerFileIfSelected(_selectedSelfieWithValidIdSourcePath, _sourceCustomer?.SelfieWithValidIdFilePath);
             customer.DriverLicensePath = newDriverLicensePath;
             customer.ProofOfBillingPath = newProofOfBillingPath;
+            customer.ValidIdFilePath = newValidIdPath;
+            customer.SelfieWithValidIdFilePath = newSelfieWithValidIdPath;
 
             if (_mode == CustomerFormMode.Edit)
             {
@@ -430,12 +490,16 @@ public sealed class CustomerDetailsForm : Form
         {
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newDriverLicensePath, _sourceCustomer?.DriverLicensePath);
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newProofOfBillingPath, _sourceCustomer?.ProofOfBillingPath);
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newValidIdPath, _sourceCustomer?.ValidIdFilePath);
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newSelfieWithValidIdPath, _sourceCustomer?.SelfieWithValidIdFilePath);
             ShowValidationErrors(exception.Errors.ToList(), exception.Message);
         }
         catch (Exception exception)
         {
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newDriverLicensePath, _sourceCustomer?.DriverLicensePath);
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newProofOfBillingPath, _sourceCustomer?.ProofOfBillingPath);
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newValidIdPath, _sourceCustomer?.ValidIdFilePath);
+            UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newSelfieWithValidIdPath, _sourceCustomer?.SelfieWithValidIdFilePath);
             MessageBoxHelper.ShowError($"Unable to save customer record.\n\n{exception.Message}");
         }
         finally
@@ -462,6 +526,8 @@ public sealed class CustomerDetailsForm : Form
             BlacklistReason = _sourceCustomer?.BlacklistReason,
             DriverLicensePath = _sourceCustomer?.DriverLicensePath,
             ProofOfBillingPath = _sourceCustomer?.ProofOfBillingPath,
+            ValidIdFilePath = _sourceCustomer?.ValidIdFilePath,
+            SelfieWithValidIdFilePath = _sourceCustomer?.SelfieWithValidIdFilePath,
             IsArchived = _sourceCustomer?.IsArchived ?? false
         };
     }

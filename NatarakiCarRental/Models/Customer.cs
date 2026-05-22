@@ -17,6 +17,8 @@ public sealed class Customer
     public bool IsArchived { get; set; }
     public string? DriverLicensePath { get; set; }
     public string? ProofOfBillingPath { get; set; }
+    public string? ValidIdFilePath { get; set; }
+    public string? SelfieWithValidIdFilePath { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public DateTime? ArchivedAt { get; set; }

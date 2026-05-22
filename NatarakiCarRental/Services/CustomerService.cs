@@ -311,6 +311,8 @@ public sealed class CustomerService
         customer.BlacklistReason = customer.IsBlacklisted ? NullIfWhiteSpace(customer.BlacklistReason) : null;
         customer.DriverLicensePath = NullIfWhiteSpace(customer.DriverLicensePath);
         customer.ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath);
+        customer.ValidIdFilePath = NullIfWhiteSpace(customer.ValidIdFilePath);
+        customer.SelfieWithValidIdFilePath = NullIfWhiteSpace(customer.SelfieWithValidIdFilePath);
     }
 
     private static void ValidateCustomer(Customer customer)

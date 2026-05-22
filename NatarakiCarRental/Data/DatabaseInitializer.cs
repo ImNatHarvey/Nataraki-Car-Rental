@@ -237,6 +237,8 @@ public static class DatabaseInitializer
                     IsArchived bit NOT NULL DEFAULT 0,
                     DriverLicensePath nvarchar(500) NULL,
                     ProofOfBillingPath nvarchar(500) NULL,
+                    ValidIdFilePath nvarchar(500) NULL,
+                    SelfieWithValidIdFilePath nvarchar(500) NULL,
                     CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
                     UpdatedAt datetime2 NULL,
                     ArchivedAt datetime2 NULL
@@ -717,6 +719,16 @@ public static class DatabaseInitializer
                 IF COL_LENGTH(N'dbo.Customers', N'StreetAddress') IS NULL
                 BEGIN
                     ALTER TABLE dbo.Customers ADD StreetAddress nvarchar(255) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.Customers', N'ValidIdFilePath') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD ValidIdFilePath nvarchar(500) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.Customers', N'SelfieWithValidIdFilePath') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD SelfieWithValidIdFilePath nvarchar(500) NULL;
                 END;
             END;
             """);

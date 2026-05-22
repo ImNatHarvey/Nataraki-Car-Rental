@@ -38,6 +38,8 @@ public sealed class CustomerRepository
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
+                ValidIdFilePath,
+                SelfieWithValidIdFilePath,
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
@@ -68,6 +70,8 @@ public sealed class CustomerRepository
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
+                ValidIdFilePath,
+                SelfieWithValidIdFilePath,
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
@@ -136,6 +140,8 @@ public sealed class CustomerRepository
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
+                ValidIdFilePath,
+                SelfieWithValidIdFilePath,
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
@@ -180,6 +186,8 @@ public sealed class CustomerRepository
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
+                ValidIdFilePath,
+                SelfieWithValidIdFilePath,
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
@@ -261,6 +269,8 @@ public sealed class CustomerRepository
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
+                ValidIdFilePath,
+                SelfieWithValidIdFilePath,
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
@@ -315,7 +325,9 @@ public sealed class CustomerRepository
                 IsBlacklisted,
                 BlacklistReason,
                 DriverLicensePath,
-                ProofOfBillingPath
+                ProofOfBillingPath,
+                ValidIdFilePath,
+                SelfieWithValidIdFilePath
             )
             OUTPUT INSERTED.CustomerId
             VALUES
@@ -332,7 +344,9 @@ public sealed class CustomerRepository
                 @IsBlacklisted,
                 @BlacklistReason,
                 @DriverLicensePath,
-                @ProofOfBillingPath
+                @ProofOfBillingPath,
+                @ValidIdFilePath,
+                @SelfieWithValidIdFilePath
             );
             """;
 
@@ -356,7 +370,9 @@ public sealed class CustomerRepository
                     customer.IsBlacklisted,
                     BlacklistReason = NullIfWhiteSpace(customer.BlacklistReason),
                     DriverLicensePath = NullIfWhiteSpace(customer.DriverLicensePath),
-                    ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath)
+                    ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath),
+                    ValidIdFilePath = NullIfWhiteSpace(customer.ValidIdFilePath),
+                    SelfieWithValidIdFilePath = NullIfWhiteSpace(customer.SelfieWithValidIdFilePath)
                 },
                 transaction);
         }
@@ -387,6 +403,8 @@ public sealed class CustomerRepository
                 BlacklistReason = @BlacklistReason,
                 DriverLicensePath = @DriverLicensePath,
                 ProofOfBillingPath = @ProofOfBillingPath,
+                ValidIdFilePath = @ValidIdFilePath,
+                SelfieWithValidIdFilePath = @SelfieWithValidIdFilePath,
                 UpdatedAt = sysdatetime()
             WHERE CustomerId = @CustomerId;
             """;
@@ -412,7 +430,9 @@ public sealed class CustomerRepository
                     customer.IsBlacklisted,
                     BlacklistReason = NullIfWhiteSpace(customer.BlacklistReason),
                     DriverLicensePath = NullIfWhiteSpace(customer.DriverLicensePath),
-                    ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath)
+                    ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath),
+                    ValidIdFilePath = NullIfWhiteSpace(customer.ValidIdFilePath),
+                    SelfieWithValidIdFilePath = NullIfWhiteSpace(customer.SelfieWithValidIdFilePath)
                 },
                 transaction);
         }
