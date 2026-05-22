@@ -88,12 +88,15 @@
 
             if (!vehicleMarker) {
                 vehicleMarker = L.marker(position, { icon: vehicleIcon }).addTo(map);
+                map.setView(position, 15, { animate: true });
             } else {
                 vehicleMarker.setLatLng(position);
+                
+                // Pan to marker to keep it centered without resetting zoom level
+                map.panTo(position, { animate: true, duration: 1.0 });
             }
 
             vehicleMarker.bindPopup(popup);
-            map.setView(position, Math.max(map.getZoom(), 13), { animate: true });
         };
 
         window.clearVehicleMarker = function () {

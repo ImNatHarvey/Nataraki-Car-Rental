@@ -16,9 +16,9 @@ public sealed class OffsiteControl : UserControl
     private readonly VehicleTrackingService _trackingService = new();
     private readonly VehicleTrackingSimulator _simulator = new();
     private readonly ComboBox _carComboBox = new();
-    private readonly Button _refreshButton = ControlFactory.CreatePrimaryButton("Refresh", 96, 34);
-    private readonly Button _startDemoButton = ControlFactory.CreatePrimaryButton("Start Demo Tracking", 170, 34);
-    private readonly Button _stopDemoButton = ControlFactory.CreatePrimaryButton("Stop Demo Tracking", 160, 34);
+    private readonly Button _refreshButton = ControlFactory.CreatePrimaryButton("Refresh", 90, 34);
+    private readonly Button _startDemoButton = ControlFactory.CreatePrimaryButton("Start Tracking", 140, 34);
+    private readonly Button _stopDemoButton = ControlFactory.CreatePrimaryButton("Stop Tracking", 140, 34);
     private readonly WebView2 _mapWebView = new();
     private readonly Label _selectedCarValueLabel = CreateValueLabel();
     private readonly Label _plateNumberValueLabel = CreateValueLabel();
@@ -68,7 +68,7 @@ public sealed class OffsiteControl : UserControl
             RowCount = 4
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68F));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 126F));
 
@@ -111,48 +111,58 @@ public sealed class OffsiteControl : UserControl
 
     private Panel CreateToolbarPanel()
     {
-        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 52));
+        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 58));
         panel.Dock = DockStyle.Fill;
-        panel.Padding = new Padding(16, 8, 16, 8);
+        panel.Padding = new Padding(16, 12, 16, 12);
+
+        FlowLayoutPanel flow = new()
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            AutoScroll = false,
+            BackColor = Color.Transparent
+        };
 
         Label carLabel = new()
         {
             Text = "Car",
             AutoSize = true,
-            Location = new Point(16, 17),
             Font = FontHelper.SemiBold(9F),
-            ForeColor = ThemeHelper.TextSecondary
+            ForeColor = ThemeHelper.TextSecondary,
+            Margin = new Padding(0, 7, 8, 0)
         };
 
         _carComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         _carComboBox.Font = FontHelper.Regular(10F);
-        _carComboBox.Location = new Point(52, 12);
-        _carComboBox.Size = new Size(270, 30);
+        _carComboBox.Width = 240;
+        _carComboBox.Margin = new Padding(0, 0, 12, 0);
         _carComboBox.SelectedIndexChanged += async (_, _) => await RefreshSelectedCarLocationAsync(showEmptyMessage: true);
 
-        _refreshButton.Location = new Point(340, 10);
+        _refreshButton.Margin = new Padding(0, 0, 12, 0);
         _refreshButton.Click += async (_, _) => await RefreshSelectedCarLocationAsync(showEmptyMessage: true);
 
-        _startDemoButton.Location = new Point(448, 10);
+        _startDemoButton.Margin = new Padding(0, 0, 8, 0);
         _startDemoButton.Click += async (_, _) => await StartDemoTrackingAsync();
 
-        _stopDemoButton.Location = new Point(630, 10);
         _stopDemoButton.Enabled = false;
+        _stopDemoButton.Margin = new Padding(0, 0, 12, 0);
         _stopDemoButton.Click += (_, _) => StopDemoTracking();
 
-        _autoRefreshLabel.Text = "Auto-refresh: 10 minutes";
-        _autoRefreshLabel.AutoSize = false;
-        _autoRefreshLabel.Location = new Point(806, 16);
-        _autoRefreshLabel.Size = new Size(180, 22);
+        _autoRefreshLabel.Text = "Refresh: 10m";
+        _autoRefreshLabel.AutoSize = true;
         _autoRefreshLabel.Font = FontHelper.Regular(9F);
         _autoRefreshLabel.ForeColor = ThemeHelper.TextSecondary;
+        _autoRefreshLabel.Margin = new Padding(0, 8, 0, 0);
 
-        panel.Controls.Add(carLabel);
-        panel.Controls.Add(_carComboBox);
-        panel.Controls.Add(_refreshButton);
-        panel.Controls.Add(_startDemoButton);
-        panel.Controls.Add(_stopDemoButton);
-        panel.Controls.Add(_autoRefreshLabel);
+        flow.Controls.Add(carLabel);
+        flow.Controls.Add(_carComboBox);
+        flow.Controls.Add(_refreshButton);
+        flow.Controls.Add(_startDemoButton);
+        flow.Controls.Add(_stopDemoButton);
+        flow.Controls.Add(_autoRefreshLabel);
+
+        panel.Controls.Add(flow);
         return panel;
     }
 
@@ -304,7 +314,7 @@ public sealed class OffsiteControl : UserControl
                 await ClearLocationDisplayAsync(car);
                 if (showEmptyMessage)
                 {
-                    _statusLabel.Text = "No tracking data yet. Start demo tracking or add a location record.";
+                    _statusLabel.Text = "No tracking data yet. Start tracking or add a location record.";
                 }
                 return;
             }
@@ -326,13 +336,13 @@ public sealed class OffsiteControl : UserControl
     {
         if (_carComboBox.SelectedItem is not CarOption)
         {
-            MessageBoxHelper.ShowWarning("Select a car before starting demo tracking.", "Offsite Tracking");
+            MessageBoxHelper.ShowWarning("Select a car before starting tracking.", "Offsite Tracking");
             return;
         }
 
         _startDemoButton.Enabled = false;
         _stopDemoButton.Enabled = true;
-        _autoRefreshLabel.Text = "Demo refresh: 5 seconds";
+        _autoRefreshLabel.Text = "Refresh: 5s";
         _demoTimer.Start();
         await InsertDemoLocationAsync();
     }
@@ -342,8 +352,8 @@ public sealed class OffsiteControl : UserControl
         _demoTimer.Stop();
         _startDemoButton.Enabled = true;
         _stopDemoButton.Enabled = false;
-        _autoRefreshLabel.Text = "Auto-refresh: 10 minutes";
-        _statusLabel.Text = "Demo tracking stopped. Latest saved location remains available.";
+        _autoRefreshLabel.Text = "Refresh: 10m";
+        _statusLabel.Text = "Tracking stopped. Latest saved location remains available.";
     }
 
     private async Task InsertDemoLocationAsync()
@@ -362,7 +372,7 @@ public sealed class OffsiteControl : UserControl
         catch (Exception exception)
         {
             StopDemoTracking();
-            MessageBoxHelper.ShowWarning($"Demo tracking stopped because a location could not be saved.\n\n{exception.Message}", "Offsite Tracking");
+            MessageBoxHelper.ShowWarning($"Tracking stopped because a location could not be saved.\n\n{exception.Message}", "Offsite Tracking");
         }
         finally
         {

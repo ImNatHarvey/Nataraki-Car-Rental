@@ -6,16 +6,21 @@ namespace NatarakiCarRental.Helpers;
 public sealed class VehicleTrackingSimulator
 {
     private readonly VehicleTrackingService _trackingService;
-    private int _routeIndex;
+    private decimal _currentLat;
+    private decimal _currentLng;
+    private int _targetIndex;
+    private bool _initialized;
+    private readonly Random _random = new();
 
-    private static readonly (decimal Latitude, decimal Longitude, string Name)[] DemoRoute =
+    private static readonly (decimal Latitude, decimal Longitude)[] Waypoints =
     [
-        (14.6760m, 121.0437m, "Quezon City"),
-        (14.7566m, 121.0450m, "Caloocan"),
-        (14.7987m, 120.9266m, "Bocaue"),
-        (14.8175m, 120.8661m, "Balagtas"),
-        (14.8527m, 120.8160m, "Malolos"),
-        (14.8139m, 121.0453m, "San Jose del Monte")
+        (14.8118m, 120.8631m), // STI Balagtas
+        (14.8050m, 120.8800m), // Towards Bocaue
+        (14.7944m, 120.9255m), // Bocaue
+        (14.8100m, 120.9400m), // Towards Santa Maria
+        (14.8191m, 120.9616m), // Santa Maria
+        (14.8327m, 120.8794m), // Guiguinto
+        (14.8441m, 120.8116m)  // Malolos
     ];
 
     public VehicleTrackingSimulator()
@@ -30,16 +35,47 @@ public sealed class VehicleTrackingSimulator
 
     public async Task<VehicleLocation> InsertNextAsync(int carId)
     {
-        (decimal latitude, decimal longitude, string _) = DemoRoute[_routeIndex];
-        decimal? heading = _routeIndex == 0 ? null : CalculateHeading(_routeIndex);
-        _routeIndex = (_routeIndex + 1) % DemoRoute.Length;
+        if (!_initialized)
+        {
+            _currentLat = Waypoints[0].Latitude;
+            _currentLng = Waypoints[0].Longitude;
+            _targetIndex = 1;
+            _initialized = true;
+        }
+
+        decimal prevLat = _currentLat;
+        decimal prevLng = _currentLng;
+
+        // Move 40-70 meters per 5-second tick (approx 28-50 kph)
+        double stepDistanceMeters = 40.0 + (_random.NextDouble() * 30.0);
+        
+        decimal targetLat = Waypoints[_targetIndex].Latitude;
+        decimal targetLng = Waypoints[_targetIndex].Longitude;
+        
+        double distanceToTarget = CalculateDistance(_currentLat, _currentLng, targetLat, targetLng);
+        
+        if (distanceToTarget < stepDistanceMeters)
+        {
+            _currentLat = targetLat;
+            _currentLng = targetLng;
+            _targetIndex = (_targetIndex + 1) % Waypoints.Length;
+        }
+        else
+        {
+            double ratio = stepDistanceMeters / distanceToTarget;
+            _currentLat += (decimal)((double)(targetLat - _currentLat) * ratio);
+            _currentLng += (decimal)((double)(targetLng - _currentLng) * ratio);
+        }
+
+        decimal? heading = CalculateHeading(prevLat, prevLng, _currentLat, _currentLng);
+        decimal speedKph = (decimal)(stepDistanceMeters / 5.0 * 3.6); // m/s to kph
 
         VehicleLocation location = new()
         {
             CarId = carId,
-            Latitude = latitude,
-            Longitude = longitude,
-            SpeedKph = 38,
+            Latitude = _currentLat,
+            Longitude = _currentLng,
+            SpeedKph = Math.Round(speedKph, 1),
             Heading = heading,
             Source = "Simulator",
             RecordedAt = DateTime.Now
@@ -49,17 +85,28 @@ public sealed class VehicleTrackingSimulator
         return location;
     }
 
-    private static decimal CalculateHeading(int routeIndex)
+    private static double CalculateDistance(decimal lat1, decimal lng1, decimal lat2, decimal lng2)
     {
-        (decimal currentLat, decimal currentLng, string _) = DemoRoute[routeIndex - 1];
-        (decimal nextLat, decimal nextLng, string _) = DemoRoute[routeIndex];
-        double y = Math.Sin((double)(nextLng - currentLng)) * Math.Cos((double)nextLat);
-        double x = (Math.Cos((double)currentLat) * Math.Sin((double)nextLat))
-                 - (Math.Sin((double)currentLat) * Math.Cos((double)nextLat) * Math.Cos((double)(nextLng - currentLng)));
-        double heading = (Math.Atan2(y, x) * 180D / Math.PI + 360D) % 360D;
+        const double EarthRadius = 6371000;
+        double dLat = DegreeToRadian((double)(lat2 - lat1));
+        double dLng = DegreeToRadian((double)(lng2 - lng1));
+        double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                   Math.Cos(DegreeToRadian((double)lat1)) * Math.Cos(DegreeToRadian((double)lat2)) *
+                   Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return EarthRadius * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    private static decimal? CalculateHeading(decimal lat1, decimal lng1, decimal lat2, decimal lng2)
+    {
+        if (lat1 == lat2 && lng1 == lng2) return null;
+
+        double y = Math.Sin(DegreeToRadian((double)(lng2 - lng1))) * Math.Cos(DegreeToRadian((double)lat2));
+        double x = (Math.Cos(DegreeToRadian((double)lat1)) * Math.Sin(DegreeToRadian((double)lat2)))
+                 - (Math.Sin(DegreeToRadian((double)lat1)) * Math.Cos(DegreeToRadian((double)lat2)) * Math.Cos(DegreeToRadian((double)(lng2 - lng1))));
+        double heading = (RadianToDegree(Math.Atan2(y, x)) + 360.0) % 360.0;
         return (decimal)Math.Round(heading, 2);
     }
 
-    // Future sources such as Bluetooth GPS, phone GPS, or a lightweight API sender
-    // should write validated records into VehicleLocations. Offsite remains the viewer.
+    private static double DegreeToRadian(double degree) => degree * Math.PI / 180.0;
+    private static double RadianToDegree(double radian) => radian * 180.0 / Math.PI;
 }
