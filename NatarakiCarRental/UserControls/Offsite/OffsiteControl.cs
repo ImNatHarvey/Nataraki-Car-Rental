@@ -1063,11 +1063,33 @@ public sealed class OffsiteControl : UserControl
         } finally { _isRefreshing = false; }
     }
 
+    private bool _isStartingDemo;
+
     private async Task StartDemoTrackingAsync()
     {
-        if (_carComboBox.SelectedItem is not CarOption) { MessageBoxHelper.ShowWarning("Select a car before starting tracking."); return; }
-        _startTrackingButton.Enabled = false; _stopTrackingButton.Enabled = true;
-        _autoRefreshLabel.Text = "Refresh: 5s"; _demoTimer.Start(); await InsertDemoLocationAsync();
+        if (_isStartingDemo) return;
+        _isStartingDemo = true;
+        try
+        {
+            if (_carComboBox.SelectedItem is not CarOption) { MessageBoxHelper.ShowWarning("Select a car before starting tracking."); return; }
+            _startTrackingButton.Enabled = false; _stopTrackingButton.Enabled = true;
+            _autoRefreshLabel.Text = "Refresh: 5s";
+            await DrawSimulationRouteAsync();
+            _demoTimer.Start();
+            await InsertDemoLocationAsync();
+        }
+        finally
+        {
+            _isStartingDemo = false;
+        }
+    }
+
+    private async Task DrawSimulationRouteAsync()
+    {
+        if (!_mapReady || _mapWebView.CoreWebView2 is null) return;
+        var points = NatarakiCarRental.Helpers.VehicleTrackingSimulator.GetRoutePoints().Select(p => $"[{p.Lat}, {p.Lng}]");
+        string arrayStr = $"[{string.Join(",", points)}]";
+        await _mapWebView.ExecuteScriptAsync($"window.setSimulationRoute({arrayStr});");
     }
 
     private void StopDemoTracking() { _demoTimer.Stop(); _startTrackingButton.Enabled = true; _stopTrackingButton.Enabled = false; _autoRefreshLabel.Text = "Refresh: 10m"; }
