@@ -131,7 +131,8 @@ public sealed class OffsiteService
                 ContactNumber = request.ContactNumber,
                 StartDate = request.StartDate,
                 ExpectedReturnDate = request.ExpectedReturnDate,
-                EstimatedCost = request.EstimatedCost,
+                EstimatedCost = 0,
+                ActualCost = request.AmountPaid,
                 ProofFilePath = finalProofPath,
                 CreatedByUserId = _currentUserId
             };
@@ -199,7 +200,8 @@ public sealed class OffsiteService
             existing.ContactNumber = request.ContactNumber;
             existing.StartDate = request.StartDate;
             existing.ExpectedReturnDate = request.ExpectedReturnDate;
-            existing.EstimatedCost = request.EstimatedCost;
+            existing.EstimatedCost = 0;
+            existing.ActualCost = request.AmountPaid;
             existing.ProofFilePath = finalProofPath;
 
             await _offsiteRepository.UpdateAsync(existing, transaction);
@@ -346,7 +348,7 @@ public sealed class OffsiteService
 
         if (request.CarId <= 0) failures.Add(new ValidationFailure("CarId", "Car is required."));
         if (string.IsNullOrWhiteSpace(request.OffsiteType)) failures.Add(new ValidationFailure("OffsiteType", "Offsite type is required."));
-        if (request.EstimatedCost < 0) failures.Add(new ValidationFailure("EstimatedCost", "Estimated cost cannot be negative."));
+        if (request.AmountPaid < 0) failures.Add(new ValidationFailure("AmountPaid", "Amount paid cannot be negative."));
         if (request.ExpectedReturnDate.HasValue && request.ExpectedReturnDate.Value.Date < request.StartDate.Date)
             failures.Add(new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date."));
 
@@ -366,7 +368,7 @@ public sealed class OffsiteService
         List<ValidationFailure> failures = [];
 
         if (string.IsNullOrWhiteSpace(request.OffsiteType)) failures.Add(new ValidationFailure("OffsiteType", "Offsite type is required."));
-        if (request.EstimatedCost < 0) failures.Add(new ValidationFailure("EstimatedCost", "Estimated cost cannot be negative."));
+        if (request.AmountPaid < 0) failures.Add(new ValidationFailure("AmountPaid", "Amount paid cannot be negative."));
         if (request.ExpectedReturnDate.HasValue && request.ExpectedReturnDate.Value.Date < request.StartDate.Date)
             failures.Add(new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date."));
 

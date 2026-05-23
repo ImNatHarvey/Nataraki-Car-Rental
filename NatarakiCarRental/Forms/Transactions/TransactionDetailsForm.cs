@@ -316,16 +316,6 @@ public sealed class TransactionDetailsForm : Form
         layout.Controls.Add(CreateInputPanel("First Name", _walkInFirstNameTextBox), 0, 4);
         layout.Controls.Add(CreateInputPanel("Last Name", _walkInLastNameTextBox), 1, 4);
 
-        Label historicalHelperLabel = new()
-        {
-            Text = "Past dates are allowed for missed/historical records.",
-            AutoSize = true,
-            Location = new Point(18, 280),
-            Font = FontHelper.Italic(8.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        };
-        tab.Controls.Add(historicalHelperLabel);
-        
         tab.Controls.Add(layout);
 
         _walkInCarComboBox.SelectedIndexChanged += (_, _) => ApplySelectedCarRate();

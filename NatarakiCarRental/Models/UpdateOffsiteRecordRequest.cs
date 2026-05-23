@@ -9,6 +9,6 @@ public sealed class UpdateOffsiteRecordRequest
     public string? ContactNumber { get; set; }
     public DateTime StartDate { get; set; }
     public DateTime? ExpectedReturnDate { get; set; }
-    public decimal EstimatedCost { get; set; }
+    public decimal AmountPaid { get; set; }
     public string? ProofFilePath { get; set; }
 }

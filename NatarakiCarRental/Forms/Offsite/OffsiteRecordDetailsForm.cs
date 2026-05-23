@@ -1,14 +1,21 @@
+using FluentValidation;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
-using FluentValidation;
 using System.Diagnostics;
-using NatarakiCarRental.UserControls.Common;
+using FleetScheduleModel = NatarakiCarRental.Models.FleetSchedule;
 
 namespace NatarakiCarRental.Forms.Offsite;
 
 public sealed class OffsiteRecordDetailsForm : Form
 {
+    private const int FormWidth = 1060;
+    private const int AddFormHeight = 760;
+    private const int DetailFormHeight = 740;
+    private const int InputWidth = 360;
+    private const int WideInputWidth = 900;
+    private const int InputHeight = 28;
+
     private enum FormMode { Add, Edit, View, Complete }
 
     private readonly OffsiteService _offsiteService;
@@ -20,31 +27,36 @@ public sealed class OffsiteRecordDetailsForm : Form
     private OffsiteRecord? _record;
     private string? _selectedProofPath;
 
-    // Tabs
     private readonly TabControl _addTabs = new();
     private readonly TabPage _scheduleTab = new() { Text = "Create from Schedule" };
     private readonly TabPage _manualTab = new() { Text = "Manual Entry" };
 
-    // Components
-    private readonly ComboBox _scheduleComboBox = new();
-    private readonly Label _summaryCarLabel = new();
-    private readonly Label _summaryDateLabel = new();
-    private readonly Label _summaryStatusLabel = new();
+    private readonly ComboBox _scheduleComboBox = CreateComboBox(WideInputWidth);
+    private readonly Label _summaryCarLabel = CreateValueLabel();
+    private readonly Label _summaryDateLabel = CreateValueLabel();
+    private readonly Label _summaryStatusLabel = CreateValueLabel();
+    private readonly ComboBox _scheduleTypeComboBox = CreateComboBox();
+    private readonly TextBox _scheduleLocationTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly TextBox _scheduleContactPersonTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly TextBox _scheduleContactNumberTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly NumericUpDown _scheduleAmountPaidInput = CreateMoneyInput();
+    private readonly Label _scheduleProofPathLabel = CreatePathLabel();
+    private readonly Button _scheduleBrowseProofButton = CreateSecondaryButton("Browse", 90, InputHeight);
+    private readonly Button _scheduleOpenProofButton = CreateSecondaryButton("Open File", 90, InputHeight);
 
-    private readonly ComboBox _carComboBox = new();
-    private readonly ComboBox _typeComboBox = new();
-    private readonly TextBox _locationTextBox = ControlFactory.CreateTextBox(300);
-    private readonly TextBox _contactPersonTextBox = ControlFactory.CreateTextBox(300);
-    private readonly TextBox _contactNumberTextBox = ControlFactory.CreateTextBox(300);
-    private readonly DateTimePicker _startDatePicker = new();
-    private readonly DateTimePicker _expectedReturnPicker = new();
-    private readonly NumericUpDown _estimatedCostInput = new();
-    private readonly NumericUpDown _actualCostInput = new();
-    private readonly DateTimePicker _completedDatePicker = new();
-    
-    private readonly TextBox _proofPathTextBox = ControlFactory.CreateTextBox(300);
-    private readonly Button _browseProofButton = new();
-    private readonly Button _openProofButton = new();
+    private readonly ComboBox _carComboBox = CreateComboBox(WideInputWidth);
+    private readonly ComboBox _typeComboBox = CreateComboBox();
+    private readonly TextBox _locationTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly TextBox _contactPersonTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly TextBox _contactNumberTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly DateTimePicker _startDatePicker = CreateDatePicker();
+    private readonly DateTimePicker _expectedReturnPicker = CreateDatePicker();
+    private readonly NumericUpDown _amountPaidInput = CreateMoneyInput();
+    private readonly NumericUpDown _actualCostInput = CreateMoneyInput();
+    private readonly DateTimePicker _completedDatePicker = CreateDatePicker();
+    private readonly Label _proofPathLabel = CreatePathLabel();
+    private readonly Button _browseProofButton = CreateSecondaryButton("Browse", 90, InputHeight);
+    private readonly Button _openProofButton = CreateSecondaryButton("Open File", 90, InputHeight);
 
     private readonly Button _saveButton;
     private readonly Button _cancelButton;
@@ -62,27 +74,11 @@ public sealed class OffsiteRecordDetailsForm : Form
         else if (recordId.HasValue) _mode = FormMode.Edit;
         else _mode = FormMode.Add;
 
-        _saveButton = ControlFactory.CreatePrimaryButton(GetSaveButtonText(), 180, 40);
-        _cancelButton = CreateSecondaryButton(_mode == FormMode.View ? "Close" : "Cancel");
+        _saveButton = ControlFactory.CreatePrimaryButton(GetSaveButtonText(), 180, 38);
+        _cancelButton = CreateSecondaryButton(_mode == FormMode.View ? "Close" : "Cancel", 118, 38);
 
         InitializeComponent();
         SetupEvents();
-    }
-
-    private static Button CreateSecondaryButton(string text)
-    {
-        Button button = new()
-        {
-            Text = text,
-            Size = new Size(120, 40),
-            FlatStyle = FlatStyle.Flat,
-            Font = FontHelper.SemiBold(),
-            BackColor = Color.White,
-            ForeColor = ThemeHelper.TextPrimary,
-            Cursor = Cursors.Hand
-        };
-        button.FlatAppearance.BorderColor = ThemeHelper.Border;
-        return button;
     }
 
     private string GetSaveButtonText() => _mode switch
@@ -95,285 +91,308 @@ public sealed class OffsiteRecordDetailsForm : Form
 
     private void InitializeComponent()
     {
-        string titleText = $"{_mode} Offsite Record";
-        Text = titleText;
+        Text = _mode switch
+        {
+            FormMode.Add => "Add Offsite Record",
+            FormMode.Edit => "Edit Offsite Record",
+            FormMode.View => "View Offsite Record",
+            FormMode.Complete => "Complete Offsite Record",
+            _ => "Offsite Record"
+        };
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(920, 780);
+        ClientSize = new Size(FormWidth, _mode == FormMode.Add ? AddFormHeight : DetailFormHeight);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
 
-        Label titleLabel = new()
+        Controls.Add(new Label
         {
-            Text = titleText,
+            Text = Text,
             AutoSize = false,
             Location = new Point(32, 24),
-            Size = new Size(400, 34),
+            Size = new Size(360, 34),
             Font = FontHelper.Title(18F),
             ForeColor = ThemeHelper.TextPrimary
-        };
+        });
 
-        Label subtitleLabel = new()
+        Controls.Add(new Label
         {
             Text = _mode switch
             {
                 FormMode.Edit => "Update operational status and maintenance details.",
                 FormMode.View => "Review recorded maintenance or operational offsite details.",
                 FormMode.Complete => "Mark as finished and record final costs.",
-                _ => "Record why a vehicle is temporarily unavailable (maintenance, repair, etc.)."
+                _ => "Record why a vehicle is temporarily unavailable."
             },
             AutoSize = false,
             Location = new Point(34, 58),
-            Size = new Size(620, 24),
+            Size = new Size(720, 24),
             Font = FontHelper.Regular(9.5F),
             ForeColor = ThemeHelper.TextSecondary
-        };
+        });
 
-        _addTabs.Location = new Point(32, 100);
-        _addTabs.Size = new Size(856, 600);
+        _addTabs.Location = new Point(32, 96);
+        _addTabs.Size = new Size(996, _mode == FormMode.Add ? 584 : 560);
         _addTabs.Font = FontHelper.SemiBold(9F);
 
         if (_mode == FormMode.Add)
         {
-            _addTabs.TabPages.Add(_scheduleTab);
-            _addTabs.TabPages.Add(_manualTab);
             _scheduleTab.BackColor = ThemeHelper.Surface;
             _manualTab.BackColor = ThemeHelper.Surface;
-
             _scheduleTab.Controls.Add(CreateScheduleTabContent());
             _manualTab.Controls.Add(CreateManualTabContent());
+            _addTabs.TabPages.Add(_scheduleTab);
+            _addTabs.TabPages.Add(_manualTab);
         }
         else
         {
-            Panel p = new() { Dock = DockStyle.Fill, Padding = new Padding(12), BackColor = ThemeHelper.Surface };
-            p.Controls.Add(CreateManualTabContent());
-            TabPage t = new() { Text = "Offsite Details", BackColor = ThemeHelper.Surface };
-            t.Controls.Add(p);
-            _addTabs.TabPages.Add(t);
+            TabPage detailsTab = new() { Text = "Offsite Details", BackColor = ThemeHelper.Surface };
+            detailsTab.Controls.Add(CreateManualTabContent());
+            _addTabs.TabPages.Add(detailsTab);
         }
 
-        _cancelButton.Location = new Point(ClientSize.Width - 120 - 32, 715);
-        if (_mode != FormMode.View)
+        if (_mode == FormMode.View)
         {
-            _saveButton.Location = new Point(_cancelButton.Location.X - 180 - 16, 715);
+            _cancelButton.Location = new Point(ClientSize.Width - 32 - _cancelButton.Width, ClientSize.Height - 60);
+        }
+        else
+        {
+            _cancelButton.Location = new Point(ClientSize.Width - 32 - _saveButton.Width - 14 - _cancelButton.Width, ClientSize.Height - 60);
+            _saveButton.Location = new Point(ClientSize.Width - 32 - _saveButton.Width, ClientSize.Height - 60);
             Controls.Add(_saveButton);
-        }
-        else
-        {
-            _cancelButton.Location = new Point(ClientSize.Width - 120 - 32, 715);
+            AcceptButton = _saveButton;
         }
 
-        Controls.Add(titleLabel);
-        Controls.Add(subtitleLabel);
         Controls.Add(_addTabs);
         Controls.Add(_cancelButton);
-        
+        CancelButton = _cancelButton;
         Click += (_, _) => ActiveControl = null;
+
         ConfigureControls();
     }
 
     private Control CreateScheduleTabContent()
     {
-        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 4 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100F)); // Source
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110F)); // Summary
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 220F)); // Details
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));  // Payment
+        Panel layout = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        const int left = 14;
+        const int width = 948;
 
-        // 1. Source Selection
-        GroupBox sourceGroup = CreateGroupBox("Source", new Size(800, 80));
-        _scheduleComboBox.Location = new Point(24, 34);
-        _scheduleComboBox.Width = 750;
-        _scheduleComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        sourceGroup.Controls.Add(_scheduleComboBox);
+        GroupBox source = CreateSingleInputSection("Source", "Eligible Maintenance Schedule *", _scheduleComboBox, new Point(left, 14), new Size(width, 96), wideInput: true);
+        GroupBox summary = CreateScheduleSummarySection(new Point(left, 124), new Size(width, 92));
+        GroupBox details = CreateDetailsSection(
+            "Offsite Details",
+            new Point(left, 230),
+            new Size(width, 205),
+            (_scheduleTypeComboBox, _scheduleContactPersonTextBox, null),
+            (_scheduleLocationTextBox, _scheduleContactNumberTextBox, null));
+        GroupBox payment = CreatePaymentSection(
+            new Point(left, 449),
+            new Size(width, 128),
+            _scheduleAmountPaidInput,
+            _scheduleProofPathLabel,
+            _scheduleBrowseProofButton,
+            _scheduleOpenProofButton,
+            includeCompletionFields: false);
 
-        // 2. Schedule Summary
-        GroupBox summaryGroup = CreateGroupBox("Schedule Summary", new Size(800, 90));
-        TableLayoutPanel summaryGrid = CreateFieldsGrid(2, 1);
-        summaryGrid.Location = new Point(24, 30);
-        summaryGrid.Size = new Size(750, 50);
-        summaryGrid.Controls.Add(CreateDisplayRow("Vehicle:", _summaryCarLabel), 0, 0);
-        summaryGrid.Controls.Add(CreateDisplayRow("Range:", _summaryDateLabel), 1, 0);
-        summaryGroup.Controls.Add(summaryGrid);
-
-        // 3. Offsite Details (same fields as manual but without start/end date)
-        GroupBox detailsGroup = CreateGroupBox("Offsite Details", new Size(800, 200));
-        TableLayoutPanel dGrid = CreateFieldsGrid(2, 2);
-        dGrid.Location = new Point(24, 30);
-        dGrid.Controls.Add(CreateInputPanel("Offsite Type *", _typeComboBox), 0, 0);
-        dGrid.Controls.Add(CreateInputPanel("Location Name", _locationTextBox), 1, 0);
-        dGrid.Controls.Add(CreateInputPanel("Contact Person", _contactPersonTextBox), 0, 1);
-        dGrid.Controls.Add(CreateInputPanel("Contact Number", _contactNumberTextBox), 1, 1);
-        detailsGroup.Controls.Add(dGrid);
-
-        // 4. Payment
-        GroupBox paymentGroup = CreateGroupBox("Payment Information", new Size(800, 140));
-        paymentGroup.Controls.Add(CreatePaymentFieldsContent());
-
-        layout.Controls.Add(sourceGroup, 0, 0);
-        layout.Controls.Add(summaryGroup, 0, 1);
-        layout.Controls.Add(detailsGroup, 0, 2);
-        layout.Controls.Add(paymentGroup, 0, 3);
+        layout.Controls.Add(source);
+        layout.Controls.Add(summary);
+        layout.Controls.Add(details);
+        layout.Controls.Add(payment);
         return layout;
     }
 
     private Control CreateManualTabContent()
     {
-        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 1, RowCount = 4 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90F)); // Vehicle
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 220F)); // Details
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));  // Payment
+        bool includeCompletionFields = _mode is FormMode.Complete or FormMode.View || (_record?.Status == "Completed");
+        Panel layout = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        const int left = 14;
+        const int width = 948;
 
-        // 1. Vehicle
-        GroupBox vehicleGroup = CreateGroupBox("Vehicle Information", new Size(800, 80));
-        TableLayoutPanel vGrid = CreateFieldsGrid(1, 1);
-        vGrid.Location = new Point(24, 30);
-        vGrid.Controls.Add(CreateInputPanel("Select Car *", _carComboBox), 0, 0);
-        vehicleGroup.Controls.Add(vGrid);
+        GroupBox vehicle = CreateSingleInputSection("Vehicle Information", "Select Car *", _carComboBox, new Point(left, 14), new Size(width, 96), wideInput: false);
+        GroupBox details = CreateDetailsSection(
+            "Offsite Details",
+            new Point(left, 124),
+            new Size(width, 205),
+            (_typeComboBox, _contactPersonTextBox, _startDatePicker),
+            (_locationTextBox, _contactNumberTextBox, _expectedReturnPicker));
+        GroupBox payment = CreatePaymentSection(
+            new Point(left, 343),
+            new Size(width, includeCompletionFields ? 160 : 128),
+            _amountPaidInput,
+            _proofPathLabel,
+            _browseProofButton,
+            _openProofButton,
+            includeCompletionFields);
 
-        // 2. Offsite Details
-        GroupBox detailsGroup = CreateGroupBox("Offsite Details", new Size(800, 210));
-        TableLayoutPanel dGrid = CreateFieldsGrid(2, 3);
-        dGrid.Location = new Point(24, 30);
-        dGrid.Controls.Add(CreateInputPanel("Offsite Type *", _typeComboBox), 0, 0);
-        dGrid.Controls.Add(CreateInputPanel("Location Name", _locationTextBox), 1, 0);
-        dGrid.Controls.Add(CreateInputPanel("Contact Person", _contactPersonTextBox), 0, 1);
-        dGrid.Controls.Add(CreateInputPanel("Contact Number", _contactNumberTextBox), 1, 1);
-        dGrid.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 2);
-        dGrid.Controls.Add(CreateInputPanel("Expected Return Date *", _expectedReturnPicker), 1, 2);
-        detailsGroup.Controls.Add(dGrid);
-
-        // 3. Payment Information
-        GroupBox paymentGroup = CreateGroupBox("Payment Information", new Size(800, 180));
-        paymentGroup.Controls.Add(CreatePaymentFieldsContent());
-
-        layout.Controls.Add(vehicleGroup, 0, 0);
-        layout.Controls.Add(detailsGroup, 0, 1);
-        layout.Controls.Add(paymentGroup, 0, 2);
+        layout.Controls.Add(vehicle);
+        layout.Controls.Add(details);
+        layout.Controls.Add(payment);
         return layout;
     }
 
-    private Control CreatePaymentFieldsContent()
+    private Control CreatePaymentLayout(NumericUpDown costInput, Label pathLabel, Button browseButton, Button openButton, bool includeCompletionFields)
     {
-        TableLayoutPanel pGrid = CreateFieldsGrid(2, 2);
-        pGrid.Location = new Point(24, 30);
-        pGrid.Size = new Size(750, 130);
-        
-        pGrid.Controls.Add(CreateInputPanel("Estimated Cost (₱)", _estimatedCostInput), 0, 0);
-        
-        // Proof upload row
-        Panel proofPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 12, 0) };
-        Label proofLabel = ControlFactory.CreateInputLabel("Proof / Receipt");
-        proofLabel.Location = new Point(0, 0);
-        _proofPathTextBox.Location = new Point(0, 22);
-        _proofPathTextBox.Width = 200;
-        _proofPathTextBox.ReadOnly = true;
-        
-        _browseProofButton.Text = "Browse";
-        _browseProofButton.Size = new Size(70, 30);
-        _browseProofButton.Location = new Point(206, 21);
-        _browseProofButton.FlatStyle = FlatStyle.Flat;
-        _browseProofButton.FlatAppearance.BorderColor = ThemeHelper.Border;
-        _browseProofButton.Font = FontHelper.SemiBold(8.5F);
-        
-        _openProofButton.Text = "Open";
-        _openProofButton.Size = new Size(60, 30);
-        _openProofButton.Location = new Point(282, 21);
-        _openProofButton.FlatStyle = FlatStyle.Flat;
-        _openProofButton.FlatAppearance.BorderColor = ThemeHelper.Border;
-        _openProofButton.Font = FontHelper.SemiBold(8.5F);
-        _openProofButton.Enabled = false;
+        TableLayoutPanel layout = CreateGrid(2, includeCompletionFields ? 2 : 1, includeCompletionFields ? 62 : 70);
+        layout.Controls.Add(CreateInputPanel("Amount Paid (₱)", costInput), 0, 0);
+        layout.Controls.Add(CreateProofPickerPanel("Proof / Receipt", pathLabel, browseButton, openButton), 1, 0);
 
-        proofPanel.Controls.Add(proofLabel);
-        proofPanel.Controls.Add(_proofPathTextBox);
-        proofPanel.Controls.Add(_browseProofButton);
-        proofPanel.Controls.Add(_openProofButton);
-        pGrid.Controls.Add(proofPanel, 1, 0);
-
-        if (_mode == FormMode.Complete || _mode == FormMode.View || (_record != null && _record.Status == "Completed"))
+        if (includeCompletionFields)
         {
-            pGrid.Controls.Add(CreateInputPanel("Completed Date *", _completedDatePicker), 0, 1);
-            pGrid.Controls.Add(CreateInputPanel("Actual Cost (₱) *", _actualCostInput), 1, 1);
+            layout.Controls.Add(CreateInputPanel("Completed Date *", _completedDatePicker), 0, 1);
+            layout.Controls.Add(CreateInputPanel("Amount Paid (₱) *", _actualCostInput), 1, 1);
         }
 
-        return pGrid;
+        return layout;
     }
 
-    private static GroupBox CreateGroupBox(string title, Size size)
+    private static GroupBox CreateBaseSection(string title, Point location, Size size)
     {
-        GroupBox gb = new()
+        return new GroupBox
         {
             Text = title,
+            Location = location,
             Size = size,
             Font = FontHelper.SemiBold(9.5F),
             ForeColor = ThemeHelper.TextPrimary,
-            BackColor = ThemeHelper.Surface,
-            Margin = new Padding(0, 0, 0, 12)
+            BackColor = ThemeHelper.Surface
         };
-        return gb;
     }
 
-    private static TableLayoutPanel CreateFieldsGrid(int columns, int rows)
+    private static GroupBox CreateSingleInputSection(string title, string labelText, Control input, Point location, Size size, bool wideInput)
     {
-        TableLayoutPanel grid = new() { ColumnCount = columns, RowCount = rows, AutoSize = true, BackColor = ThemeHelper.Surface };
-        for (int i = 0; i < columns; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
-        return grid;
+        GroupBox group = CreateBaseSection(title, location, size);
+        AddPositionedInput(group, labelText, input, new Point(24, 30), wideInput ? 860 : InputWidth);
+        return group;
     }
 
-    private static Panel CreateDisplayRow(string label, Label valueLabel)
+    private GroupBox CreateScheduleSummarySection(Point location, Size size)
     {
-        Panel p = new() { Width = 350, Height = 30 };
-        Label l = new() { Text = label, Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, Location = new Point(0, 5), AutoSize = true };
-        valueLabel.Font = FontHelper.Regular(9.5F);
-        valueLabel.ForeColor = ThemeHelper.TextPrimary;
-        valueLabel.Location = new Point(100, 5);
-        valueLabel.AutoSize = true;
-        valueLabel.Text = "-";
-        p.Controls.Add(l);
-        p.Controls.Add(valueLabel);
-        return p;
+        GroupBox group = CreateBaseSection("Schedule Summary", location, size);
+        AddPositionedDisplay(group, "Vehicle", _summaryCarLabel, new Point(24, 30), 280);
+        AddPositionedDisplay(group, "Date Range", _summaryDateLabel, new Point(330, 30), 280);
+        AddPositionedDisplay(group, "Status", _summaryStatusLabel, new Point(636, 30), 220);
+        return group;
     }
 
-    private static Panel CreateInputPanel(string labelText, Control input)
+    private static GroupBox CreateDetailsSection(
+        string title,
+        Point location,
+        Size size,
+        (Control row1, Control row2, Control? row3) column1,
+        (Control row1, Control row2, Control? row3) column2)
     {
-        Panel p = new() { Width = 370, Height = 60, Padding = new Padding(0, 0, 20, 0) };
-        Label l = new() { Text = labelText, Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextPrimary, Location = new Point(0, 0), AutoSize = true };
-        input.Location = new Point(0, 22);
-        input.Font = FontHelper.Regular(10F); // Consistent normal input font
-        p.Controls.Add(l);
-        p.Controls.Add(input);
-        return p;
+        GroupBox group = CreateBaseSection(title, location, size);
+        AddPositionedInput(group, "Offsite Type *", column1.row1, new Point(24, 30), InputWidth);
+        AddPositionedInput(group, "Location Name", column2.row1, new Point(486, 30), InputWidth);
+        AddPositionedInput(group, "Contact Person", column1.row2, new Point(24, 88), InputWidth);
+        AddPositionedInput(group, "Contact Number", column2.row2, new Point(486, 88), InputWidth);
+
+        if (column1.row3 is not null)
+        {
+            AddPositionedInput(group, "Start Date *", column1.row3, new Point(24, 146), InputWidth);
+        }
+
+        if (column2.row3 is not null)
+        {
+            AddPositionedInput(group, "Expected Return Date *", column2.row3, new Point(486, 146), InputWidth);
+        }
+
+        return group;
+    }
+
+    private GroupBox CreatePaymentSection(
+        Point location,
+        Size size,
+        NumericUpDown costInput,
+        Label pathLabel,
+        Button browseButton,
+        Button openButton,
+        bool includeCompletionFields)
+    {
+        GroupBox group = CreateBaseSection("Payment Information", location, size);
+        AddPositionedInput(group, "Amount Paid (₱)", costInput, new Point(24, 30), InputWidth);
+        AddPositionedProof(group, "Proof / Receipt", pathLabel, browseButton, openButton, new Point(486, 30));
+
+        if (includeCompletionFields)
+        {
+            AddPositionedInput(group, "Completed Date *", _completedDatePicker, new Point(24, 88), InputWidth);
+            AddPositionedInput(group, "Amount Paid (₱) *", _actualCostInput, new Point(486, 88), InputWidth);
+        }
+
+        return group;
+    }
+
+    private static void AddPositionedInput(Control parent, string labelText, Control input, Point labelLocation, int width)
+    {
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = labelLocation;
+        input.Location = new Point(labelLocation.X, labelLocation.Y + 22);
+        input.Size = new Size(width, InputHeight);
+        input.Font = FontHelper.Regular(10F);
+        parent.Controls.Add(label);
+        parent.Controls.Add(input);
+    }
+
+    private static void AddPositionedDisplay(Control parent, string labelText, Label valueLabel, Point labelLocation, int width)
+    {
+        Label label = new()
+        {
+            Text = labelText,
+            Location = labelLocation,
+            Size = new Size(width, 18),
+            Font = FontHelper.SemiBold(9F),
+            ForeColor = ThemeHelper.TextSecondary
+        };
+        valueLabel.Location = new Point(labelLocation.X, labelLocation.Y + 22);
+        valueLabel.Size = new Size(width, 24);
+        parent.Controls.Add(label);
+        parent.Controls.Add(valueLabel);
+    }
+
+    private static void AddPositionedProof(Control parent, string labelText, Label pathLabel, Button browseButton, Button openButton, Point labelLocation)
+    {
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = labelLocation;
+        browseButton.Location = new Point(labelLocation.X, labelLocation.Y + 22);
+        openButton.Location = new Point(labelLocation.X + 102, labelLocation.Y + 22);
+        pathLabel.Location = new Point(labelLocation.X + 204, labelLocation.Y + 27);
+        pathLabel.Size = new Size(220, 20);
+        parent.Controls.Add(label);
+        parent.Controls.Add(browseButton);
+        parent.Controls.Add(openButton);
+        parent.Controls.Add(pathLabel);
     }
 
     private void ConfigureControls()
     {
-        _carComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        _carComboBox.Width = 350;
-        _typeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        _typeComboBox.Width = 350;
         _typeComboBox.Items.AddRange(["Maintenance", "Repair", "Cleaning"]);
+        _scheduleTypeComboBox.Items.AddRange(["Maintenance", "Repair", "Cleaning"]);
 
-        _startDatePicker.Format = DateTimePickerFormat.Short;
-        _startDatePicker.Width = 350;
-        _expectedReturnPicker.Format = DateTimePickerFormat.Short;
-        _expectedReturnPicker.Width = 350;
-        _completedDatePicker.Format = DateTimePickerFormat.Short;
-        _completedDatePicker.Width = 350;
+        foreach (Control input in GetInputControls())
+        {
+            input.Font = FontHelper.Regular(10F);
+            input.ForeColor = ThemeHelper.TextPrimary;
+            input.Height = InputHeight;
+        }
 
-        _estimatedCostInput.Minimum = 0;
-        _estimatedCostInput.Maximum = 1000000;
-        _estimatedCostInput.Increment = 1000;
-        _estimatedCostInput.ThousandsSeparator = true;
-        _estimatedCostInput.Width = 350;
+        _scheduleTypeComboBox.Width = InputWidth;
+        _typeComboBox.Width = InputWidth;
+        _locationTextBox.Width = InputWidth;
+        _contactPersonTextBox.Width = InputWidth;
+        _contactNumberTextBox.Width = InputWidth;
+        _scheduleLocationTextBox.Width = InputWidth;
+        _scheduleContactPersonTextBox.Width = InputWidth;
+        _scheduleContactNumberTextBox.Width = InputWidth;
 
-        _actualCostInput.Minimum = 0;
-        _actualCostInput.Maximum = 1000000;
-        _actualCostInput.Increment = 1000;
-        _actualCostInput.ThousandsSeparator = true;
-        _actualCostInput.Width = 350;
+        ConfigureMoneyInput(_amountPaidInput);
+        ConfigureMoneyInput(_scheduleAmountPaidInput);
+        ConfigureMoneyInput(_actualCostInput);
+
+        _scheduleOpenProofButton.Enabled = false;
+        _openProofButton.Enabled = false;
 
         if (_mode != FormMode.Add)
         {
@@ -387,11 +406,40 @@ public sealed class OffsiteRecordDetailsForm : Form
                 _contactNumberTextBox.ReadOnly = true;
                 _expectedReturnPicker.Enabled = false;
                 _completedDatePicker.Enabled = false;
-                _estimatedCostInput.Enabled = false;
+                _amountPaidInput.Enabled = false;
                 _actualCostInput.Enabled = false;
                 _browseProofButton.Visible = false;
             }
         }
+    }
+
+    private static void ConfigureMoneyInput(NumericUpDown input)
+    {
+        input.Minimum = 0;
+        input.Maximum = 1000000;
+        input.DecimalPlaces = 2;
+        input.Increment = 1000;
+        input.ThousandsSeparator = true;
+        input.Width = InputWidth;
+        input.Height = InputHeight;
+        input.Font = FontHelper.Regular(10F);
+    }
+
+    private IEnumerable<Control> GetInputControls()
+    {
+        yield return _scheduleComboBox;
+        yield return _scheduleTypeComboBox;
+        yield return _scheduleLocationTextBox;
+        yield return _scheduleContactPersonTextBox;
+        yield return _scheduleContactNumberTextBox;
+        yield return _carComboBox;
+        yield return _typeComboBox;
+        yield return _locationTextBox;
+        yield return _contactPersonTextBox;
+        yield return _contactNumberTextBox;
+        yield return _startDatePicker;
+        yield return _expectedReturnPicker;
+        yield return _completedDatePicker;
     }
 
     private void SetupEvents()
@@ -399,101 +447,182 @@ public sealed class OffsiteRecordDetailsForm : Form
         Load += async (_, _) => await LoadDataAsync();
         _saveButton.Click += async (_, _) => await SaveAsync();
         _cancelButton.Click += (_, _) => Close();
-        _startDatePicker.ValueChanged += (_, _) => 
-        {
-            _expectedReturnPicker.MinDate = _startDatePicker.Value;
-            if (_expectedReturnPicker.Value < _startDatePicker.Value) _expectedReturnPicker.Value = _startDatePicker.Value;
-        };
-        
+        _startDatePicker.ValueChanged += (_, _) => UpdateExpectedReturnMinimum();
         _browseProofButton.Click += (_, _) => BrowseProof();
+        _scheduleBrowseProofButton.Click += (_, _) => BrowseProof();
         _openProofButton.Click += (_, _) => OpenProof();
-        _scheduleComboBox.SelectedIndexChanged += async (_, _) => await HandleScheduleSelectionChange();
+        _scheduleOpenProofButton.Click += (_, _) => OpenProof();
+        _scheduleComboBox.SelectedIndexChanged += (_, _) => UpdateScheduleSummary();
     }
 
     private async Task LoadDataAsync()
     {
         try
         {
-            var cars = await _carService.GetActiveCarsAsync();
+            IReadOnlyList<Car> cars = await _carService.GetActiveCarsAsync();
             _carComboBox.Items.Clear();
             _carComboBox.Items.Add("Select a car");
-            foreach (var car in cars) _carComboBox.Items.Add(new CarOption(car.CarId, car.CarName, car.PlateNumber));
+            foreach (Car car in cars)
+            {
+                _carComboBox.Items.Add(new CarOption(car.CarId, car.CarName, car.PlateNumber));
+            }
             _carComboBox.SelectedIndex = 0;
 
             if (_mode == FormMode.Add)
             {
-                var allSchedules = await _fleetScheduleService.GetSchedulesForMonthAsync(DateTime.Now.Year, DateTime.Now.Month);
-                var eligible = allSchedules.Where(s => s.ScheduleType == FleetScheduleConstants.Type.Maintenance && 
-                                                      (s.Status == FleetScheduleConstants.Status.Ongoing || s.Status == "Pending") && 
-                                                      !s.IsArchived).ToList();
-                
+                IReadOnlyList<FleetScheduleModel> allSchedules = await _fleetScheduleService.GetSchedulesForMonthAsync(DateTime.Now.Year, DateTime.Now.Month);
+                List<FleetScheduleModel> eligible = allSchedules
+                    .Where(schedule => schedule.ScheduleType == FleetScheduleConstants.Type.Maintenance
+                        && (schedule.Status == FleetScheduleConstants.Status.Ongoing || schedule.Status == "Pending")
+                        && !schedule.IsArchived)
+                    .ToList();
+
                 _scheduleComboBox.Items.Clear();
                 _scheduleComboBox.Items.Add("Select an eligible maintenance schedule");
-                foreach(var s in eligible) _scheduleComboBox.Items.Add(new ScheduleOption(s.ScheduleId, s.Title, s.CarName, s.PlateNumber, s.StartDate, s.EndDate, s.Status, s.CarId));
+                foreach (FleetScheduleModel schedule in eligible)
+                {
+                    _scheduleComboBox.Items.Add(new ScheduleOption(
+                        schedule.ScheduleId,
+                        schedule.Title,
+                        schedule.CarName,
+                        schedule.PlateNumber,
+                        schedule.StartDate,
+                        schedule.EndDate,
+                        schedule.Status,
+                        schedule.CarId));
+                }
                 _scheduleComboBox.SelectedIndex = 0;
             }
 
             if (_recordId.HasValue)
             {
                 _record = await _offsiteService.GetByIdAsync(_recordId.Value);
-                if (_record != null)
+                if (_record is not null)
                 {
-                    foreach (var item in _carComboBox.Items)
-                    {
-                        if (item is CarOption opt && opt.CarId == _record.CarId) { _carComboBox.SelectedItem = item; break; }
-                    }
-
-                    _typeComboBox.SelectedItem = _record.OffsiteType;
-                    _locationTextBox.Text = _record.LocationName;
-                    _contactPersonTextBox.Text = _record.ContactPerson;
-                    _contactNumberTextBox.Text = _record.ContactNumber;
-                    _startDatePicker.Value = _record.StartDate;
-                    if (_record.ExpectedReturnDate.HasValue) _expectedReturnPicker.Value = _record.ExpectedReturnDate.Value;
-                    _estimatedCostInput.Value = _record.EstimatedCost;
-                    
-                    if (!string.IsNullOrEmpty(_record.ProofFilePath))
-                    {
-                        _proofPathTextBox.Text = Path.GetFileName(_record.ProofFilePath);
-                        _openProofButton.Enabled = true;
-                    }
-
-                    if (_record.CompletedDate.HasValue) _completedDatePicker.Value = _record.CompletedDate.Value;
-                    _actualCostInput.Value = _record.ActualCost;
+                    LoadRecord(_record);
                 }
             }
+
+            UpdateExpectedReturnMinimum();
         }
-        catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load data: {ex.Message}"); }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Failed to load data: {exception.Message}");
+        }
     }
 
-    private async Task HandleScheduleSelectionChange()
+    private void LoadRecord(OffsiteRecord record)
     {
-        if (_scheduleComboBox.SelectedItem is not ScheduleOption opt)
+        foreach (object item in _carComboBox.Items)
         {
-            _summaryCarLabel.Text = "-"; _summaryDateLabel.Text = "-"; _summaryStatusLabel.Text = "-"; return;
+            if (item is CarOption option && option.CarId == record.CarId)
+            {
+                _carComboBox.SelectedItem = item;
+                break;
+            }
         }
-        _summaryCarLabel.Text = $"{opt.CarName} ({opt.PlateNumber})";
-        _summaryDateLabel.Text = $"{opt.Start:MMM d, yyyy} to {opt.End:MMM d, yyyy}";
-        _summaryStatusLabel.Text = opt.Status;
+
+        _typeComboBox.SelectedItem = record.OffsiteType;
+        _locationTextBox.Text = record.LocationName;
+        _contactPersonTextBox.Text = record.ContactPerson;
+        _contactNumberTextBox.Text = record.ContactNumber;
+        _startDatePicker.Value = record.StartDate;
+        _expectedReturnPicker.Value = record.ExpectedReturnDate ?? record.StartDate;
+        _amountPaidInput.Value = record.ActualCost;
+
+        if (!string.IsNullOrWhiteSpace(record.ProofFilePath))
+        {
+            _proofPathLabel.Text = Path.GetFileName(record.ProofFilePath);
+            _proofPathLabel.ForeColor = ThemeHelper.Primary;
+            _openProofButton.Enabled = true;
+        }
+
+        if (record.CompletedDate.HasValue)
+        {
+            _completedDatePicker.Value = record.CompletedDate.Value;
+        }
+        _actualCostInput.Value = record.ActualCost;
+    }
+
+    private void UpdateScheduleSummary()
+    {
+        if (_scheduleComboBox.SelectedItem is not ScheduleOption option)
+        {
+            _summaryCarLabel.Text = "-";
+            _summaryDateLabel.Text = "-";
+            _summaryStatusLabel.Text = "-";
+            return;
+        }
+
+        _summaryCarLabel.Text = $"{option.CarName} ({option.PlateNumber})";
+        _summaryDateLabel.Text = $"{option.Start:MMM d, yyyy} - {option.End:MMM d, yyyy}";
+        _summaryStatusLabel.Text = option.Status;
+        if (_scheduleTypeComboBox.SelectedIndex < 0)
+        {
+            _scheduleTypeComboBox.SelectedItem = "Maintenance";
+        }
+    }
+
+    private void UpdateExpectedReturnMinimum()
+    {
+        DateTime startDate = _startDatePicker.Value.Date;
+        _expectedReturnPicker.MinDate = DateTimePicker.MinimumDateTime;
+        if (_expectedReturnPicker.Value.Date < startDate)
+        {
+            _expectedReturnPicker.Value = startDate;
+        }
+        _expectedReturnPicker.MinDate = startDate;
     }
 
     private void BrowseProof()
     {
-        using OpenFileDialog dialog = new() { Filter = "Image/PDF Files|*.jpg;*.jpeg;*.png;*.pdf" };
-        if (dialog.ShowDialog() == DialogResult.OK)
+        using OpenFileDialog dialog = new()
         {
-            _selectedProofPath = dialog.FileName;
-            _proofPathTextBox.Text = Path.GetFileName(dialog.FileName);
-            _openProofButton.Enabled = true;
+            Filter = "Image/PDF Files|*.jpg;*.jpeg;*.png;*.pdf",
+            Title = "Select proof or receipt",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
         }
+
+        _selectedProofPath = dialog.FileName;
+        string fileName = Path.GetFileName(dialog.FileName);
+        SetProofLabel(_proofPathLabel, fileName);
+        SetProofLabel(_scheduleProofPathLabel, fileName);
+        _openProofButton.Enabled = true;
+        _scheduleOpenProofButton.Enabled = true;
+    }
+
+    private static void SetProofLabel(Label label, string text)
+    {
+        label.Text = text;
+        label.ForeColor = ThemeHelper.Primary;
     }
 
     private void OpenProof()
     {
-        string? path = _selectedProofPath;
-        if (string.IsNullOrEmpty(path) && _record != null) path = UploadPathHelper.ResolveOffsiteProofPath(_record.ProofFilePath);
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) { MessageBoxHelper.ShowWarning("The proof file could not be found."); return; }
-        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-        catch (Exception ex) { MessageBoxHelper.ShowError($"Could not open file: {ex.Message}"); }
+        string? path = !string.IsNullOrWhiteSpace(_selectedProofPath) && File.Exists(_selectedProofPath)
+            ? _selectedProofPath
+            : UploadPathHelper.ResolveOffsiteProofPath(_record?.ProofFilePath);
+
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            MessageBoxHelper.ShowWarning("The proof file could not be found.");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Could not open file: {exception.Message}");
+        }
     }
 
     private async Task SaveAsync()
@@ -502,43 +631,260 @@ public sealed class OffsiteRecordDetailsForm : Form
         {
             if (_mode == FormMode.Add)
             {
-                CreateOffsiteRecordRequest request;
-                if (_addTabs.SelectedTab == _scheduleTab)
-                {
-                    if (_scheduleComboBox.SelectedItem is not ScheduleOption opt) throw new ValidationException("Please select a schedule.");
-                    request = new CreateOffsiteRecordRequest { CarId = opt.CarId, FleetScheduleId = opt.ScheduleId, OffsiteType = _typeComboBox.SelectedItem?.ToString() ?? "Maintenance",
-                        LocationName = _locationTextBox.Text, ContactPerson = _contactPersonTextBox.Text, ContactNumber = _contactNumberTextBox.Text,
-                        StartDate = opt.Start, ExpectedReturnDate = opt.End, EstimatedCost = _estimatedCostInput.Value, ProofFilePath = _selectedProofPath };
-                }
-                else
-                {
-                    if (_carComboBox.SelectedItem is not CarOption car) throw new ValidationException("Please select a car.");
-                    request = new CreateOffsiteRecordRequest { CarId = car.CarId, OffsiteType = _typeComboBox.SelectedItem?.ToString() ?? "",
-                        LocationName = _locationTextBox.Text, ContactPerson = _contactPersonTextBox.Text, ContactNumber = _contactNumberTextBox.Text,
-                        StartDate = _startDatePicker.Value, ExpectedReturnDate = _expectedReturnPicker.Value, EstimatedCost = _estimatedCostInput.Value, ProofFilePath = _selectedProofPath };
-                }
-                await _offsiteService.CreateAsync(request);
+                await _offsiteService.CreateAsync(BuildCreateRequest());
             }
             else if (_mode == FormMode.Edit)
             {
-                var request = new UpdateOffsiteRecordRequest { OffsiteRecordId = _recordId!.Value, OffsiteType = _typeComboBox.SelectedItem?.ToString() ?? "",
-                    LocationName = _locationTextBox.Text, ContactPerson = _contactPersonTextBox.Text, ContactNumber = _contactNumberTextBox.Text,
-                    StartDate = _startDatePicker.Value, ExpectedReturnDate = _expectedReturnPicker.Value, EstimatedCost = _estimatedCostInput.Value,
-                    ProofFilePath = _selectedProofPath ?? _record?.ProofFilePath };
-                await _offsiteService.UpdateAsync(request);
+                await _offsiteService.UpdateAsync(new UpdateOffsiteRecordRequest
+                {
+                    OffsiteRecordId = _recordId!.Value,
+                    OffsiteType = _typeComboBox.SelectedItem?.ToString() ?? string.Empty,
+                    LocationName = _locationTextBox.Text,
+                    ContactPerson = _contactPersonTextBox.Text,
+                    ContactNumber = _contactNumberTextBox.Text,
+                    StartDate = _startDatePicker.Value.Date,
+                    ExpectedReturnDate = _expectedReturnPicker.Value.Date,
+                    AmountPaid = _amountPaidInput.Value,
+                    ProofFilePath = _selectedProofPath ?? _record?.ProofFilePath
+                });
             }
             else if (_mode == FormMode.Complete)
             {
-                await _offsiteService.CompleteAsync(_recordId!.Value, _completedDatePicker.Value, _actualCostInput.Value, null);
+                await _offsiteService.CompleteAsync(_recordId!.Value, _completedDatePicker.Value.Date, _actualCostInput.Value, null);
             }
 
-            DialogResult = DialogResult.OK; Close();
+            DialogResult = DialogResult.OK;
+            Close();
         }
-        catch (ValidationException ex) { MessageBoxHelper.ShowWarning(ex.Errors.First().ErrorMessage); }
-        catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to save: {ex.Message}"); }
+        catch (ValidationException exception)
+        {
+            string message = exception.Errors.FirstOrDefault()?.ErrorMessage ?? exception.Message;
+            MessageBoxHelper.ShowWarning(message);
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Failed to save: {exception.Message}");
+        }
     }
 
-    private sealed record CarOption(int CarId, string CarName, string PlateNumber) { public override string ToString() => $"{CarName} ({PlateNumber})"; }
+    private CreateOffsiteRecordRequest BuildCreateRequest()
+    {
+        if (_addTabs.SelectedTab == _scheduleTab)
+        {
+            if (_scheduleComboBox.SelectedItem is not ScheduleOption schedule)
+            {
+                throw new ValidationException("Please select a schedule.");
+            }
+
+            return new CreateOffsiteRecordRequest
+            {
+                CarId = schedule.CarId,
+                FleetScheduleId = schedule.ScheduleId,
+                OffsiteType = _scheduleTypeComboBox.SelectedItem?.ToString() ?? "Maintenance",
+                LocationName = _scheduleLocationTextBox.Text,
+                ContactPerson = _scheduleContactPersonTextBox.Text,
+                ContactNumber = _scheduleContactNumberTextBox.Text,
+                StartDate = schedule.Start.Date,
+                ExpectedReturnDate = schedule.End.Date,
+                AmountPaid = _scheduleAmountPaidInput.Value,
+                ProofFilePath = _selectedProofPath
+            };
+        }
+
+        if (_carComboBox.SelectedItem is not CarOption car)
+        {
+            throw new ValidationException("Please select a car.");
+        }
+
+        return new CreateOffsiteRecordRequest
+        {
+            CarId = car.CarId,
+            OffsiteType = _typeComboBox.SelectedItem?.ToString() ?? string.Empty,
+            LocationName = _locationTextBox.Text,
+            ContactPerson = _contactPersonTextBox.Text,
+            ContactNumber = _contactNumberTextBox.Text,
+            StartDate = _startDatePicker.Value.Date,
+            ExpectedReturnDate = _expectedReturnPicker.Value.Date,
+            AmountPaid = _amountPaidInput.Value,
+            ProofFilePath = _selectedProofPath
+        };
+    }
+
+    private static GroupBox CreateSection(string title, Control content)
+    {
+        GroupBox section = new()
+        {
+            Text = title,
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16, 30, 16, 14),
+            Font = FontHelper.SemiBold(9.5F),
+            ForeColor = ThemeHelper.TextPrimary,
+            BackColor = ThemeHelper.Surface
+        };
+        content.Dock = DockStyle.Fill;
+        section.Controls.Add(content);
+        return section;
+    }
+
+    private static TableLayoutPanel CreateGrid(int columns, int rows, int rowHeight)
+    {
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = columns,
+            RowCount = rows,
+            BackColor = ThemeHelper.Surface
+        };
+
+        for (int column = 0; column < columns; column++)
+        {
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / columns));
+        }
+
+        for (int row = 0; row < rows; row++)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+        }
+
+        return layout;
+    }
+
+    private static TableLayoutPanel CreateSingleInputLayout(string labelText, Control input)
+    {
+        TableLayoutPanel layout = CreateGrid(1, 1, 62);
+        layout.Controls.Add(CreateInputPanel(labelText, input), 0, 0);
+        return layout;
+    }
+
+    private static Panel CreateInputPanel(string labelText, Control input)
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 20, 0), BackColor = ThemeHelper.Surface };
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = new Point(0, 0);
+        input.Location = new Point(0, 24);
+        input.Font = FontHelper.Regular(10F);
+        panel.Controls.Add(label);
+        panel.Controls.Add(input);
+        return panel;
+    }
+
+    private static Panel CreateDisplayCell(string labelText, Label valueLabel)
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        Label label = new()
+        {
+            Text = labelText,
+            Location = new Point(0, 0),
+            Size = new Size(280, 18),
+            Font = FontHelper.SemiBold(9F),
+            ForeColor = ThemeHelper.TextSecondary
+        };
+        valueLabel.Location = new Point(0, 20);
+        valueLabel.Size = new Size(280, 24);
+        panel.Controls.Add(label);
+        panel.Controls.Add(valueLabel);
+        return panel;
+    }
+
+    private static Panel CreateProofPickerPanel(string labelText, Label pathLabel, Button browseButton, Button openButton)
+    {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = new Point(0, 0);
+        browseButton.Location = new Point(0, 26);
+        openButton.Location = new Point(102, 26);
+        pathLabel.Location = new Point(204, 31);
+        pathLabel.Size = new Size(250, 20);
+        panel.Resize += (_, _) => pathLabel.Width = Math.Max(panel.Width - 214, 180);
+        panel.Controls.Add(label);
+        panel.Controls.Add(browseButton);
+        panel.Controls.Add(openButton);
+        panel.Controls.Add(pathLabel);
+        return panel;
+    }
+
+    private static ComboBox CreateComboBox(int width = InputWidth)
+    {
+        return new ComboBox
+        {
+            Width = width,
+            Height = InputHeight,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = FontHelper.Regular(10F),
+            ForeColor = ThemeHelper.TextPrimary
+        };
+    }
+
+    private static DateTimePicker CreateDatePicker()
+    {
+        return new DateTimePicker
+        {
+            Width = InputWidth,
+            Height = InputHeight,
+            Format = DateTimePickerFormat.Short,
+            Font = FontHelper.Regular(10F)
+        };
+    }
+
+    private static NumericUpDown CreateMoneyInput()
+    {
+        return new NumericUpDown
+        {
+            Width = InputWidth,
+            Height = InputHeight,
+            DecimalPlaces = 2,
+            Maximum = 1000000,
+            Increment = 1000,
+            ThousandsSeparator = true,
+            Font = FontHelper.Regular(10F)
+        };
+    }
+
+    private static Label CreateValueLabel()
+    {
+        return new Label
+        {
+            Text = "-",
+            AutoSize = false,
+            Font = FontHelper.Regular(10F),
+            ForeColor = ThemeHelper.TextPrimary,
+            AutoEllipsis = true
+        };
+    }
+
+    private static Label CreatePathLabel()
+    {
+        return new Label
+        {
+            Text = "No file selected",
+            AutoSize = false,
+            Font = FontHelper.Regular(9F),
+            ForeColor = ThemeHelper.TextSecondary,
+            AutoEllipsis = true
+        };
+    }
+
+    private static Button CreateSecondaryButton(string text, int width, int height)
+    {
+        Button button = new()
+        {
+            Text = text,
+            Size = new Size(width, height),
+            BackColor = ThemeHelper.Surface,
+            ForeColor = ThemeHelper.TextPrimary,
+            Font = FontHelper.SemiBold(9F),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderColor = ThemeHelper.Border;
+        return button;
+    }
+
+    private sealed record CarOption(int CarId, string CarName, string PlateNumber)
+    {
+        public override string ToString() => $"{CarName} ({PlateNumber})";
+    }
+
     private sealed record ScheduleOption(int ScheduleId, string Title, string CarName, string PlateNumber, DateTime Start, DateTime End, string Status, int CarId)
     {
         public override string ToString() => $"{CarName} ({PlateNumber}) - {Start:MMM d}";

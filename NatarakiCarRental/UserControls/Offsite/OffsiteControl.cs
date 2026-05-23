@@ -48,6 +48,7 @@ public sealed class OffsiteControl : UserControl
     
     private readonly System.Windows.Forms.Timer _refreshTimer = new();
     private readonly System.Windows.Forms.Timer _demoTimer = new();
+    private readonly System.Windows.Forms.Timer _recordsSearchTimer = new() { Interval = 350 };
 
     // Records Components
     private readonly DataGridView _recordsGrid = new();
@@ -55,8 +56,12 @@ public sealed class OffsiteControl : UserControl
     private readonly IconButton _archivedSubTabButton = new();
     private readonly TextBox _searchBox = new();
     private readonly ComboBox _typeFilter = new();
+    private readonly ComboBox _statusFilter = new();
     private readonly Button _addRecordButton = CreateAddButton();
     private readonly Label _emptyStateLabel = new();
+    private readonly Label _paginationLabel = new();
+    private readonly Button _prevPageButton = CreatePaginationButton("Previous");
+    private readonly Button _nextPageButton = CreatePaginationButton("Next");
     
     private readonly MetricCardControl _currentlyOffsiteCard = new();
     private readonly MetricCardControl _maintenanceCard = new();
@@ -66,7 +71,11 @@ public sealed class OffsiteControl : UserControl
     private bool _mapReady;
     private bool _isRefreshing;
     private bool _isDemoTickRunning;
+    private bool _isInitializingRecordFilters;
+    private bool _isLoadingRecords;
+    private bool _pendingRecordsReload;
     private int _currentPage = 1;
+    private int _pageSize = 4;
     private int _totalItems;
     private bool _isMapTabActive = true;
     private bool _showArchivedRecords;
@@ -91,6 +100,22 @@ public sealed class OffsiteControl : UserControl
         return button;
     }
 
+    private static Button CreatePaginationButton(string text)
+    {
+        Button button = new()
+        {
+            Text = text,
+            Size = new Size(80, 32),
+            BackColor = ThemeHelper.Surface,
+            ForeColor = ThemeHelper.TextPrimary,
+            Font = FontHelper.SemiBold(9F),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderColor = ThemeHelper.Border;
+        return button;
+    }
+
     public OffsiteControl(int currentUserId)
     {
         _currentUserId = currentUserId;
@@ -105,8 +130,10 @@ public sealed class OffsiteControl : UserControl
         {
             _refreshTimer.Stop();
             _demoTimer.Stop();
+            _recordsSearchTimer.Stop();
             _refreshTimer.Dispose();
             _demoTimer.Dispose();
+            _recordsSearchTimer.Dispose();
             _mapWebView.Dispose();
         }
 
@@ -137,12 +164,15 @@ public sealed class OffsiteControl : UserControl
         mainLayout.Controls.Add(_mainContentPanel, 0, 2);
         
         Controls.Add(mainLayout);
+        Resize += OffsiteControl_Resize;
 
         _refreshTimer.Interval = (int)NormalRefreshInterval.TotalMilliseconds;
         _refreshTimer.Tick += async (_, _) => await RefreshSelectedCarLocationAsync(showEmptyMessage: false);
 
         _demoTimer.Interval = (int)DemoInterval.TotalMilliseconds;
         _demoTimer.Tick += async (_, _) => await InsertDemoLocationAsync();
+
+        _recordsSearchTimer.Tick += RecordsSearchTimer_Tick;
     }
 
     private Panel CreateHeaderPanel()
@@ -205,6 +235,16 @@ public sealed class OffsiteControl : UserControl
     {
         ApplyTabStyle(_mapTrackingTabButton, _isMapTabActive);
         ApplyTabStyle(_offsiteRecordsTabButton, !_isMapTabActive);
+    }
+
+    private async void OffsiteControl_Resize(object? sender, EventArgs e)
+    {
+        if (_isMapTabActive || _recordsGrid.Columns.Count == 0) return;
+        int newPageSize = GetRecordsPageSize();
+        if (newPageSize == _pageSize) return;
+        _pageSize = newPageSize;
+        _currentPage = 1;
+        await LoadRecordsAsync();
     }
 
     private Control CreateMapTrackingLayout()
@@ -302,13 +342,14 @@ public sealed class OffsiteControl : UserControl
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(0, 0, 0, 0)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
 
         // Metrics
         TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 12, 0, 8) };
@@ -361,15 +402,7 @@ public sealed class OffsiteControl : UserControl
         searchContainer.Controls.Add(_searchBox);
         searchContainer.Click += (_, _) => _searchBox.Focus();
 
-        _typeFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-        _typeFilter.Font = FontHelper.Regular(10F);
-        _typeFilter.Items.Clear();
-        _typeFilter.Items.AddRange(["All Types", "Maintenance", "Repair", "Cleaning"]);
-        _typeFilter.SelectedIndex = 0;
-        _typeFilter.Size = new Size(180, 30);
-        _typeFilter.Location = new Point(272, 8);
-        _typeFilter.SelectedIndexChanged -= TypeFilter_SelectedIndexChanged;
-        _typeFilter.SelectedIndexChanged += TypeFilter_SelectedIndexChanged;
+        ConfigureRecordFilters();
 
         _addRecordButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _addRecordButton.Location = new Point(0, 6);
@@ -379,6 +412,7 @@ public sealed class OffsiteControl : UserControl
 
         searchRow.Controls.Add(searchContainer);
         searchRow.Controls.Add(_typeFilter);
+        searchRow.Controls.Add(_statusFilter);
         searchRow.Controls.Add(_addRecordButton);
         layout.Controls.Add(searchRow, 0, 1);
 
@@ -406,18 +440,107 @@ public sealed class OffsiteControl : UserControl
         tableCard.Controls.Add(_recordsGrid);
         tableCard.Controls.Add(_emptyStateLabel);
         layout.Controls.Add(tableCard, 0, 3);
+        layout.Controls.Add(CreatePaginationPanel(), 0, 4);
 
         return layout;
     }
 
-    private async void SearchBox_TextChanged(object? sender, EventArgs e)
+    private Panel CreatePaginationPanel()
     {
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+
+        _prevPageButton.Location = new Point(0, 8);
+        _prevPageButton.Click -= PrevPageButton_Click;
+        _prevPageButton.Click += PrevPageButton_Click;
+
+        _nextPageButton.Location = new Point(90, 8);
+        _nextPageButton.Click -= NextPageButton_Click;
+        _nextPageButton.Click += NextPageButton_Click;
+
+        _paginationLabel.AutoSize = false;
+        _paginationLabel.Location = new Point(180, 8);
+        _paginationLabel.Size = new Size(260, 32);
+        _paginationLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _paginationLabel.Font = FontHelper.Regular(9.5F);
+        _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
+
+        panel.Controls.Add(_prevPageButton);
+        panel.Controls.Add(_nextPageButton);
+        panel.Controls.Add(_paginationLabel);
+        return panel;
+    }
+
+    private void ConfigureRecordFilters()
+    {
+        string? selectedType = _typeFilter.SelectedItem?.ToString();
+        string? selectedStatus = _statusFilter.SelectedItem?.ToString();
+
+        _isInitializingRecordFilters = true;
+
+        _typeFilter.SelectedIndexChanged -= TypeFilter_SelectedIndexChanged;
+        _typeFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+        _typeFilter.Font = FontHelper.Regular(10F);
+        _typeFilter.Items.Clear();
+        _typeFilter.Items.AddRange(["All Types", "Maintenance", "Repair", "Cleaning"]);
+        _typeFilter.SelectedItem = IsComboValueAvailable(_typeFilter, selectedType) ? selectedType : "All Types";
+        _typeFilter.Size = new Size(180, 30);
+        _typeFilter.Location = new Point(272, 8);
+
+        _statusFilter.SelectedIndexChanged -= StatusFilter_SelectedIndexChanged;
+        _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+        _statusFilter.Font = FontHelper.Regular(10F);
+        _statusFilter.Items.Clear();
+        _statusFilter.Items.AddRange(["All Status", "Ongoing", "Completed", "Cancelled"]);
+        _statusFilter.SelectedItem = IsComboValueAvailable(_statusFilter, selectedStatus) ? selectedStatus : "All Status";
+        _statusFilter.Size = new Size(160, 30);
+        _statusFilter.Location = new Point(464, 8);
+
+        _isInitializingRecordFilters = false;
+
+        _typeFilter.SelectedIndexChanged += TypeFilter_SelectedIndexChanged;
+        _statusFilter.SelectedIndexChanged += StatusFilter_SelectedIndexChanged;
+    }
+
+    private static bool IsComboValueAvailable(ComboBox comboBox, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        foreach (object? item in comboBox.Items)
+        {
+            if (string.Equals(item?.ToString(), value, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private void SearchBox_TextChanged(object? sender, EventArgs e)
+    {
+        if (_isInitializingRecordFilters) return;
+
         _currentPage = 1;
+        _recordsSearchTimer.Stop();
+        _recordsSearchTimer.Start();
+    }
+
+    private async void RecordsSearchTimer_Tick(object? sender, EventArgs e)
+    {
+        _recordsSearchTimer.Stop();
         await LoadRecordsAsync();
     }
 
     private async void TypeFilter_SelectedIndexChanged(object? sender, EventArgs e)
     {
+        if (_isInitializingRecordFilters) return;
+
+        _currentPage = 1;
+        await LoadRecordsAsync();
+    }
+
+    private async void StatusFilter_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_isInitializingRecordFilters) return;
+
         _currentPage = 1;
         await LoadRecordsAsync();
     }
@@ -427,9 +550,25 @@ public sealed class OffsiteControl : UserControl
         await AddRecordAsync();
     }
 
+    private async void PrevPageButton_Click(object? sender, EventArgs e)
+    {
+        if (_currentPage <= 1) return;
+        _currentPage--;
+        await LoadRecordsAsync();
+    }
+
+    private async void NextPageButton_Click(object? sender, EventArgs e)
+    {
+        int totalPages = Math.Max(1, (int)Math.Ceiling(_totalItems / (double)_pageSize));
+        if (_currentPage >= totalPages) return;
+        _currentPage++;
+        await LoadRecordsAsync();
+    }
+
     private async void RecordsSubTabButton_Click(object? sender, EventArgs e)
     {
         _showArchivedRecords = false;
+        _currentPage = 1;
         UpdateSubTabStyles();
         await LoadRecordsAsync();
     }
@@ -437,6 +576,7 @@ public sealed class OffsiteControl : UserControl
     private async void ArchivedSubTabButton_Click(object? sender, EventArgs e)
     {
         _showArchivedRecords = true;
+        _currentPage = 1;
         UpdateSubTabStyles();
         await LoadRecordsAsync();
     }
@@ -501,8 +641,9 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.Columns.Add("Status", "Status");
         _recordsGrid.Columns.Add("Dates", "Date Range");
         _recordsGrid.Columns.Add("Location", "Location");
-        _recordsGrid.Columns.Add("Contact", "Contact");
-        _recordsGrid.Columns.Add("Cost", "Est. Cost");
+        _recordsGrid.Columns.Add("ContactPerson", "Contact Person");
+        _recordsGrid.Columns.Add("ContactNumber", "Contact Number");
+        _recordsGrid.Columns.Add("AmountPaid", "Amount Paid");
         _recordsGrid.Columns.Add("Actions", "Actions");
 
         UpdateRecordsGridColumnLayout();
@@ -531,8 +672,9 @@ public sealed class OffsiteControl : UserControl
             SetColumnWidth("Status", 110);
             SetColumnWidth("Dates", 130);
             SetColumnWidth("Location", 160);
-            SetColumnWidth("Contact", 170);
-            SetColumnWidth("Cost", 110);
+            SetColumnWidth("ContactPerson", 150);
+            SetColumnWidth("ContactNumber", 135);
+            SetColumnWidth("AmountPaid", 120);
             SetColumnWidth("Actions", 330);
             return;
         }
@@ -544,8 +686,9 @@ public sealed class OffsiteControl : UserControl
         SetColumnSizing("Status", 100, 90);
         SetColumnSizing("Dates", 120, 110);
         SetColumnSizing("Location", 160, 120);
-        SetColumnSizing("Contact", 170, 130);
-        SetColumnSizing("Cost", 95, 85);
+        SetColumnSizing("ContactPerson", 130, 110);
+        SetColumnSizing("ContactNumber", 120, 105);
+        SetColumnSizing("AmountPaid", 105, 95);
         SetColumnSizing("Actions", 310, 280);
     }
 
@@ -782,10 +925,39 @@ public sealed class OffsiteControl : UserControl
 
     private async Task LoadRecordsAsync()
     {
+        if (_isLoadingRecords)
+        {
+            _pendingRecordsReload = true;
+            return;
+        }
+
+        _isLoadingRecords = true;
         try
         {
-            var items = await _offsiteService.GetListAsync(_searchBox.Text, null, _typeFilter.SelectedIndex > 0 ? _typeFilter.SelectedItem?.ToString() : null, _showArchivedRecords, _currentPage, 15);
-            _totalItems = await _offsiteService.CountAsync(_searchBox.Text, null, _typeFilter.SelectedIndex > 0 ? _typeFilter.SelectedItem?.ToString() : null, _showArchivedRecords);
+            do
+            {
+                _pendingRecordsReload = false;
+                await LoadRecordsCoreAsync();
+            }
+            while (_pendingRecordsReload);
+        }
+        finally
+        {
+            _isLoadingRecords = false;
+        }
+    }
+
+    private async Task LoadRecordsCoreAsync()
+    {
+        try
+        {
+            _pageSize = GetRecordsPageSize();
+            string? status = _statusFilter.SelectedIndex > 0 ? _statusFilter.SelectedItem?.ToString() : null;
+            string? type = _typeFilter.SelectedIndex > 0 ? _typeFilter.SelectedItem?.ToString() : null;
+            _totalItems = await _offsiteService.CountAsync(_searchBox.Text, status, type, _showArchivedRecords);
+            int totalPages = Math.Max(1, (int)Math.Ceiling(_totalItems / (double)_pageSize));
+            if (_currentPage > totalPages) _currentPage = totalPages;
+            var items = await _offsiteService.GetListAsync(_searchBox.Text, status, type, _showArchivedRecords, _currentPage, _pageSize);
 
             _recordsGrid.Rows.Clear();
             foreach (var item in items)
@@ -795,7 +967,8 @@ public sealed class OffsiteControl : UserControl
                     : $"{item.StartDate:MMM d} - {item.CompletedDate?.ToString("MMM d") ?? "Cancelled"}";
 
                 string location = string.IsNullOrWhiteSpace(item.LocationName) ? "-" : item.LocationName;
-                string contact = FormatContact(item.ContactPerson, item.ContactNumber);
+                string contactPerson = string.IsNullOrWhiteSpace(item.ContactPerson) ? "-" : item.ContactPerson.Trim();
+                string contactNumber = string.IsNullOrWhiteSpace(item.ContactNumber) ? "-" : item.ContactNumber.Trim();
 
                 int rowIndex = _recordsGrid.Rows.Add(
                     $"{item.CarName}\n{item.PlateNumber}",
@@ -803,27 +976,32 @@ public sealed class OffsiteControl : UserControl
                     item.Status,
                     dates,
                     location,
-                    contact,
-                    $"₱{item.EstimatedCost:N0}",
+                    contactPerson,
+                    contactNumber,
+                    $"\u20B1{item.ActualCost:N2}",
                     string.Empty // Actions column is custom painted
                 );
                 
                 _recordsGrid.Rows[rowIndex].Tag = item;
             }
             _emptyStateLabel.Visible = !items.Any();
+            UpdatePagination(totalPages);
             UpdateMetrics();
             UpdateRecordsGridColumnLayout();
         }
         catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load records: {ex.Message}"); }
     }
 
-    private static string FormatContact(string? contactPerson, string? contactNumber)
+    private int GetRecordsPageSize()
     {
-        bool hasPerson = !string.IsNullOrWhiteSpace(contactPerson);
-        bool hasNumber = !string.IsNullOrWhiteSpace(contactNumber);
-        if (!hasPerson && !hasNumber) return "-";
-        if (hasPerson && hasNumber) return $"{contactPerson}\n{contactNumber}";
-        return hasPerson ? contactPerson!.Trim() : contactNumber!.Trim();
+        return Width >= 1200 ? 13 : 4;
+    }
+
+    private void UpdatePagination(int totalPages)
+    {
+        _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({_totalItems} records)";
+        _prevPageButton.Enabled = _currentPage > 1;
+        _nextPageButton.Enabled = _currentPage < totalPages;
     }
 
     private void UpdateMetrics() => _currentlyOffsiteCard.SetMetric(IconChar.LocationDot, "Currently Offsite", _totalItems.ToString(), "Cars", ThemeHelper.Primary);
@@ -835,12 +1013,12 @@ public sealed class OffsiteControl : UserControl
         button.FlatAppearance.BorderSize = 0; return button;
     }
 
-    private void ShowDetails(int recordId, bool viewOnly) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, viewOnly); if (form.ShowDialog() == DialogResult.OK) _ = LoadRecordsAsync(); }
-    private async Task CompleteRecord(int recordId) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, isCompletion: true); if (form.ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
-    private async Task CancelRecord(int recordId) { if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); await LoadRecordsAsync(); } }
-    private async Task ArchiveRecord(int recordId) { await _offsiteService.ArchiveAsync(recordId); await LoadRecordsAsync(); }
-    private async Task RestoreRecord(int recordId) { await _offsiteService.RestoreAsync(recordId); await LoadRecordsAsync(); }
-    private async Task AddRecordAsync() { using var form = new OffsiteRecordDetailsForm(_currentUserId); if (form.ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
+    private void ShowDetails(int recordId, bool viewOnly) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, viewOnly); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; _ = LoadRecordsAsync(); } }
+    private async Task CompleteRecord(int recordId) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, isCompletion: true); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; await LoadRecordsAsync(); } }
+    private async Task CancelRecord(int recordId) { if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); } }
+    private async Task ArchiveRecord(int recordId) { await _offsiteService.ArchiveAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); }
+    private async Task RestoreRecord(int recordId) { await _offsiteService.RestoreAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); }
+    private async Task AddRecordAsync() { using var form = new OffsiteRecordDetailsForm(_currentUserId); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; await LoadRecordsAsync(); } }
 
     private async Task InitializeMapAsync()
     {
