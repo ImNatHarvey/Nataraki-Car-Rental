@@ -160,11 +160,11 @@ public sealed class LoginForm : Form
         AcceptButton = loginButton;
     }
 
-    private void LoginButton_Click(object? sender, EventArgs e)
+    private async void LoginButton_Click(object? sender, EventArgs e)
     {
         try
         {
-            User? user = _authService.Login(_usernameTextBox.Text, _passwordTextBox.Text);
+            User? user = await _authService.LoginAsync(_usernameTextBox.Text, _passwordTextBox.Text);
 
             if (user is null)
             {

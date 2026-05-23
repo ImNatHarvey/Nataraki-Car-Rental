@@ -15,6 +15,8 @@ public static class DatabaseInitializer
         CreateDatabaseIfMissing();
         CreateTablesIfMissing();
         SeedRoles();
+        SeedPermissions();
+        SeedRolePermissions();
         SeedDefaultDemoOwner();
     }
 
@@ -70,10 +72,36 @@ public static class DatabaseInitializer
                 CREATE TABLE dbo.Roles
                 (
                     RoleId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    RoleName nvarchar(50) NOT NULL UNIQUE,
-                    Description nvarchar(255) NULL,
-                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime()
+                    RoleName nvarchar(100) NOT NULL UNIQUE,
+                    Description nvarchar(300) NULL,
+                    IsSystemRole bit NOT NULL DEFAULT 0,
+                    IsActive bit NOT NULL DEFAULT 1,
+                    IsArchived bit NOT NULL DEFAULT 0,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
+                    UpdatedAt datetime2 NULL
                 );
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Roles', N'IsSystemRole') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Roles ADD IsSystemRole bit NOT NULL DEFAULT 0;
+                END;
+                IF COL_LENGTH(N'dbo.Roles', N'IsActive') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Roles ADD IsActive bit NOT NULL DEFAULT 1;
+                END;
+                IF COL_LENGTH(N'dbo.Roles', N'IsArchived') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Roles ADD IsArchived bit NOT NULL DEFAULT 0;
+                END;
+                IF COL_LENGTH(N'dbo.Roles', N'UpdatedAt') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Roles ADD UpdatedAt datetime2 NULL;
+                END;
             END;
             """);
 
@@ -85,18 +113,66 @@ public static class DatabaseInitializer
                 (
                     UserId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     RoleId int NOT NULL,
-                    Username nvarchar(50) NOT NULL UNIQUE,
-                    PasswordHash nvarchar(255) NOT NULL,
+                    Username nvarchar(100) NOT NULL UNIQUE,
+                    PasswordHash nvarchar(max) NOT NULL,
                     FirstName nvarchar(100) NOT NULL,
                     LastName nvarchar(100) NOT NULL,
                     Email nvarchar(150) NULL,
                     PhoneNumber nvarchar(30) NULL,
                     IsActive bit NOT NULL DEFAULT 1,
+                    IsOwner bit NOT NULL DEFAULT 0,
                     IsArchived bit NOT NULL DEFAULT 0,
                     CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
                     UpdatedAt datetime2 NULL,
+                    LastLoginAt datetime2 NULL,
                     ArchivedAt datetime2 NULL,
                     CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleId) REFERENCES dbo.Roles(RoleId)
+                );
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Users', N'IsOwner') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Users ADD IsOwner bit NOT NULL DEFAULT 0;
+                END;
+                IF COL_LENGTH(N'dbo.Users', N'LastLoginAt') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Users ADD LastLoginAt datetime2 NULL;
+                END;
+            END;
+            """);
+
+        // 2.1 Permissions Table
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Permissions', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.Permissions
+                (
+                    PermissionId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    PermissionKey nvarchar(150) NOT NULL UNIQUE,
+                    PermissionName nvarchar(150) NOT NULL,
+                    ModuleName nvarchar(100) NOT NULL,
+                    Description nvarchar(300) NULL,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime()
+                );
+            END;
+            """);
+
+        // 2.2 RolePermissions Table
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.RolePermissions', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.RolePermissions
+                (
+                    RoleId int NOT NULL,
+                    PermissionId int NOT NULL,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
+                    CONSTRAINT PK_RolePermissions PRIMARY KEY (RoleId, PermissionId),
+                    CONSTRAINT FK_RolePermissions_Roles FOREIGN KEY (RoleId) REFERENCES dbo.Roles(RoleId),
+                    CONSTRAINT FK_RolePermissions_Permissions FOREIGN KEY (PermissionId) REFERENCES dbo.Permissions(PermissionId)
                 );
             END;
             """);
@@ -1317,20 +1393,20 @@ public static class DatabaseInitializer
 
     private static void SeedRoles()
     {
-        InsertRoleIfMissing("Owner", "Full system owner access");
-        InsertRoleIfMissing("Admin", "Administrative access");
-        InsertRoleIfMissing("Manager", "Manages daily operations and reports");
-        InsertRoleIfMissing("Agent", "Handles bookings and customer transactions");
-        InsertRoleIfMissing("Staff", "Basic staff access");
+        InsertRoleIfMissing("Owner", "Full system owner access", isSystemRole: true);
+        InsertRoleIfMissing("Admin", "Administrative access", isSystemRole: true);
+        InsertRoleIfMissing("Manager", "Manages daily operations and reports", isSystemRole: true);
+        InsertRoleIfMissing("Agent", "Handles bookings and customer transactions", isSystemRole: true);
+        InsertRoleIfMissing("Staff", "Basic staff access", isSystemRole: true);
     }
 
-    private static void InsertRoleIfMissing(string roleName, string description)
+    private static void InsertRoleIfMissing(string roleName, string description, bool isSystemRole = false)
     {
         const string sql = """
             IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE RoleName = @RoleName)
             BEGIN
-                INSERT INTO dbo.Roles (RoleName, Description)
-                VALUES (@RoleName, @Description);
+                INSERT INTO dbo.Roles (RoleName, Description, IsSystemRole)
+                VALUES (@RoleName, @Description, @IsSystemRole);
             END;
             """;
 
@@ -1340,7 +1416,141 @@ public static class DatabaseInitializer
         using SqlCommand command = new(sql, connection);
         command.Parameters.AddWithValue("@RoleName", roleName);
         command.Parameters.AddWithValue("@Description", description);
+        command.Parameters.AddWithValue("@IsSystemRole", isSystemRole);
         command.ExecuteNonQuery();
+    }
+
+    private static void SeedPermissions()
+    {
+        // Overview
+        InsertPermissionIfMissing("Overview.View", "View Dashboard", "Overview");
+
+        // Fleet Schedule
+        InsertPermissionIfMissing("FleetSchedule.View", "View Fleet Schedule", "Fleet Schedule");
+        InsertPermissionIfMissing("FleetSchedule.Create", "Create Schedule", "Fleet Schedule");
+        InsertPermissionIfMissing("FleetSchedule.Edit", "Edit Schedule", "Fleet Schedule");
+        InsertPermissionIfMissing("FleetSchedule.Cancel", "Cancel Schedule", "Fleet Schedule");
+
+        // Transactions
+        InsertPermissionIfMissing("Transactions.View", "View Transactions", "Transactions");
+        InsertPermissionIfMissing("Transactions.Create", "Create Transaction", "Transactions");
+        InsertPermissionIfMissing("Transactions.Edit", "Edit Transaction", "Transactions");
+        InsertPermissionIfMissing("Transactions.StartRental", "Start Rental", "Transactions");
+        InsertPermissionIfMissing("Transactions.AddPayment", "Add Payment", "Transactions");
+        InsertPermissionIfMissing("Transactions.Complete", "Complete Transaction", "Transactions");
+        InsertPermissionIfMissing("Transactions.Cancel", "Cancel Transaction", "Transactions");
+        InsertPermissionIfMissing("Transactions.ArchiveRestore", "Archive/Restore Transactions", "Transactions");
+
+        // Customers
+        InsertPermissionIfMissing("Customers.View", "View Customers", "Customers");
+        InsertPermissionIfMissing("Customers.Create", "Add Customer", "Customers");
+        InsertPermissionIfMissing("Customers.Edit", "Edit Customer", "Customers");
+        InsertPermissionIfMissing("Customers.Blacklist", "Manage Blacklist", "Customers");
+        InsertPermissionIfMissing("Customers.ArchiveRestore", "Archive/Restore Customers", "Customers");
+
+        // Car Garage
+        InsertPermissionIfMissing("Cars.View", "View Car Garage", "Car Garage");
+        InsertPermissionIfMissing("Cars.Create", "Add Car", "Car Garage");
+        InsertPermissionIfMissing("Cars.Edit", "Edit Car", "Car Garage");
+        InsertPermissionIfMissing("Cars.ArchiveRestore", "Archive/Restore Cars", "Car Garage");
+
+        // Offsite
+        InsertPermissionIfMissing("Offsite.View", "View Offsite Records", "Offsite");
+        InsertPermissionIfMissing("Offsite.Create", "Create Offsite Record", "Offsite");
+        InsertPermissionIfMissing("Offsite.Edit", "Edit Offsite Record", "Offsite");
+        InsertPermissionIfMissing("Offsite.Complete", "Complete Offsite Record", "Offsite");
+        InsertPermissionIfMissing("Offsite.Cancel", "Cancel Offsite Record", "Offsite");
+        InsertPermissionIfMissing("Offsite.ArchiveRestore", "Archive/Restore Offsite", "Offsite");
+        InsertPermissionIfMissing("Offsite.MapTracking", "Access Map Tracking", "Offsite");
+
+        // Activity Log
+        InsertPermissionIfMissing("ActivityLog.View", "View Activity Logs", "Activity Log");
+
+        // Reports
+        InsertPermissionIfMissing("Reports.View", "View Reports", "Reports");
+        InsertPermissionIfMissing("Reports.Export", "Export Reports", "Reports");
+
+        // Manage System
+        InsertPermissionIfMissing("ManageSystem.View", "View Manage System", "Manage System");
+        InsertPermissionIfMissing("ManageSystem.Settings", "Edit System Settings", "Manage System");
+        InsertPermissionIfMissing("ManageSystem.Branding", "Edit Branding & Theme", "Manage System");
+        InsertPermissionIfMissing("ManageSystem.Users", "Manage Users", "Manage System");
+        InsertPermissionIfMissing("ManageSystem.Roles", "Manage Roles & Permissions", "Manage System");
+    }
+
+    private static void InsertPermissionIfMissing(string key, string name, string module)
+    {
+        const string sql = """
+            IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE PermissionKey = @Key)
+            BEGIN
+                INSERT INTO dbo.Permissions (PermissionKey, PermissionName, ModuleName)
+                VALUES (@Key, @Name, @Module);
+            END;
+            """;
+
+        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
+        connection.Open();
+
+        using SqlCommand command = new(sql, connection);
+        command.Parameters.AddWithValue("@Key", key);
+        command.Parameters.AddWithValue("@Name", name);
+        command.Parameters.AddWithValue("@Module", module);
+        command.ExecuteNonQuery();
+    }
+
+    private static void SeedRolePermissions()
+    {
+        // 1. Owner - All Permissions
+        ExecuteDatabaseCommand("""
+            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
+            SELECT r.RoleId, p.PermissionId
+            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
+            WHERE r.RoleName = N'Owner'
+              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
+            """);
+
+        // 2. Admin - Most Permissions
+        ExecuteDatabaseCommand("""
+            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
+            SELECT r.RoleId, p.PermissionId
+            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
+            WHERE r.RoleName = N'Admin'
+              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
+            """);
+
+        // 3. Manager
+        ExecuteDatabaseCommand("""
+            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
+            SELECT r.RoleId, p.PermissionId
+            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
+            WHERE r.RoleName = N'Manager'
+              AND p.ModuleName NOT IN (N'Manage System')
+              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
+            """);
+
+        // 4. Agent
+        ExecuteDatabaseCommand("""
+            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
+            SELECT r.RoleId, p.PermissionId
+            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
+            WHERE r.RoleName = N'Agent'
+              AND p.ModuleName NOT IN (N'Manage System', N'Activity Log')
+              AND p.PermissionKey NOT IN (N'Reports.Export', N'Transactions.ArchiveRestore', N'Customers.ArchiveRestore', N'Cars.ArchiveRestore', N'Offsite.ArchiveRestore')
+              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
+            """);
+
+        // 5. Staff
+        ExecuteDatabaseCommand("""
+            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
+            SELECT r.RoleId, p.PermissionId
+            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
+            WHERE r.RoleName = N'Staff'
+              AND p.ModuleName IN (N'Overview', N'Fleet Schedule', N'Transactions', N'Customers', N'Car Garage', N'Offsite')
+              AND p.PermissionKey NOT LIKE N'%.ArchiveRestore'
+              AND p.PermissionKey NOT LIKE N'%.Cancel'
+              AND p.PermissionKey NOT IN (N'Transactions.AddPayment', N'Transactions.Complete')
+              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
+            """);
     }
 
     private static void SeedDefaultDemoOwner()
@@ -1355,8 +1565,10 @@ public static class DatabaseInitializer
                     PasswordHash,
                     FirstName,
                     LastName,
-                    Email,
-                    PhoneNumber
+                    IsActive,
+                    IsOwner,
+                    IsArchived,
+                    CreatedAt
                 )
                 SELECT
                     RoleId,
@@ -1364,8 +1576,10 @@ public static class DatabaseInitializer
                     @PasswordHash,
                     @FirstName,
                     @LastName,
-                    NULL,
-                    NULL
+                    1,
+                    1,
+                    0,
+                    sysdatetime()
                 FROM dbo.Roles
                 WHERE RoleName = N'Owner';
             END;

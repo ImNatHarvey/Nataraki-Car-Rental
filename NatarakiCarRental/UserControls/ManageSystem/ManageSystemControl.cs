@@ -1,7 +1,9 @@
 using FontAwesome.Sharp;
+using NatarakiCarRental.Forms.ManageSystem;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
+using System.Data;
 
 namespace NatarakiCarRental.UserControls.ManageSystem;
 
@@ -9,6 +11,8 @@ public sealed class ManageSystemControl : UserControl
 {
     private readonly int _currentUserId;
     private readonly SystemSettingsService _service = new();
+    private readonly UserService _userService = new();
+    private readonly RoleService _roleService = new();
     private readonly TabControl _tabs = new();
 
     private readonly TextBox _businessNameInput = new();
@@ -34,6 +38,16 @@ public sealed class ManageSystemControl : UserControl
         { "Dark", "#111827" }
     };
 
+    // Users Tab Controls
+    private readonly DataGridView _usersGrid = CreateGrid();
+    private readonly TextBox _userSearchInput = ControlFactory.CreateTextBox(200);
+    private readonly ComboBox _roleFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+    private readonly ComboBox _statusFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
+    private int _userPageSize = 13;
+
+    // Roles Tab Controls
+    private readonly DataGridView _rolesGrid = CreateGrid();
+
     public ManageSystemControl(int currentUserId)
     {
         _currentUserId = currentUserId;
@@ -42,6 +56,9 @@ public sealed class ManageSystemControl : UserControl
         Padding = new Padding(32);
         InitializeLayout();
         LoadSettings();
+        
+        _ = LoadUsersAsync();
+        _ = LoadRolesAsync();
     }
 
     private void InitializeLayout()
@@ -59,16 +76,28 @@ public sealed class ManageSystemControl : UserControl
         _tabs.Font = FontHelper.SemiBold(10F);
         
         TabPage settingsTab = new() { Text = "System Settings", BackColor = ThemeHelper.ContentBackground, Padding = new Padding(16) };
-        settingsTab.Controls.Add(CreateSystemSettingsPanel());
+        if (AccessControlService.HasPermission("ManageSystem.Settings"))
+            settingsTab.Controls.Add(CreateSystemSettingsPanel());
+        else
+            settingsTab.Controls.Add(CreatePlaceholder("You do not have permission to edit system settings."));
 
         TabPage brandingTab = new() { Text = "Branding & Theme", BackColor = ThemeHelper.ContentBackground, Padding = new Padding(16) };
-        brandingTab.Controls.Add(CreateBrandingPanel());
+        if (AccessControlService.HasPermission("ManageSystem.Branding"))
+            brandingTab.Controls.Add(CreateBrandingPanel());
+        else
+            brandingTab.Controls.Add(CreatePlaceholder("You do not have permission to edit branding settings."));
 
         TabPage usersTab = new() { Text = "Users", BackColor = ThemeHelper.ContentBackground, Padding = new Padding(16) };
-        usersTab.Controls.Add(CreatePlaceholder("User Management will be implemented in Manage System Phase 2."));
+        if (AccessControlService.HasPermission("ManageSystem.Users"))
+            usersTab.Controls.Add(CreateUsersPanel());
+        else
+            usersTab.Controls.Add(CreatePlaceholder("You do not have permission to manage users."));
 
         TabPage rolesTab = new() { Text = "Roles & Permissions", BackColor = ThemeHelper.ContentBackground, Padding = new Padding(16) };
-        rolesTab.Controls.Add(CreatePlaceholder("Role-Based Access Control will be implemented in Manage System Phase 2."));
+        if (AccessControlService.HasPermission("ManageSystem.Roles"))
+            rolesTab.Controls.Add(CreateRolesPanel());
+        else
+            rolesTab.Controls.Add(CreatePlaceholder("You do not have permission to manage roles."));
 
         _tabs.TabPages.Add(settingsTab);
         _tabs.TabPages.Add(brandingTab);
@@ -77,6 +106,167 @@ public sealed class ManageSystemControl : UserControl
 
         Controls.Add(_tabs);
         Controls.Add(titleLabel);
+
+        Resize += (_, _) => { _userPageSize = Height > 700 ? 13 : 4; _ = LoadUsersAsync(); };
+    }
+
+    private Panel CreateUsersPanel()
+    {
+        Panel panel = new() { Dock = DockStyle.Fill };
+        
+        Panel toolbar = new() { Dock = DockStyle.Top, Height = 50, Padding = new Padding(0, 0, 0, 10) };
+        
+        _userSearchInput.PlaceholderText = "Search users...";
+        _userSearchInput.Location = new Point(0, 5);
+        _userSearchInput.TextChanged += async (_, _) => await LoadUsersAsync();
+
+        _roleFilter.Items.Add("All Roles");
+        _roleFilter.SelectedIndex = 0;
+        _roleFilter.Location = new Point(210, 5);
+        _roleFilter.SelectedIndexChanged += async (_, _) => await LoadUsersAsync();
+
+        _statusFilter.Items.AddRange(["All Status", "Active", "Inactive"]);
+        _statusFilter.SelectedIndex = 0;
+        _statusFilter.Location = new Point(370, 5);
+        _statusFilter.SelectedIndexChanged += async (_, _) => await LoadUsersAsync();
+
+        Button addUserBtn = ControlFactory.CreatePrimaryButton("Add User", 120, 32);
+        addUserBtn.Location = new Point(500, 4);
+        addUserBtn.Click += async (_, _) => {
+            using var form = new UserDetailsForm(_currentUserId);
+            if (form.ShowDialog() == DialogResult.OK) await LoadUsersAsync();
+        };
+
+        toolbar.Controls.Add(_userSearchInput);
+        toolbar.Controls.Add(_roleFilter);
+        toolbar.Controls.Add(_statusFilter);
+        toolbar.Controls.Add(addUserBtn);
+
+        _usersGrid.CellContentClick += UsersGrid_CellContentClick;
+        panel.Controls.Add(_usersGrid);
+        panel.Controls.Add(toolbar);
+
+        return panel;
+    }
+
+    private Panel CreateRolesPanel()
+    {
+        Panel panel = new() { Dock = DockStyle.Fill };
+        Panel toolbar = new() { Dock = DockStyle.Top, Height = 50, Padding = new Padding(0, 0, 0, 10) };
+
+        Button addRoleBtn = ControlFactory.CreatePrimaryButton("Add Role", 120, 32);
+        addRoleBtn.Location = new Point(0, 4);
+        addRoleBtn.Click += async (_, _) => {
+            using var form = new RoleDetailsForm(_currentUserId);
+            if (form.ShowDialog() == DialogResult.OK) await LoadRolesAsync();
+        };
+
+        toolbar.Controls.Add(addRoleBtn);
+        _rolesGrid.CellContentClick += RolesGrid_CellContentClick;
+
+        panel.Controls.Add(_rolesGrid);
+        panel.Controls.Add(toolbar);
+        return panel;
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            bool? isActive = _statusFilter.SelectedIndex == 1 ? true : (_statusFilter.SelectedIndex == 2 ? false : null);
+            var users = await _userService.SearchUsersAsync(_userSearchInput.Text, null, isActive);
+            
+            _usersGrid.Rows.Clear();
+            if (_usersGrid.Columns.Count == 0)
+            {
+                _usersGrid.Columns.Add("FullName", "Full Name");
+                _usersGrid.Columns.Add("Username", "Username");
+                _usersGrid.Columns.Add("Role", "Role");
+                _usersGrid.Columns.Add("Status", "Status");
+                _usersGrid.Columns.Add("Actions", "Actions");
+            }
+
+            foreach (var user in users.Take(_userPageSize))
+            {
+                _usersGrid.Rows.Add(
+                    user.FullName ?? string.Empty, 
+                    user.Username ?? string.Empty, 
+                    user.RoleName ?? string.Empty, 
+                    user.IsActive ? "Active" : "Inactive", 
+                    "Edit Account");
+                _usersGrid.Rows[_usersGrid.Rows.Count - 1].Tag = user;
+            }
+        }
+        catch (Exception ex) { MessageBoxHelper.ShowError(ex.Message); }
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        try
+        {
+            var roles = await _roleService.GetAllRolesAsync();
+            
+            _roleFilter.Items.Clear();
+            _roleFilter.Items.Add("All Roles");
+            foreach (var r in roles.Where(r => r.IsActive)) _roleFilter.Items.Add(r.RoleName);
+            _roleFilter.SelectedIndex = 0;
+
+            _rolesGrid.Rows.Clear();
+            if (_rolesGrid.Columns.Count == 0)
+            {
+                _rolesGrid.Columns.Add("RoleName", "Role Name");
+                _rolesGrid.Columns.Add("Description", "Description");
+                _rolesGrid.Columns.Add("Status", "Status");
+                _rolesGrid.Columns.Add("Actions", "Actions");
+            }
+
+            foreach (var role in roles)
+            {
+                _rolesGrid.Rows.Add(role.RoleName, role.Description, role.IsActive ? "Active" : "Inactive", "Edit Permissions");
+                _rolesGrid.Rows[_rolesGrid.Rows.Count - 1].Tag = role;
+            }
+        }
+        catch (Exception ex) { MessageBoxHelper.ShowError(ex.Message); }
+    }
+
+    private async void UsersGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || _usersGrid.Rows[e.RowIndex].Tag is not UserListItem user) return;
+
+        if (_usersGrid.Columns[e.ColumnIndex].Name == "Actions")
+        {
+            using var form = new UserDetailsForm(_currentUserId, user.UserId);
+            if (form.ShowDialog() == DialogResult.OK) await LoadUsersAsync();
+        }
+    }
+
+    private async void RolesGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || _rolesGrid.Rows[e.RowIndex].Tag is not Role role) return;
+
+        if (_rolesGrid.Columns[e.ColumnIndex].Name == "Actions")
+        {
+            using var form = new RoleDetailsForm(_currentUserId, role.RoleId);
+            if (form.ShowDialog() == DialogResult.OK) await LoadRolesAsync();
+        }
+    }
+
+    private static DataGridView CreateGrid()
+    {
+        DataGridView grid = new()
+        {
+            Dock = DockStyle.Fill,
+            BackgroundColor = Color.White,
+            BorderStyle = BorderStyle.None,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            AllowUserToAddRows = false,
+            ReadOnly = true,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        };
+        grid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
+        grid.DefaultCellStyle.Font = FontHelper.Regular(9F);
+        return grid;
     }
 
     private Panel CreateSystemSettingsPanel()
@@ -270,7 +460,7 @@ public sealed class ManageSystemControl : UserControl
 
         await _service.SaveSystemSettingsAsync(model, _currentUserId);
         await AppBrandingManager.LoadSettingsAsync();
-        MessageBoxHelper.ShowInfo("System settings saved successfully.");
+        MessageBoxHelper.ShowSuccess("System settings saved successfully.");
     }
 
     private async Task SaveBrandingAsync()
@@ -285,13 +475,7 @@ public sealed class ManageSystemControl : UserControl
 
             await _service.SaveBrandingSettingsAsync(model, _currentUserId);
             await AppBrandingManager.LoadSettingsAsync();
-            MessageBoxHelper.ShowInfo("Branding and theme saved. Some changes may require re-opening the application.");
-            
-            // Reload the form to apply theme
-            if (ParentForm is Forms.Main.MainForm main)
-            {
-                // Trigger a refresh logic if needed
-            }
+            MessageBoxHelper.ShowSuccess("Branding and theme saved. Some changes may require re-opening the application.");
         }
     }
 
@@ -302,7 +486,7 @@ public sealed class ManageSystemControl : UserControl
             await _service.ResetDefaultsAsync(_currentUserId);
             await AppBrandingManager.LoadSettingsAsync();
             LoadSettings();
-            MessageBoxHelper.ShowInfo("Settings reset to defaults.");
+            MessageBoxHelper.ShowSuccess("Settings reset to defaults.");
         }
     }
 

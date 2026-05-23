@@ -1,6 +1,7 @@
 using FontAwesome.Sharp;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
+using NatarakiCarRental.Services;
 using NatarakiCarRental.UserControls.ActivityLogs;
 using NatarakiCarRental.UserControls.Cars;
 using NatarakiCarRental.UserControls.Customers;
@@ -101,19 +102,22 @@ public sealed class MainForm : Form
             new("Customers", IconChar.Users, true),
             new("Car Garage", IconChar.Car, true),
             new("Offsite", IconChar.LocationDot, true),
-            new("Activity Log", IconChar.ClipboardList, true),
+            new("Activity Log", IconChar.ClipboardList, AccessControlService.HasPermission("ActivityLog.View")),
             new("Reports & Analytics", IconChar.ChartColumn, true),
-            new("Manage System", IconChar.Gear, true)
+            new("Manage System", IconChar.Gear, AccessControlService.HasPermission("ManageSystem.View"))
         ];
 
         foreach (NavigationItem menuItem in menuItems)
         {
             IconButton button = ControlFactory.CreateSidebarButton(menuItem.Text, menuItem.Icon);
-            button.Enabled = menuItem.IsImplemented;
-
+            
             if (menuItem.IsImplemented)
             {
                 button.Click += (_, _) => Navigate(menuItem.Text);
+            }
+            else
+            {
+                button.Enabled = false;
             }
 
             _navigationButtons.Add(button);
@@ -322,6 +326,7 @@ public sealed class MainForm : Form
             return;
         }
 
+        AccessControlService.Logout();
         LoggedOut?.Invoke(this, EventArgs.Empty);
         Close();
     }

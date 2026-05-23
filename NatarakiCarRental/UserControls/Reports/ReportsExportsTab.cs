@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Services;
+using NatarakiCarRental.Models;
 
 namespace NatarakiCarRental.UserControls.Reports;
 
@@ -149,6 +150,12 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
         Func<string, DateTime, DateTime, string, Task> exporter,
         Button sourceButton)
     {
+        if (!AccessControlService.HasPermission("Reports.Export"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to export reports.", "Export Reports");
+            return;
+        }
+
         if (_to < _from)
         {
             MessageBoxHelper.ShowWarning("The report end date must be after the start date.", "Export Reports");
@@ -172,7 +179,8 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
         {
             sourceButton.Enabled = false;
             Cursor = Cursors.WaitCursor;
-            await exporter(dialog.FileName, _from, _to, "System");
+            string generatedBy = AccessControlService.CurrentUser?.FullName ?? "System";
+            await exporter(dialog.FileName, _from, _to, generatedBy);
             MessageBoxHelper.ShowSuccess("Report exported successfully.", "Export Reports");
 
             if (MessageBoxHelper.ShowConfirmWarning("Open exported file?", "Export Reports"))
