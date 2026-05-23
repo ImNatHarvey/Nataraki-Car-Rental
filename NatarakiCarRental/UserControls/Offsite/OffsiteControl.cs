@@ -1014,7 +1014,15 @@ public sealed class OffsiteControl : UserControl
     }
 
     private void ShowDetails(int recordId, bool viewOnly) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, viewOnly); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; _ = LoadRecordsAsync(); } }
-    private async Task CompleteRecord(int recordId) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, isCompletion: true); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; await LoadRecordsAsync(); } }
+    private async Task CompleteRecord(int recordId)
+    {
+        using var form = new OffsiteCompletionForm(_currentUserId, recordId);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            MessageBoxHelper.ShowSuccess("Offsite record completed successfully.");
+            await LoadRecordsAsync();
+        }
+    }
     private async Task CancelRecord(int recordId) { if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); } }
     private async Task ArchiveRecord(int recordId) { await _offsiteService.ArchiveAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); }
     private async Task RestoreRecord(int recordId) { await _offsiteService.RestoreAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); }

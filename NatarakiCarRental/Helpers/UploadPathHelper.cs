@@ -101,6 +101,11 @@ public static class UploadPathHelper
         DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.PaymentsUploadFolder);
     }
 
+    public static void DeleteNewOffsiteProofIfSaveFailed(string? storedPath, string? previousPath)
+    {
+        DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.OffsiteUploadFolder);
+    }
+
     private static string? SaveUploadedFileIfSelected(
         string? sourcePath,
         string? existingPath,

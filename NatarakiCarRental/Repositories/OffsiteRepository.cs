@@ -42,7 +42,11 @@ public sealed class OffsiteRepository
                 r.CompletedDate,
                 r.EstimatedCost,
                 r.ActualCost,
-                r.ProofFilePath
+                r.ProofFilePath,
+                r.WorkResult,
+                r.FollowUpRequired,
+                r.FollowUpReason,
+                r.SuggestedNextAction
             FROM dbo.OffsiteRecords r
             INNER JOIN dbo.Cars c ON r.CarId = c.CarId
             WHERE (@IncludeArchived = 1 OR r.IsArchived = 0)
@@ -185,17 +189,22 @@ public sealed class OffsiteRepository
         }
     }
 
-    public async Task<int> CompleteAsync(int offsiteRecordId, DateTime completedDate, decimal actualCost, string? notes, IDbTransaction? transaction = null)
+    public async Task<int> CompleteAsync(CompleteOffsiteRecordRequest request, IDbTransaction? transaction = null)
     {
         const string sql = """
             UPDATE dbo.OffsiteRecords
             SET
                 Status = N'Completed',
                 CompletedDate = @CompletedDate,
-                ActualCost = @ActualCost,
-                Notes = ISNULL(@Notes, Notes),
+                ActualCost = @AmountPaid,
+                ProofFilePath = @ProofFilePath,
+                WorkResult = @WorkResult,
+                FollowUpRequired = @FollowUpRequired,
+                FollowUpReason = @FollowUpReason,
+                SuggestedNextAction = @SuggestedNextAction,
+                CompletedByUserId = @CompletedByUserId,
                 UpdatedAt = sysdatetime()
-            WHERE OffsiteRecordId = @Id
+            WHERE OffsiteRecordId = @OffsiteRecordId
               AND Status = N'Ongoing'
               AND IsArchived = 0;
             """;
@@ -203,7 +212,7 @@ public sealed class OffsiteRepository
         var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
         try
         {
-            return await connection.ExecuteAsync(sql, new { Id = offsiteRecordId, CompletedDate = completedDate, ActualCost = actualCost, Notes = notes }, transaction);
+            return await connection.ExecuteAsync(sql, request, transaction);
         }
         finally
         {

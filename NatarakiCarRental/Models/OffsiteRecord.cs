@@ -16,6 +16,11 @@ public sealed class OffsiteRecord
     public decimal EstimatedCost { get; set; }
     public decimal ActualCost { get; set; }
     public string? ProofFilePath { get; set; }
+    public string? WorkResult { get; set; }
+    public bool FollowUpRequired { get; set; }
+    public string? FollowUpReason { get; set; }
+    public string? SuggestedNextAction { get; set; }
+    public int? CompletedByUserId { get; set; }
     public string? Notes { get; set; }
     public int? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; }

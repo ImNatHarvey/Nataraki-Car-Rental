@@ -12,6 +12,7 @@ public sealed class OffsiteRecordDetailsForm : Form
     private const int FormWidth = 1060;
     private const int AddFormHeight = 760;
     private const int DetailFormHeight = 740;
+    private const int ViewFormHeight = 890;
     private const int InputWidth = 360;
     private const int WideInputWidth = 900;
     private const int InputHeight = 28;
@@ -57,6 +58,15 @@ public sealed class OffsiteRecordDetailsForm : Form
     private readonly Label _proofPathLabel = CreatePathLabel();
     private readonly Button _browseProofButton = CreateSecondaryButton("Browse", 90, InputHeight);
     private readonly Button _openProofButton = CreateSecondaryButton("Open File", 90, InputHeight);
+    private readonly Label _workResultLabel = CreateValueLabel();
+    private readonly Label _followUpRequiredLabel = CreateValueLabel();
+    private readonly Label _followUpReasonLabel = CreateValueLabel();
+    private readonly Label _auditCompletedDateLabel = CreateValueLabel();
+    private readonly Label _auditAmountPaidLabel = CreateValueLabel();
+    private readonly Label _auditProofLabel = CreateValueLabel();
+    private readonly Label _completedByLabel = CreateValueLabel();
+    private readonly Button _auditBrowseProofButton = CreateSecondaryButton("Browse", 90, InputHeight);
+    private readonly Button _auditOpenProofButton = CreateSecondaryButton("Open File", 90, InputHeight);
 
     private readonly Button _saveButton;
     private readonly Button _cancelButton;
@@ -103,7 +113,7 @@ public sealed class OffsiteRecordDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(FormWidth, _mode == FormMode.Add ? AddFormHeight : DetailFormHeight);
+        ClientSize = new Size(FormWidth, _mode == FormMode.Add ? AddFormHeight : (_mode == FormMode.View ? ViewFormHeight : DetailFormHeight));
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -135,7 +145,7 @@ public sealed class OffsiteRecordDetailsForm : Form
         });
 
         _addTabs.Location = new Point(32, 96);
-        _addTabs.Size = new Size(996, _mode == FormMode.Add ? 584 : 560);
+        _addTabs.Size = new Size(996, _mode == FormMode.Add ? 584 : (_mode == FormMode.View ? 710 : 560));
         _addTabs.Font = FontHelper.SemiBold(9F);
 
         if (_mode == FormMode.Add)
@@ -230,6 +240,12 @@ public sealed class OffsiteRecordDetailsForm : Form
         layout.Controls.Add(vehicle);
         layout.Controls.Add(details);
         layout.Controls.Add(payment);
+
+        if (_mode == FormMode.View)
+        {
+            layout.Controls.Add(CreateAuditSection(new Point(left, 517), new Size(width, 176)));
+        }
+
         return layout;
     }
 
@@ -325,6 +341,42 @@ public sealed class OffsiteRecordDetailsForm : Form
         return group;
     }
 
+    private GroupBox CreateAuditSection(Point location, Size size)
+    {
+        GroupBox group = CreateBaseSection("Completion Audit", location, size);
+        AddPositionedDisplay(group, "Completed Date", _auditCompletedDateLabel, new Point(24, 30), 170);
+        AddPositionedDisplay(group, "Work Result", _workResultLabel, new Point(250, 30), 170);
+        AddPositionedDisplay(group, "Amount Paid", _auditAmountPaidLabel, new Point(476, 30), 170);
+        AddPositionedDisplay(group, "Completed By", _completedByLabel, new Point(702, 30), 180);
+        AddPositionedDisplay(group, "Follow-up Required", _followUpRequiredLabel, new Point(24, 84), 170);
+        AddPositionedDisplay(group, "Follow-up Reason", _followUpReasonLabel, new Point(250, 84), 210);
+        AddAuditProof(group, new Point(476, 84));
+        return group;
+    }
+
+    private void AddAuditProof(Control parent, Point labelLocation)
+    {
+        Label label = new()
+        {
+            Text = "Proof / Receipt",
+            Location = labelLocation,
+            Size = new Size(180, 18),
+            Font = FontHelper.SemiBold(9F),
+            ForeColor = ThemeHelper.TextSecondary
+        };
+        _auditBrowseProofButton.Location = new Point(labelLocation.X, labelLocation.Y + 22);
+        _auditBrowseProofButton.Enabled = false;
+        _auditOpenProofButton.Location = new Point(labelLocation.X + 98, labelLocation.Y + 22);
+        _auditProofLabel.Location = new Point(labelLocation.X + 200, labelLocation.Y + 26);
+        _auditProofLabel.Size = new Size(250, 22);
+        _auditOpenProofButton.Click -= AuditOpenProofButton_Click;
+        _auditOpenProofButton.Click += AuditOpenProofButton_Click;
+        parent.Controls.Add(label);
+        parent.Controls.Add(_auditBrowseProofButton);
+        parent.Controls.Add(_auditOpenProofButton);
+        parent.Controls.Add(_auditProofLabel);
+    }
+
     private static void AddPositionedInput(Control parent, string labelText, Control input, Point labelLocation, int width)
     {
         Label label = ControlFactory.CreateInputLabel(labelText);
@@ -357,8 +409,8 @@ public sealed class OffsiteRecordDetailsForm : Form
         Label label = ControlFactory.CreateInputLabel(labelText);
         label.Location = labelLocation;
         browseButton.Location = new Point(labelLocation.X, labelLocation.Y + 22);
-        openButton.Location = new Point(labelLocation.X + 102, labelLocation.Y + 22);
-        pathLabel.Location = new Point(labelLocation.X + 204, labelLocation.Y + 27);
+        openButton.Location = new Point(labelLocation.X + 98, labelLocation.Y + 22);
+        pathLabel.Location = new Point(labelLocation.X + 200, labelLocation.Y + 26);
         pathLabel.Size = new Size(220, 20);
         parent.Controls.Add(label);
         parent.Controls.Add(browseButton);
@@ -455,6 +507,11 @@ public sealed class OffsiteRecordDetailsForm : Form
         _scheduleComboBox.SelectedIndexChanged += (_, _) => UpdateScheduleSummary();
     }
 
+    private void AuditOpenProofButton_Click(object? sender, EventArgs e)
+    {
+        OpenProof();
+    }
+
     private async Task LoadDataAsync()
     {
         try
@@ -535,6 +592,14 @@ public sealed class OffsiteRecordDetailsForm : Form
             _proofPathLabel.Text = Path.GetFileName(record.ProofFilePath);
             _proofPathLabel.ForeColor = ThemeHelper.Primary;
             _openProofButton.Enabled = true;
+            _auditProofLabel.Text = Path.GetFileName(record.ProofFilePath);
+            _auditProofLabel.ForeColor = ThemeHelper.Primary;
+            _auditOpenProofButton.Enabled = true;
+        }
+        else
+        {
+            _auditProofLabel.Text = "No file selected";
+            _auditOpenProofButton.Enabled = false;
         }
 
         if (record.CompletedDate.HasValue)
@@ -542,6 +607,12 @@ public sealed class OffsiteRecordDetailsForm : Form
             _completedDatePicker.Value = record.CompletedDate.Value;
         }
         _actualCostInput.Value = record.ActualCost;
+        _auditCompletedDateLabel.Text = record.CompletedDate?.ToString("MMM d, yyyy") ?? "-";
+        _auditAmountPaidLabel.Text = $"\u20B1{record.ActualCost:N2}";
+        _completedByLabel.Text = record.CompletedByUserId.HasValue ? $"User #{record.CompletedByUserId.Value}" : "-";
+        _workResultLabel.Text = string.IsNullOrWhiteSpace(record.WorkResult) ? "-" : record.WorkResult;
+        _followUpRequiredLabel.Text = record.FollowUpRequired ? "Yes" : "No";
+        _followUpReasonLabel.Text = string.IsNullOrWhiteSpace(record.FollowUpReason) ? "-" : record.FollowUpReason;
     }
 
     private void UpdateScheduleSummary()
@@ -650,7 +721,15 @@ public sealed class OffsiteRecordDetailsForm : Form
             }
             else if (_mode == FormMode.Complete)
             {
-                await _offsiteService.CompleteAsync(_recordId!.Value, _completedDatePicker.Value.Date, _actualCostInput.Value, null);
+                await _offsiteService.CompleteAsync(new CompleteOffsiteRecordRequest
+                {
+                    OffsiteRecordId = _recordId!.Value,
+                    CompletedDate = _completedDatePicker.Value.Date,
+                    WorkResult = "Completed",
+                    AmountPaid = _actualCostInput.Value,
+                    ProofFilePath = _selectedProofPath ?? _record?.ProofFilePath,
+                    CompletedByUserId = _currentUserId
+                });
             }
 
             DialogResult = DialogResult.OK;

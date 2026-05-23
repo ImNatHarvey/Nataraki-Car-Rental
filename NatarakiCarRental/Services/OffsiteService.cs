@@ -11,6 +11,21 @@ namespace NatarakiCarRental.Services;
 
 public sealed class OffsiteService
 {
+    private static readonly HashSet<string> ValidWorkResults = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Completed",
+        "Needs Follow-up",
+        "Not Repaired"
+    };
+
+    private static readonly HashSet<string> AllowedProofExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".pdf"
+    };
+
     private readonly OffsiteRepository _offsiteRepository;
     private readonly CarRepository _carRepository;
     private readonly FleetScheduleService _fleetScheduleService;
@@ -223,43 +238,79 @@ public sealed class OffsiteService
         }
     }
 
-    public async Task CompleteAsync(int recordId, DateTime completedDate, decimal actualCost, string? notes)
+    public Task CompleteAsync(int recordId, DateTime completedDate, decimal actualCost, string? notes)
     {
-        OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
-        if (existing == null || existing.IsArchived || existing.Status != "Ongoing")
-            throw new RecordNotFoundException("Record not found or not in Ongoing status.");
+        return CompleteAsync(new CompleteOffsiteRecordRequest
+        {
+            OffsiteRecordId = recordId,
+            CompletedDate = completedDate,
+            WorkResult = "Completed",
+            AmountPaid = actualCost,
+            SuggestedNextAction = null,
+            CompletedByUserId = _currentUserId
+        });
+    }
 
-        if (completedDate.Date < existing.StartDate.Date)
-            throw new ValidationException([new ValidationFailure("CompletedDate", "Completed date cannot be before start date.")]);
+    public async Task CompleteAsync(CompleteOffsiteRecordRequest request)
+    {
+        OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(request.OffsiteRecordId);
+        ValidateCompleteRequest(request, existing);
+        if (existing is null)
+        {
+            throw new RecordNotFoundException("Record not found.");
+        }
 
-        if (actualCost < 0)
-            throw new ValidationException([new ValidationFailure("ActualCost", "Actual cost cannot be negative.")]);
+        string? previousProofPath = existing.ProofFilePath;
+        string? finalProofPath = previousProofPath;
+        bool proofChanged = !string.IsNullOrWhiteSpace(request.ProofFilePath)
+            && !string.Equals(request.ProofFilePath, existing.ProofFilePath, StringComparison.OrdinalIgnoreCase);
+
+        if (proofChanged && File.Exists(request.ProofFilePath))
+        {
+            finalProofPath = await UploadPathHelper.SaveOffsiteProofAsync(request.ProofFilePath);
+        }
+
+        CompleteOffsiteRecordRequest completion = new()
+        {
+            OffsiteRecordId = request.OffsiteRecordId,
+            CompletedDate = request.CompletedDate.Date,
+            WorkResult = request.WorkResult.Trim(),
+            AmountPaid = request.AmountPaid,
+            ProofFilePath = finalProofPath,
+            FollowUpRequired = request.FollowUpRequired || RequiresFollowUp(request.WorkResult),
+            FollowUpReason = NullIfWhiteSpace(request.FollowUpReason),
+            SuggestedNextAction = null,
+            CompletedByUserId = request.CompletedByUserId ?? _currentUserId
+        };
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
         try
         {
-            // 1. Complete linked FleetSchedule
             if (existing.FleetScheduleId.HasValue)
             {
                 FleetSchedule? schedule = await _fleetScheduleService.GetByIdAsync(existing.FleetScheduleId.Value);
                 if (schedule != null)
                 {
+                    schedule.ScheduleType = FleetScheduleConstants.Type.Maintenance;
                     schedule.Status = FleetScheduleConstants.Status.Completed;
-                    schedule.EndDate = completedDate; // Actual end date
+                    schedule.EndDate = completion.CompletedDate;
                     await _fleetScheduleService.UpdateAsync(schedule);
                 }
             }
 
-            // 2. Complete OffsiteRecord
-            await _offsiteRepository.CompleteAsync(recordId, completedDate, actualCost, notes, transaction);
+            int affectedRows = await _offsiteRepository.CompleteAsync(completion, transaction);
+            if (affectedRows == 0)
+            {
+                throw new RecordNotFoundException("Record not found or not in Ongoing status.");
+            }
 
             await _activityLogService.LogAsync(
                 "Complete Offsite Record",
                 "OffsiteRecord",
-                recordId,
-                $"Completed offsite record for car #{existing.CarId}. Cost: ₱{actualCost:N2}",
+                completion.OffsiteRecordId,
+                BuildCompletionLogMessage(existing, completion),
                 userId: _currentUserId,
                 transaction: transaction);
 
@@ -267,6 +318,7 @@ public sealed class OffsiteService
         }
         catch
         {
+            UploadPathHelper.DeleteNewOffsiteProofIfSaveFailed(finalProofPath, previousProofPath);
             transaction.Rollback();
             throw;
         }
@@ -340,6 +392,76 @@ public sealed class OffsiteService
 
         await _offsiteRepository.RestoreAsync(recordId);
         await _activityLogService.LogAsync("Restore Offsite Record", "OffsiteRecord", recordId, $"Restored offsite record #{recordId}.");
+    }
+
+    private static void ValidateCompleteRequest(CompleteOffsiteRecordRequest request, OffsiteRecord? existing)
+    {
+        if (existing == null)
+            throw new RecordNotFoundException("Record not found.");
+
+        if (existing.IsArchived)
+            throw new ValidationException([new ValidationFailure("IsArchived", "Cannot complete an archived offsite record.")]);
+
+        if (existing.Status != "Ongoing")
+            throw new ValidationException([new ValidationFailure("Status", "Only ongoing offsite records can be completed.")]);
+
+        List<ValidationFailure> failures = [];
+
+        if (request.CompletedDate.Date < existing.StartDate.Date)
+            failures.Add(new ValidationFailure("CompletedDate", "Completed date cannot be before start date."));
+
+        if (request.AmountPaid < 0)
+            failures.Add(new ValidationFailure("AmountPaid", "Amount paid cannot be negative."));
+
+        if (string.IsNullOrWhiteSpace(request.WorkResult))
+            failures.Add(new ValidationFailure("WorkResult", "Work result is required."));
+        else if (!ValidWorkResults.Contains(request.WorkResult))
+            failures.Add(new ValidationFailure("WorkResult", "Work result is invalid."));
+
+        bool requiresFollowUp = request.FollowUpRequired || RequiresFollowUp(request.WorkResult);
+
+        if (requiresFollowUp && (string.IsNullOrWhiteSpace(request.FollowUpReason)
+            || string.Equals(request.FollowUpReason, "Select a reason", StringComparison.OrdinalIgnoreCase)))
+        {
+            failures.Add(new ValidationFailure("FollowUpReason", "Follow-up reason is required."));
+        }
+
+        string? proofPath = string.IsNullOrWhiteSpace(request.ProofFilePath) ? existing.ProofFilePath : request.ProofFilePath;
+        if (request.AmountPaid > 0 && string.IsNullOrWhiteSpace(proofPath))
+            failures.Add(new ValidationFailure("ProofFilePath", "Proof or receipt is required when amount paid is greater than zero."));
+
+        if (!string.IsNullOrWhiteSpace(request.ProofFilePath))
+        {
+            string extension = Path.GetExtension(request.ProofFilePath);
+            if (!AllowedProofExtensions.Contains(extension))
+                failures.Add(new ValidationFailure("ProofFilePath", "Proof file must be a JPG, PNG, or PDF file."));
+        }
+
+        if (failures.Count > 0)
+            throw new ValidationException(failures);
+    }
+
+    private static string BuildCompletionLogMessage(OffsiteRecord record, CompleteOffsiteRecordRequest request)
+    {
+        string message = $"Completed offsite record for car #{record.CarId}. Result: {request.WorkResult}. Amount paid: \u20B1{request.AmountPaid:N2}.";
+
+        if (request.FollowUpRequired && !string.IsNullOrWhiteSpace(request.FollowUpReason))
+        {
+            message += $" Follow-up required: {request.FollowUpReason.Trim()}";
+        }
+
+        return message;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static bool RequiresFollowUp(string? workResult)
+    {
+        return string.Equals(workResult, "Needs Follow-up", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(workResult, "Not Repaired", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task ValidateCreateRequestAsync(CreateOffsiteRecordRequest request)

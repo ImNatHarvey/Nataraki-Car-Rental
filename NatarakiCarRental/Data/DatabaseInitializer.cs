@@ -1162,11 +1162,91 @@ public static class DatabaseInitializer
                 );
             END;
 
+            """);
+
+        ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
             BEGIN
                 IF COL_LENGTH(N'dbo.OffsiteRecords', N'ProofFilePath') IS NULL
                 BEGIN
                     ALTER TABLE dbo.OffsiteRecords ADD ProofFilePath nvarchar(500) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'WorkResult') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD WorkResult nvarchar(50) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'FollowUpRequired') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD FollowUpRequired bit NOT NULL CONSTRAINT DF_OffsiteRecords_FollowUpRequired DEFAULT 0;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'FollowUpReason') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD FollowUpReason nvarchar(300) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'SuggestedNextAction') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD SuggestedNextAction nvarchar(300) NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'CompletedByUserId') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD CompletedByUserId int NULL;
+                END;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.OffsiteRecords', N'WorkResult') IS NOT NULL
+               AND COL_LENGTH(N'dbo.OffsiteRecords', N'FollowUpRequired') IS NOT NULL
+            BEGIN
+                UPDATE dbo.OffsiteRecords
+                SET WorkResult = N'Completed'
+                WHERE WorkResult IS NULL
+                  AND Status = N'Completed';
+
+                UPDATE dbo.OffsiteRecords
+                SET FollowUpRequired = 0
+                WHERE FollowUpRequired IS NULL;
+            END;
+            """);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'CompletedByUserId') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM sys.foreign_keys
+                        WHERE name = N'FK_OffsiteRecords_CompletedByUsers'
+                          AND parent_object_id = OBJECT_ID(N'dbo.OffsiteRecords')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords WITH CHECK
+                    ADD CONSTRAINT FK_OffsiteRecords_CompletedByUsers FOREIGN KEY (CompletedByUserId) REFERENCES dbo.Users(UserId);
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'WorkResult') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM sys.check_constraints
+                        WHERE name = N'CK_OffsiteRecords_WorkResult_Valid'
+                          AND parent_object_id = OBJECT_ID(N'dbo.OffsiteRecords')
+                   )
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.OffsiteRecords
+                        WHERE WorkResult IS NOT NULL
+                          AND WorkResult NOT IN (N'Completed', N'Needs Follow-up', N'Not Repaired')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords WITH CHECK
+                    ADD CONSTRAINT CK_OffsiteRecords_WorkResult_Valid CHECK (WorkResult IS NULL OR WorkResult IN (N'Completed', N'Needs Follow-up', N'Not Repaired'));
                 END;
             END;
             """);
