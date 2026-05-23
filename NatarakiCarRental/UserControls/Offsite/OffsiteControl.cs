@@ -15,7 +15,8 @@ namespace NatarakiCarRental.UserControls.Offsite;
 
 public sealed class OffsiteControl : UserControl
 {
-    private const float ActionPillHeight = 24F;
+    private const float ActionPillHeight = 26F;
+    private const int NarrowRecordsGridWidth = 1380;
     private static readonly TimeSpan NormalRefreshInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan DemoInterval = TimeSpan.FromSeconds(5);
 
@@ -55,6 +56,7 @@ public sealed class OffsiteControl : UserControl
     private readonly TextBox _searchBox = new();
     private readonly ComboBox _typeFilter = new();
     private readonly Button _addRecordButton = CreateAddButton();
+    private readonly Label _emptyStateLabel = new();
     
     private readonly MetricCardControl _currentlyOffsiteCard = new();
     private readonly MetricCardControl _maintenanceCard = new();
@@ -296,10 +298,20 @@ public sealed class OffsiteControl : UserControl
 
     private Control CreateRecordsLayout()
     {
-        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowStyles = { new RowStyle(SizeType.Absolute, 132F), new RowStyle(SizeType.Absolute, 52F), new RowStyle(SizeType.Absolute, 52F), new RowStyle(SizeType.Percent, 100F) }, Padding = new Padding(0, 12, 0, 0) };
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(0, 0, 0, 0)
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         // Metrics
-        TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 12) };
+        TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 12, 0, 8) };
         for (int i = 0; i < 4; i++) metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
         
         _currentlyOffsiteCard.SetMetric(IconChar.LocationDot, "Currently Offsite", "0", "Cars", ThemeHelper.Primary);
@@ -342,7 +354,8 @@ public sealed class OffsiteControl : UserControl
         _searchBox.ForeColor = ThemeHelper.TextPrimary;
         _searchBox.Location = new Point(34, 7);
         _searchBox.Width = 210;
-        _searchBox.TextChanged += async (_, _) => { _currentPage = 1; await LoadRecordsAsync(); };
+        _searchBox.TextChanged -= SearchBox_TextChanged;
+        _searchBox.TextChanged += SearchBox_TextChanged;
 
         searchContainer.Controls.Add(searchIcon);
         searchContainer.Controls.Add(_searchBox);
@@ -355,11 +368,14 @@ public sealed class OffsiteControl : UserControl
         _typeFilter.SelectedIndex = 0;
         _typeFilter.Size = new Size(180, 30);
         _typeFilter.Location = new Point(272, 8);
-        _typeFilter.SelectedIndexChanged += async (_, _) => { _currentPage = 1; await LoadRecordsAsync(); };
+        _typeFilter.SelectedIndexChanged -= TypeFilter_SelectedIndexChanged;
+        _typeFilter.SelectedIndexChanged += TypeFilter_SelectedIndexChanged;
 
         _addRecordButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        _addRecordButton.Location = new Point(layout.Width - _addRecordButton.Width - 32, 6);
-        _addRecordButton.Click += async (_, _) => await AddRecordAsync();
+        _addRecordButton.Location = new Point(0, 6);
+        _addRecordButton.Click -= AddRecordButton_Click;
+        _addRecordButton.Click += AddRecordButton_Click;
+        searchRow.Resize += (_, _) => _addRecordButton.Left = Math.Max(0, searchRow.Width - _addRecordButton.Width);
 
         searchRow.Controls.Add(searchContainer);
         searchRow.Controls.Add(_typeFilter);
@@ -371,8 +387,10 @@ public sealed class OffsiteControl : UserControl
         ConfigureTabButton(_recordsSubTabButton, "Records", IconChar.ListUl, new Point(0, 10), 120);
         ConfigureTabButton(_archivedSubTabButton, "Archived", IconChar.BoxArchive, new Point(128, 10), 120);
 
-        _recordsSubTabButton.Click += async (_, _) => { _showArchivedRecords = false; UpdateSubTabStyles(); await LoadRecordsAsync(); };
-        _archivedSubTabButton.Click += async (_, _) => { _showArchivedRecords = true; UpdateSubTabStyles(); await LoadRecordsAsync(); };
+        _recordsSubTabButton.Click -= RecordsSubTabButton_Click;
+        _recordsSubTabButton.Click += RecordsSubTabButton_Click;
+        _archivedSubTabButton.Click -= ArchivedSubTabButton_Click;
+        _archivedSubTabButton.Click += ArchivedSubTabButton_Click;
         UpdateSubTabStyles();
 
         subTabRow.Controls.Add(_recordsSubTabButton);
@@ -386,9 +404,41 @@ public sealed class OffsiteControl : UserControl
 
         SetupRecordsGrid();
         tableCard.Controls.Add(_recordsGrid);
+        tableCard.Controls.Add(_emptyStateLabel);
         layout.Controls.Add(tableCard, 0, 3);
 
         return layout;
+    }
+
+    private async void SearchBox_TextChanged(object? sender, EventArgs e)
+    {
+        _currentPage = 1;
+        await LoadRecordsAsync();
+    }
+
+    private async void TypeFilter_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        _currentPage = 1;
+        await LoadRecordsAsync();
+    }
+
+    private async void AddRecordButton_Click(object? sender, EventArgs e)
+    {
+        await AddRecordAsync();
+    }
+
+    private async void RecordsSubTabButton_Click(object? sender, EventArgs e)
+    {
+        _showArchivedRecords = false;
+        UpdateSubTabStyles();
+        await LoadRecordsAsync();
+    }
+
+    private async void ArchivedSubTabButton_Click(object? sender, EventArgs e)
+    {
+        _showArchivedRecords = true;
+        UpdateSubTabStyles();
+        await LoadRecordsAsync();
     }
 
     private void UpdateSubTabStyles()
@@ -414,7 +464,7 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.GridColor = ThemeHelper.TableGridLine;
         _recordsGrid.ReadOnly = true;
         _recordsGrid.RowHeadersVisible = false;
-        _recordsGrid.RowTemplate.Height = 42;
+        _recordsGrid.RowTemplate.Height = 38;
         _recordsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
 
         _recordsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
@@ -426,27 +476,36 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
         _recordsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
 
+        _recordsGrid.CellMouseClick -= RecordsGrid_CellMouseClick;
         _recordsGrid.CellMouseClick += RecordsGrid_CellMouseClick;
+        _recordsGrid.CellMouseMove -= RecordsGrid_CellMouseMove;
         _recordsGrid.CellMouseMove += RecordsGrid_CellMouseMove;
-        _recordsGrid.CellMouseLeave += (_, _) => _recordsGrid.Cursor = Cursors.Default;
+        _recordsGrid.CellMouseLeave -= RecordsGrid_CellMouseLeave;
+        _recordsGrid.CellMouseLeave += RecordsGrid_CellMouseLeave;
+        _recordsGrid.CellPainting -= RecordsGrid_CellPainting;
         _recordsGrid.CellPainting += RecordsGrid_CellPainting;
+        _recordsGrid.Resize -= RecordsGrid_Resize;
+        _recordsGrid.Resize += RecordsGrid_Resize;
+
+        _emptyStateLabel.Text = "No offsite records found.";
+        _emptyStateLabel.Dock = DockStyle.Bottom;
+        _emptyStateLabel.Height = 42;
+        _emptyStateLabel.Font = FontHelper.Regular(10F);
+        _emptyStateLabel.ForeColor = ThemeHelper.TextSecondary;
+        _emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _emptyStateLabel.Visible = false;
 
         _recordsGrid.Columns.Clear();
         _recordsGrid.Columns.Add("Car", "Car / Plate");
         _recordsGrid.Columns.Add("Type", "Type");
         _recordsGrid.Columns.Add("Status", "Status");
         _recordsGrid.Columns.Add("Dates", "Date Range");
-        _recordsGrid.Columns.Add("Details", "Offsite Details");
+        _recordsGrid.Columns.Add("Location", "Location");
+        _recordsGrid.Columns.Add("Contact", "Contact");
         _recordsGrid.Columns.Add("Cost", "Est. Cost");
         _recordsGrid.Columns.Add("Actions", "Actions");
 
-        SetColumnSizing("Car", 120, 100);
-        SetColumnSizing("Type", 90, 80);
-        SetColumnSizing("Status", 100, 90);
-        SetColumnSizing("Dates", 130, 110);
-        SetColumnSizing("Details", 180, 150);
-        SetColumnSizing("Cost", 90, 80);
-        SetColumnSizing("Actions", 240, 200);
+        UpdateRecordsGridColumnLayout();
     }
 
     private void SetColumnSizing(string name, float fillWeight, int minWidth)
@@ -455,6 +514,47 @@ public sealed class OffsiteControl : UserControl
         {
             col.FillWeight = fillWeight;
             col.MinimumWidth = minWidth;
+        }
+    }
+
+    private void UpdateRecordsGridColumnLayout()
+    {
+        if (_recordsGrid.Columns.Count == 0) return;
+
+        int gridWidth = _recordsGrid.ClientSize.Width;
+        if (gridWidth > 0 && gridWidth < NarrowRecordsGridWidth)
+        {
+            _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _recordsGrid.ScrollBars = ScrollBars.Both;
+            SetColumnWidth("Car", 150);
+            SetColumnWidth("Type", 100);
+            SetColumnWidth("Status", 110);
+            SetColumnWidth("Dates", 130);
+            SetColumnWidth("Location", 160);
+            SetColumnWidth("Contact", 170);
+            SetColumnWidth("Cost", 110);
+            SetColumnWidth("Actions", 330);
+            return;
+        }
+
+        _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _recordsGrid.ScrollBars = ScrollBars.Vertical;
+        SetColumnSizing("Car", 145, 120);
+        SetColumnSizing("Type", 90, 80);
+        SetColumnSizing("Status", 100, 90);
+        SetColumnSizing("Dates", 120, 110);
+        SetColumnSizing("Location", 160, 120);
+        SetColumnSizing("Contact", 170, 130);
+        SetColumnSizing("Cost", 95, 85);
+        SetColumnSizing("Actions", 310, 280);
+    }
+
+    private void SetColumnWidth(string name, int width)
+    {
+        if (_recordsGrid.Columns[name] is DataGridViewColumn col)
+        {
+            col.Width = width;
+            col.MinimumWidth = Math.Min(width, col.MinimumWidth > 0 ? col.MinimumWidth : width);
         }
     }
 
@@ -484,7 +584,7 @@ public sealed class OffsiteControl : UserControl
 
             foreach (string action in actions)
             {
-                float width = e.Graphics.MeasureString(action, font).Width + 20F;
+                float width = GetActionPillWidth(e.Graphics, font, action);
                 RectangleF rect = new(currentX, y, width, height);
 
                 Color backColor = GetActionColor(action);
@@ -493,7 +593,13 @@ public sealed class OffsiteControl : UserControl
                 using SolidBrush foreBrush = new(Color.White);
                 e.Graphics.FillPath(brush, path);
                 
-                using StringFormat format = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                using StringFormat format = new()
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    FormatFlags = StringFormatFlags.NoWrap,
+                    Trimming = StringTrimming.EllipsisCharacter
+                };
                 e.Graphics.DrawString(action, font, foreBrush, rect, format);
 
                 currentX += width + 6;
@@ -513,7 +619,13 @@ public sealed class OffsiteControl : UserControl
             using var foreBrush = new SolidBrush(Color.White);
             e.Graphics.FillPath(brush, path);
 
-            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            using var format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                FormatFlags = StringFormatFlags.NoWrap,
+                Trimming = StringTrimming.EllipsisCharacter
+            };
             e.Graphics.DrawString(item.Status, font, foreBrush, rect, format);
         }
 
@@ -527,7 +639,7 @@ public sealed class OffsiteControl : UserControl
         "Complete" => ThemeHelper.Success,
         "Cancel" => ThemeHelper.Danger,
         "Archive" => ThemeHelper.GrayIcon,
-        "Restore" => ThemeHelper.Warning,
+        "Restore" => ThemeHelper.Success,
         _ => ThemeHelper.Primary
     };
 
@@ -563,6 +675,16 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is null ? Cursors.Default : Cursors.Hand;
     }
 
+    private void RecordsGrid_CellMouseLeave(object? sender, DataGridViewCellEventArgs e)
+    {
+        _recordsGrid.Cursor = Cursors.Default;
+    }
+
+    private void RecordsGrid_Resize(object? sender, EventArgs e)
+    {
+        UpdateRecordsGridColumnLayout();
+    }
+
     private List<string> GetRowActions(OffsiteRecordListItem item)
     {
         if (_showArchivedRecords)
@@ -594,11 +716,16 @@ public sealed class OffsiteControl : UserControl
 
         foreach (string action in actions)
         {
-            float width = g.MeasureString(action, font).Width + 20F;
+            float width = GetActionPillWidth(g, font, action);
             if (new RectangleF(currentX, yOffset, width, height).Contains(x, y)) return action;
             currentX += width + 6F;
         }
         return null;
+    }
+
+    private static float GetActionPillWidth(Graphics graphics, Font font, string action)
+    {
+        return graphics.MeasureString(action, font).Width + 22F;
     }
 
     private static System.Drawing.Drawing2D.GraphicsPath GetRoundedRect(RectangleF rect, float radius)
@@ -667,28 +794,36 @@ public sealed class OffsiteControl : UserControl
                     ? $"{item.StartDate:MMM d} - {item.ExpectedReturnDate?.ToString("MMM d") ?? "???"}"
                     : $"{item.StartDate:MMM d} - {item.CompletedDate?.ToString("MMM d") ?? "Cancelled"}";
 
-                string details = string.IsNullOrWhiteSpace(item.LocationName) ? "-" : item.LocationName;
-                if (!string.IsNullOrWhiteSpace(item.ContactPerson) || !string.IsNullOrWhiteSpace(item.ContactNumber))
-                {
-                    string contact = string.Join(" / ", new[] { item.ContactPerson, item.ContactNumber }.Where(s => !string.IsNullOrWhiteSpace(s)));
-                    details += $"\nContact: {contact}";
-                }
+                string location = string.IsNullOrWhiteSpace(item.LocationName) ? "-" : item.LocationName;
+                string contact = FormatContact(item.ContactPerson, item.ContactNumber);
 
                 int rowIndex = _recordsGrid.Rows.Add(
                     $"{item.CarName}\n{item.PlateNumber}",
                     item.OffsiteType,
                     item.Status,
                     dates,
-                    details,
+                    location,
+                    contact,
                     $"₱{item.EstimatedCost:N0}",
                     string.Empty // Actions column is custom painted
                 );
                 
                 _recordsGrid.Rows[rowIndex].Tag = item;
             }
+            _emptyStateLabel.Visible = !items.Any();
             UpdateMetrics();
+            UpdateRecordsGridColumnLayout();
         }
         catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load records: {ex.Message}"); }
+    }
+
+    private static string FormatContact(string? contactPerson, string? contactNumber)
+    {
+        bool hasPerson = !string.IsNullOrWhiteSpace(contactPerson);
+        bool hasNumber = !string.IsNullOrWhiteSpace(contactNumber);
+        if (!hasPerson && !hasNumber) return "-";
+        if (hasPerson && hasNumber) return $"{contactPerson}\n{contactNumber}";
+        return hasPerson ? contactPerson!.Trim() : contactNumber!.Trim();
     }
 
     private void UpdateMetrics() => _currentlyOffsiteCard.SetMetric(IconChar.LocationDot, "Currently Offsite", _totalItems.ToString(), "Cars", ThemeHelper.Primary);
