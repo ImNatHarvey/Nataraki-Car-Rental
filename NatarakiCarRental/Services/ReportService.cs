@@ -153,4 +153,14 @@ public sealed class ReportService
     {
         return _reportRepository.GetBlacklistedCustomersReportAsync(from, to);
     }
+
+    public Task<OperatingProfitabilitySummary> GetOperatingProfitabilityAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetOperatingProfitabilityAsync(from, to);
+    }
+
+    public Task<IReadOnlyList<VehicleCostProfitabilityItem>> GetVehicleProfitabilityAsync(DateTime from, DateTime to)
+    {
+        return _reportRepository.GetVehicleProfitabilityAsync(from, to);
+    }
 }

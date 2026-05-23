@@ -25,6 +25,8 @@ public sealed class ReportExportService
         FinancialExportData data = await LoadFinancialDataAsync(from, to);
         List<string> lines = CreateHeader("Financial Reports", from, to, generatedBy);
         AddFinancialSummary(lines, data.Summary);
+        AddProfitabilitySummary(lines, data.Profitability);
+        AddVehicleProfitability(lines, data.VehicleProfitability, PdfDetailLimit);
         AddPaymentMethods(lines, data.PaymentMethods, PdfDetailLimit);
         AddPaymentCategories(lines, data.PaymentCategories, PdfDetailLimit);
         AddOutstandingTransactions(lines, data.OutstandingTransactions, PdfDetailLimit);
@@ -37,8 +39,10 @@ public sealed class ReportExportService
         WriteXlsx(path,
         [
             CreateFinancialSummarySheet(data.Summary, from, to, generatedBy),
+            CreateProfitabilitySummarySheet(data.Profitability, from, to, generatedBy),
             CreatePaymentMethodsSheet(data.PaymentMethods),
             CreatePaymentCategoriesSheet(data.PaymentCategories),
+            CreateVehicleProfitabilitySheet(data.VehicleProfitability),
             CreateOutstandingTransactionsSheet(data.OutstandingTransactions),
             CreateRevenueByCarSheet(data.RevenueByCar),
             CreateRevenueByCustomerSheet(data.RevenueByCustomer)
@@ -137,6 +141,8 @@ public sealed class ReportExportService
         List<string> lines = CreateHeader("Full Reports Bundle", from, to, generatedBy);
         AddOverviewSummary(lines, overview);
         AddFinancialSummary(lines, financial.Summary);
+        AddProfitabilitySummary(lines, financial.Profitability);
+        AddVehicleProfitability(lines, financial.VehicleProfitability, PdfDetailLimit);
         AddFleetSummary(lines, fleet.Metrics);
         AddOperationsSummary(lines, operations.Metrics);
         AddCustomerSummary(lines, customers.Metrics);
@@ -156,8 +162,10 @@ public sealed class ReportExportService
         [
             CreateOverviewSummarySheet(overview, from, to, generatedBy),
             CreateFinancialSummarySheet(financial.Summary, from, to, generatedBy),
+            CreateProfitabilitySummarySheet(financial.Profitability, from, to, generatedBy),
             CreatePaymentMethodsSheet(financial.PaymentMethods),
             CreatePaymentCategoriesSheet(financial.PaymentCategories),
+            CreateVehicleProfitabilitySheet(financial.VehicleProfitability),
             CreateOutstandingTransactionsSheet(financial.OutstandingTransactions),
             CreateFleetUtilizationSheet(fleet.Utilization),
             CreateFleetRevenueSheet(fleet.RevenuePerCar),
@@ -173,12 +181,14 @@ public sealed class ReportExportService
     private async Task<FinancialExportData> LoadFinancialDataAsync(DateTime from, DateTime to)
     {
         ReportSummaryMetrics summary = await _reportService.GetSummaryMetricsAsync(from, to);
+        OperatingProfitabilitySummary profitability = await _reportService.GetOperatingProfitabilityAsync(from, to);
         IReadOnlyList<PaymentMethodBreakdownItem> paymentMethods = await _reportService.GetPaymentMethodBreakdownAsync(from, to);
         IReadOnlyList<RevenueByCategoryItem> paymentCategories = await _reportService.GetRevenueByCategoryAsync(from, to);
+        IReadOnlyList<VehicleCostProfitabilityItem> vehicleProfitability = await _reportService.GetVehicleProfitabilityAsync(from, to);
         IReadOnlyList<TransactionListItem> outstanding = await _reportService.GetOutstandingTransactionsAsync(from, to);
         IReadOnlyList<TopCarItem> revenueByCar = await _reportService.GetRevenueByCarAsync(from, to, 50);
         IReadOnlyList<RevenueByCustomerItem> revenueByCustomer = await _reportService.GetRevenueByCustomerAsync(from, to, 50);
-        return new FinancialExportData(summary, paymentMethods, paymentCategories, outstanding, revenueByCar, revenueByCustomer);
+        return new FinancialExportData(summary, profitability, paymentMethods, paymentCategories, vehicleProfitability, outstanding, revenueByCar, revenueByCustomer);
     }
 
     private async Task<FleetExportData> LoadFleetDataAsync(DateTime from, DateTime to)
@@ -400,6 +410,50 @@ public sealed class ReportExportService
     private static ExcelSheet CreateBlacklistedCustomersSheet(IReadOnlyList<BlacklistedCustomerReportItem> items) =>
         new("Blacklisted Customers", ["Customer", "Contact", "Blacklist Reason", "Status", "Last Transaction"],
             items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.BlacklistReason, item.Status, item.LastTransaction]).ToList());
+
+    private static void AddProfitabilitySummary(List<string> lines, OperatingProfitabilitySummary metrics)
+    {
+        AddSection(lines, "Operating Profitability");
+        lines.Add($"Total Revenue: {FormatPdfPeso(metrics.TotalRevenue)}");
+        lines.Add($"Total Offsite Cost: {FormatPdfPeso(metrics.TotalOffsiteCost)}");
+        lines.Add($"Net After Offsite: {FormatPdfPeso(metrics.NetAfterOffsiteCost)}");
+        lines.Add($"Cost-to-Revenue Ratio: {FormatPercent(metrics.CostToRevenueRatio)}");
+        lines.Add($"Maintenance Cost: {FormatPdfPeso(metrics.MaintenanceCost)}");
+        lines.Add($"Repair Cost: {FormatPdfPeso(metrics.RepairCost)}");
+        lines.Add($"Cleaning Cost: {FormatPdfPeso(metrics.CleaningCost)}");
+
+        if (metrics.TotalRevenue > 0)
+        {
+            lines.Add($"Insight: Offsite costs consumed {metrics.CostToRevenueRatio:N1}% of revenue. Net after offsite costs is {FormatPdfPeso(metrics.NetAfterOffsiteCost)}.");
+        }
+    }
+
+    private static void AddVehicleProfitability(List<string> lines, IReadOnlyList<VehicleCostProfitabilityItem> items, int limit)
+    {
+        AddSection(lines, "Top Vehicles by Offsite Cost (Profitability)");
+        AddEmptyState(lines, items);
+        foreach (var item in items.Take(limit))
+        {
+            lines.Add($"{CarPlate(item.CarDisplayName, item.PlateNumber)} - Cost: {FormatPdfPeso(item.TotalOffsiteCost)} - Revenue: {FormatPdfPeso(item.RevenueGenerated)} - Net: {FormatPdfPeso(item.NetAfterCost)}");
+        }
+        AddExcelNote(lines, items.Count, limit);
+    }
+
+    private static ExcelSheet CreateProfitabilitySummarySheet(OperatingProfitabilitySummary metrics, DateTime from, DateTime to, string generatedBy) =>
+        CreateSummarySheet("Operating Profitability", from, to, generatedBy,
+        [
+            ("Total Revenue", FormatPeso(metrics.TotalRevenue)),
+            ("Total Offsite Cost", FormatPeso(metrics.TotalOffsiteCost)),
+            ("Net After Offsite", FormatPeso(metrics.NetAfterOffsiteCost)),
+            ("Cost-to-Revenue Ratio", FormatPercent(metrics.CostToRevenueRatio)),
+            ("Maintenance Cost", FormatPeso(metrics.MaintenanceCost)),
+            ("Repair Cost", FormatPeso(metrics.RepairCost)),
+            ("Cleaning Cost", FormatPeso(metrics.CleaningCost))
+        ]);
+
+    private static ExcelSheet CreateVehicleProfitabilitySheet(IReadOnlyList<VehicleCostProfitabilityItem> items) =>
+        new("Vehicle Profitability", ["Car / Plate", "Maintenance Count", "Repair Count", "Cleaning Count", "Total Offsite Cost", "Revenue Generated", "Net Profit"],
+            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarDisplayName, item.PlateNumber), item.MaintenanceCount, item.RepairCount, item.CleaningCount, FormatPeso(item.TotalOffsiteCost), FormatPeso(item.RevenueGenerated), FormatPeso(item.NetAfterCost)]).ToList());
 
     private static void AddOverviewSummary(List<string> lines, ReportSummaryMetrics metrics)
     {
@@ -638,10 +692,12 @@ public sealed class ReportExportService
         ];
     }
 
+    private const string SectionMarker = "##SEC##";
+
     private static void AddSection(List<string> lines, string title)
     {
         lines.Add(string.Empty);
-        lines.Add(title);
+        lines.Add(SectionMarker + title);
     }
 
     private static void AddEmptyState<T>(List<string> lines, IReadOnlyCollection<T> items)
@@ -890,11 +946,14 @@ public sealed class ReportExportService
                 continue;
             }
 
-            if (IsPdfSectionHeading(line))
+            string displayLine = line;
+            bool isHeading = IsPdfSectionHeading(line);
+            if (isHeading)
             {
+                displayLine = line.Replace(SectionMarker, string.Empty, StringComparison.Ordinal);
                 y -= 4;
                 AppendRectangle(builder, 50, y - 3, 512, 18, "0.145 0.388 0.922");
-                AppendText(builder, line, 58, y + 2, 10, bold: true, color: "1 1 1");
+                AppendText(builder, displayLine, 58, y + 2, 10, bold: true, color: "1 1 1");
                 y -= 24;
                 continue;
             }
@@ -902,7 +961,7 @@ public sealed class ReportExportService
             bool isNote = line.StartsWith("Showing top", StringComparison.Ordinal) ||
                           line.StartsWith("Full detailed", StringComparison.Ordinal) ||
                           line.StartsWith("Detailed records", StringComparison.Ordinal);
-            AppendText(builder, line, 58, y, isNote ? 8 : 9, bold: false, color: isNote ? "0.39 0.45 0.55" : "0.12 0.16 0.22");
+            AppendText(builder, displayLine, 58, y, isNote ? 8 : 9, bold: false, color: isNote ? "0.39 0.45 0.55" : "0.12 0.16 0.22");
             AppendLine(builder, 50, y - 5, 562, y - 5, "0.90 0.93 0.96");
             y -= 16;
         }
@@ -915,11 +974,7 @@ public sealed class ReportExportService
 
     private static bool IsPdfSectionHeading(string line)
     {
-        return !line.Contains(':', StringComparison.Ordinal) &&
-               !line.StartsWith("No records", StringComparison.Ordinal) &&
-               !line.StartsWith("Showing top", StringComparison.Ordinal) &&
-               !line.StartsWith("Full detailed", StringComparison.Ordinal) &&
-               !line.StartsWith("Detailed records", StringComparison.Ordinal);
+        return line.StartsWith(SectionMarker, StringComparison.Ordinal);
     }
 
     private static IEnumerable<string> WrapPdfLine(string line)
@@ -1083,8 +1138,10 @@ public sealed class ReportExportService
 
     private sealed record FinancialExportData(
         ReportSummaryMetrics Summary,
+        OperatingProfitabilitySummary Profitability,
         IReadOnlyList<PaymentMethodBreakdownItem> PaymentMethods,
         IReadOnlyList<RevenueByCategoryItem> PaymentCategories,
+        IReadOnlyList<VehicleCostProfitabilityItem> VehicleProfitability,
         IReadOnlyList<TransactionListItem> OutstandingTransactions,
         IReadOnlyList<TopCarItem> RevenueByCar,
         IReadOnlyList<RevenueByCustomerItem> RevenueByCustomer);

@@ -1095,4 +1095,97 @@ public sealed class ReportRepository
         var results = await connection.QueryAsync<BlacklistedCustomerReportItem>(sql, new { From = from, To = to });
         return results.ToList();
     }
+
+    public async Task<OperatingProfitabilitySummary> GetOperatingProfitabilityAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            DECLARE @TotalRevenue decimal(18,2) = (
+                SELECT ISNULL(SUM(tp.Amount), 0)
+                FROM dbo.TransactionPayments tp
+                JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                WHERE tp.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionStatus <> N'Cancelled'
+                  AND tp.PaymentDate >= @From AND tp.PaymentDate <= @To
+            );
+
+            DECLARE @TotalOffsiteCost decimal(18,2) = (
+                SELECT ISNULL(SUM(ActualCost), 0)
+                FROM dbo.OffsiteRecords
+                WHERE IsArchived = 0 AND [Status] = N'Completed'
+                  AND CompletedDate >= @From AND CompletedDate <= @To
+            );
+
+            SELECT 
+                TotalRevenue = @TotalRevenue,
+                TotalOffsiteCost = @TotalOffsiteCost,
+                NetAfterOffsiteCost = @TotalRevenue - @TotalOffsiteCost,
+                CostToRevenueRatio = CASE WHEN @TotalRevenue > 0 THEN (@TotalOffsiteCost / @TotalRevenue) * 100 ELSE 0 END,
+                MaintenanceCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'Completed' AND OffsiteType = N'Maintenance' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
+                RepairCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'Completed' AND OffsiteType = N'Repair' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
+                CleaningCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'Completed' AND OffsiteType = N'Cleaning' AND CompletedDate >= @From AND CompletedDate <= @To), 0);
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<OperatingProfitabilitySummary>(sql, new { From = from, To = to })
+            ?? new OperatingProfitabilitySummary();
+    }
+
+    public async Task<IReadOnlyList<VehicleCostProfitabilityItem>> GetVehicleProfitabilityAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT 
+                c.CarId,
+                CarDisplayName = c.CarName,
+                c.PlateNumber,
+                MaintenanceCount = COUNT(CASE WHEN o.OffsiteType = N'Maintenance' THEN 1 END),
+                RepairCount = COUNT(CASE WHEN o.OffsiteType = N'Repair' THEN 1 END),
+                CleaningCount = COUNT(CASE WHEN o.OffsiteType = N'Cleaning' THEN 1 END),
+                TotalOffsiteCost = SUM(ISNULL(o.ActualCost, 0)),
+                RevenueGenerated = ISNULL((
+                    SELECT SUM(tp.Amount)
+                    FROM dbo.TransactionPayments tp
+                    JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                    WHERE t.CarId = c.CarId 
+                      AND tp.IsArchived = 0 
+                      AND t.IsArchived = 0 
+                      AND t.TransactionStatus <> N'Cancelled'
+                      AND tp.PaymentDate >= @From 
+                      AND tp.PaymentDate <= @To
+                ), 0),
+                NetAfterCost = ISNULL((
+                    SELECT SUM(tp.Amount)
+                    FROM dbo.TransactionPayments tp
+                    JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                    WHERE t.CarId = c.CarId 
+                      AND tp.IsArchived = 0 
+                      AND t.IsArchived = 0 
+                      AND t.TransactionStatus <> N'Cancelled'
+                      AND tp.PaymentDate >= @From 
+                      AND tp.PaymentDate <= @To
+                ), 0) - SUM(ISNULL(o.ActualCost, 0))
+            FROM dbo.Cars c
+            LEFT JOIN dbo.OffsiteRecords o ON o.CarId = c.CarId 
+                AND o.IsArchived = 0 
+                AND o.[Status] = N'Completed'
+                AND o.CompletedDate >= @From 
+                AND o.CompletedDate <= @To
+            WHERE c.IsArchived = 0
+            GROUP BY c.CarId, c.CarName, c.PlateNumber
+            HAVING SUM(ISNULL(o.ActualCost, 0)) > 0 OR (
+                SELECT COUNT(1) 
+                FROM dbo.TransactionPayments tp
+                JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                WHERE t.CarId = c.CarId 
+                  AND tp.IsArchived = 0 
+                  AND t.IsArchived = 0 
+                  AND t.TransactionStatus <> N'Cancelled'
+                  AND tp.PaymentDate >= @From 
+                  AND tp.PaymentDate <= @To
+            ) > 0
+            ORDER BY TotalOffsiteCost DESC, RevenueGenerated DESC;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<VehicleCostProfitabilityItem>(sql, new { From = from, To = to });
+        return results.ToList();
+    }
 }

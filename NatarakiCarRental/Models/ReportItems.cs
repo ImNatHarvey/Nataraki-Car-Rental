@@ -227,3 +227,27 @@ public sealed class BlacklistedCustomerReportItem
     public string Status { get; set; } = string.Empty;
     public string LastTransaction { get; set; } = string.Empty;
 }
+
+public sealed class OperatingProfitabilitySummary
+{
+    public decimal TotalRevenue { get; set; }
+    public decimal TotalOffsiteCost { get; set; }
+    public decimal NetAfterOffsiteCost { get; set; }
+    public decimal CostToRevenueRatio { get; set; }
+    public decimal MaintenanceCost { get; set; }
+    public decimal RepairCost { get; set; }
+    public decimal CleaningCost { get; set; }
+}
+
+public sealed class VehicleCostProfitabilityItem
+{
+    public int CarId { get; set; }
+    public string CarDisplayName { get; set; } = string.Empty;
+    public string PlateNumber { get; set; } = string.Empty;
+    public int MaintenanceCount { get; set; }
+    public int RepairCount { get; set; }
+    public int CleaningCount { get; set; }
+    public decimal TotalOffsiteCost { get; set; }
+    public decimal RevenueGenerated { get; set; }
+    public decimal NetAfterCost { get; set; }
+}
