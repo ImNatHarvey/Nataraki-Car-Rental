@@ -11,8 +11,19 @@ public static class ThemeHelper
     public static readonly Color Background = Color.FromArgb(242, 244, 255);
     public static readonly Color ContentBackground = Color.FromArgb(250, 250, 250);
     public static readonly Color Surface = Color.White;
-    public static readonly Color Primary = Color.FromArgb(37, 99, 235);
-    public static readonly Color PrimaryHover = Color.FromArgb(29, 78, 216);
+    public static Color Primary { get; private set; } = Color.FromArgb(37, 99, 235);
+    public static Color PrimaryHover { get; private set; } = Color.FromArgb(29, 78, 216);
+
+    public static void SetPrimaryColor(Color color)
+    {
+        Primary = color;
+        // Simple hover color calculation: darker shade
+        PrimaryHover = Color.FromArgb(
+            Math.Max(0, color.R - 20),
+            Math.Max(0, color.G - 20),
+            Math.Max(0, color.B - 20)
+        );
+    }
     public static readonly Color Secondary = Color.FromArgb(219, 234, 254);
     public static readonly Color Success = Color.FromArgb(22, 163, 74);
     public static readonly Color Warning = Color.FromArgb(217, 119, 6);

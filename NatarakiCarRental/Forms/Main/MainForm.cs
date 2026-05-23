@@ -6,6 +6,7 @@ using NatarakiCarRental.UserControls.Cars;
 using NatarakiCarRental.UserControls.Customers;
 using NatarakiCarRental.UserControls.Dashboard;
 using NatarakiCarRental.UserControls.FleetSchedule;
+using NatarakiCarRental.UserControls.ManageSystem;
 using NatarakiCarRental.UserControls.Offsite;
 using NatarakiCarRental.UserControls.Reports;
 using NatarakiCarRental.UserControls.Transactions;
@@ -16,6 +17,7 @@ public sealed class MainForm : Form
 {
     private readonly Panel _contentPanel = new();
     private readonly List<IconButton> _navigationButtons = [];
+    private readonly Label _brandLabel = new();
 
     public event EventHandler? LoggedOut;
 
@@ -24,9 +26,17 @@ public sealed class MainForm : Form
         CurrentUser = currentUser;
         InitializeMainForm();
         ShowOverview();
+        
+        AppBrandingManager.SettingsUpdated += (_, _) => UpdateBranding();
     }
 
     private User CurrentUser { get; }
+
+    private void UpdateBranding()
+    {
+        _brandLabel.Text = AppBrandingManager.CurrentSettings.BusinessName;
+        SetActiveNavigation(_navigationButtons.FirstOrDefault(b => b.BackColor != Color.Transparent)?.Text ?? "Overview");
+    }
 
     private void InitializeMainForm()
     {
@@ -57,16 +67,13 @@ public sealed class MainForm : Form
             Size = new Size(34, 34)
         };
 
-        Label brandLabel = new()
-        {
-            Text = AppConstants.ApplicationName,
-            AutoSize = false,
-            Location = new Point(42, 4),
-            Size = new Size(220, 44),
-            Font = FontHelper.Title(12F),
-            ForeColor = ThemeHelper.TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+        _brandLabel.Text = AppBrandingManager.CurrentSettings.BusinessName;
+        _brandLabel.AutoSize = false;
+        _brandLabel.Location = new Point(42, 4);
+        _brandLabel.Size = new Size(220, 44);
+        _brandLabel.Font = FontHelper.Title(12F);
+        _brandLabel.ForeColor = ThemeHelper.TextPrimary;
+        _brandLabel.TextAlign = ContentAlignment.MiddleLeft;
 
         Label userLabel = new()
         {
@@ -96,7 +103,7 @@ public sealed class MainForm : Form
             new("Offsite", IconChar.LocationDot, true),
             new("Activity Log", IconChar.ClipboardList, true),
             new("Reports & Analytics", IconChar.ChartColumn, true),
-            new("Manage System", IconChar.Gear, false)
+            new("Manage System", IconChar.Gear, true)
         ];
 
         foreach (NavigationItem menuItem in menuItems)
@@ -119,7 +126,7 @@ public sealed class MainForm : Form
         logoutButton.Click += LogoutButton_Click;
 
         brandPanel.Controls.Add(brandIcon);
-        brandPanel.Controls.Add(brandLabel);
+        brandPanel.Controls.Add(_brandLabel);
 
         sidebarPanel.Controls.Add(menuPanel);
         sidebarPanel.Controls.Add(userLabel);
@@ -183,6 +190,12 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (pageName == "Manage System")
+        {
+            ShowManageSystem();
+            return;
+        }
+
         ShowPlaceholder(pageName);
     }
 
@@ -190,6 +203,12 @@ public sealed class MainForm : Form
     {
         LoadContent(new OverviewControl());
         SetActiveNavigation("Overview");
+    }
+
+    private void ShowManageSystem()
+    {
+        LoadContent(new ManageSystemControl(CurrentUser.UserId));
+        SetActiveNavigation("Manage System");
     }
 
     private void ShowCarGarage()

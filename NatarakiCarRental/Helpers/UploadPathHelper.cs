@@ -66,6 +66,17 @@ public static class UploadPathHelper
             DocumentExtensions);
     }
 
+    public static string GetBrandingUploadPath(string fileName)
+    {
+        string uploadsDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Uploads", "Branding");
+        if (!Directory.Exists(uploadsDirectory))
+        {
+            Directory.CreateDirectory(uploadsDirectory);
+        }
+        string uniqueName = $"{Guid.NewGuid():N}_{fileName}";
+        return Path.Combine(uploadsDirectory, uniqueName);
+    }
+
     public static string? ResolveCarFilePath(string? storedPath)
     {
         return ResolveExistingFilePath(storedPath, AppConstants.CarsUploadFolder);

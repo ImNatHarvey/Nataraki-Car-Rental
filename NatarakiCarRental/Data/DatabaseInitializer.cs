@@ -1288,6 +1288,31 @@ public static class DatabaseInitializer
                 END;
             END;
             """);
+
+        // System Settings
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.SystemSettings', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.SystemSettings
+                (
+                    SettingKey nvarchar(100) NOT NULL PRIMARY KEY,
+                    SettingValue nvarchar(max) NULL,
+                    UpdatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
+                    UpdatedByUserId int NULL
+                );
+
+                INSERT INTO dbo.SystemSettings (SettingKey, SettingValue) VALUES
+                (N'BusinessName', N'Nataraki Car Rental'),
+                (N'ContactNumber', N''),
+                (N'EmailAddress', N''),
+                (N'BusinessAddress', N''),
+                (N'ThemeColor', N'#2563EB'),
+                (N'SystemIconPath', N''),
+                (N'LoginPosterPath', N''),
+                (N'UseCustomLoginPoster', N'false'),
+                (N'ReportHeaderName', N'Nataraki Car Rental');
+            END;
+            """);
     }
 
     private static void SeedRoles()

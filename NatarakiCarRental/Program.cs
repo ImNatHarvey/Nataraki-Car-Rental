@@ -34,6 +34,7 @@ internal static class Program
         {
             DatabaseInitializer.ResetApplicationDataIfRequested();
             DatabaseInitializer.Initialize();
+            AppBrandingManager.LoadSettingsAsync().GetAwaiter().GetResult();
         }
         catch (Exception exception)
         {

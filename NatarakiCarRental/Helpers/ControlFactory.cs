@@ -24,6 +24,25 @@ public static class ControlFactory
         return button;
     }
 
+    public static Button CreateSecondaryButton(string text, int width = 280, int height = 40)
+    {
+        Button button = new()
+        {
+            Text = text,
+            Size = new Size(width, height),
+            BackColor = ThemeHelper.Surface,
+            ForeColor = ThemeHelper.TextPrimary,
+            Font = FontHelper.SemiBold(),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+
+        button.FlatAppearance.BorderColor = ThemeHelper.Border;
+        button.FlatAppearance.MouseOverBackColor = ThemeHelper.Background;
+
+        return button;
+    }
+
     public static IconButton CreateSidebarButton(string text, IconChar icon, bool isDanger = false)
     {
         IconButton button = new()

@@ -22,7 +22,7 @@ public sealed class LoginForm : Form
 
     private void InitializeLoginForm()
     {
-        Text = AppConstants.ApplicationName;
+        Text = AppBrandingManager.CurrentSettings.BusinessName;
         ThemeHelper.ApplyCompactDialogFormSettings(this);
 
         TableLayoutPanel rootLayout = new()
@@ -43,44 +43,65 @@ public sealed class LoginForm : Form
             BackColor = ThemeHelper.ContentBackground
         };
 
-        IconPictureBox carIcon = new()
+        if (AppBrandingManager.CurrentSettings.UseCustomLoginPoster && 
+            !string.IsNullOrWhiteSpace(AppBrandingManager.CurrentSettings.LoginPosterPath) &&
+            File.Exists(AppBrandingManager.CurrentSettings.LoginPosterPath))
         {
-            IconChar = IconChar.Car,
-            IconColor = ThemeHelper.Primary,
-            IconSize = 46,
-            BackColor = ThemeHelper.ContentBackground,
-            Location = new Point(56, 140),
-            Size = new Size(52, 52)
-        };
+            PictureBox posterBox = new()
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                ImageLocation = AppBrandingManager.CurrentSettings.LoginPosterPath,
+                BackColor = ThemeHelper.ContentBackground
+            };
+            brandingPanel.Controls.Add(posterBox);
+        }
+        else
+        {
+            IconPictureBox carIcon = new()
+            {
+                IconChar = IconChar.Car,
+                IconColor = ThemeHelper.Primary,
+                IconSize = 46,
+                BackColor = ThemeHelper.ContentBackground,
+                Location = new Point(56, 140),
+                Size = new Size(52, 52)
+            };
 
-        Label titleLabel = new()
-        {
-            AutoSize = false,
-            Text = AppConstants.ApplicationName,
-            Font = FontHelper.Title(20F),
-            ForeColor = ThemeHelper.Primary,
-            Location = new Point(56, 204),
-            Size = new Size(330, 34),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+            Label titleLabel = new()
+            {
+                AutoSize = false,
+                Text = AppBrandingManager.CurrentSettings.BusinessName,
+                Font = FontHelper.Title(20F),
+                ForeColor = ThemeHelper.Primary,
+                Location = new Point(56, 204),
+                Size = new Size(330, 34),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
 
-        Label descriptionLabel = new()
-        {
-            AutoSize = false,
-            Text = "Internal scheduling and record management system",
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary,
-            Location = new Point(58, 248),
-            Size = new Size(300, 50),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+            Label descriptionLabel = new()
+            {
+                AutoSize = false,
+                Text = "Internal scheduling and record management system",
+                Font = FontHelper.Regular(10.5F),
+                ForeColor = ThemeHelper.TextSecondary,
+                Location = new Point(58, 248),
+                Size = new Size(300, 50),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
 
-        Panel accentLine = new()
-        {
-            BackColor = ThemeHelper.Primary,
-            Location = new Point(58, 318),
-            Size = new Size(72, 3)
-        };
+            Panel accentLine = new()
+            {
+                BackColor = ThemeHelper.Primary,
+                Location = new Point(58, 318),
+                Size = new Size(72, 3)
+            };
+
+            brandingPanel.Controls.Add(carIcon);
+            brandingPanel.Controls.Add(titleLabel);
+            brandingPanel.Controls.Add(descriptionLabel);
+            brandingPanel.Controls.Add(accentLine);
+        }
 
         Panel formPanel = new()
         {
@@ -123,11 +144,6 @@ public sealed class LoginForm : Form
         Button loginButton = ControlFactory.CreatePrimaryButton("Log In", 320, 40);
         loginButton.Location = new Point(66, 374);
         loginButton.Click += LoginButton_Click;
-
-        brandingPanel.Controls.Add(carIcon);
-        brandingPanel.Controls.Add(titleLabel);
-        brandingPanel.Controls.Add(descriptionLabel);
-        brandingPanel.Controls.Add(accentLine);
 
         formPanel.Controls.Add(loginHeadingLabel);
         formPanel.Controls.Add(subtextLabel);
