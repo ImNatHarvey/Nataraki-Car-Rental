@@ -608,7 +608,7 @@ public sealed class OffsiteRecordDetailsForm : Form
         }
         _actualCostInput.Value = record.ActualCost;
         _auditCompletedDateLabel.Text = record.CompletedDate?.ToString("MMM d, yyyy") ?? "-";
-        _auditAmountPaidLabel.Text = $"\u20B1{record.ActualCost:N2}";
+        _auditAmountPaidLabel.Text = $"₱{record.ActualCost:N2}";
         _completedByLabel.Text = record.CompletedByUserId.HasValue ? $"User #{record.CompletedByUserId.Value}" : "-";
         _workResultLabel.Text = string.IsNullOrWhiteSpace(record.WorkResult) ? "-" : record.WorkResult;
         _followUpRequiredLabel.Text = record.FollowUpRequired ? "Yes" : "No";

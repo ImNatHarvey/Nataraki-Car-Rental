@@ -81,17 +81,6 @@
             popupAnchor: [0, -12]
         });
 
-        let simulationRoute = null;
-
-        window.setSimulationRoute = function (points) {
-            if (simulationRoute) {
-                map.removeLayer(simulationRoute);
-            }
-            if (points && points.length > 0) {
-                simulationRoute = L.polyline(points, { color: '#3b82f6', weight: 4, opacity: 0.6, dashArray: '8, 8' }).addTo(map);
-            }
-        };
-
         window.setVehicleLocation = function (lat, lng, label) {
             const position = [lat, lng];
             const safeLabel = label || 'Selected vehicle';
@@ -114,10 +103,6 @@
             if (vehicleMarker) {
                 map.removeLayer(vehicleMarker);
                 vehicleMarker = null;
-            }
-            if (simulationRoute) {
-                map.removeLayer(simulationRoute);
-                simulationRoute = null;
             }
             map.setView(defaultCenter, 10);
         };

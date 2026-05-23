@@ -443,7 +443,7 @@ public sealed class OffsiteService
 
     private static string BuildCompletionLogMessage(OffsiteRecord record, CompleteOffsiteRecordRequest request)
     {
-        string message = $"Completed offsite record for car #{record.CarId}. Result: {request.WorkResult}. Amount paid: \u20B1{request.AmountPaid:N2}.";
+        string message = $"Completed offsite record for car #{record.CarId}. Result: {request.WorkResult}. Amount paid: ₱{request.AmountPaid:N2}.";
 
         if (request.FollowUpRequired && !string.IsNullOrWhiteSpace(request.FollowUpReason))
         {

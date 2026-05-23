@@ -978,7 +978,7 @@ public sealed class OffsiteControl : UserControl
                     location,
                     contactPerson,
                     contactNumber,
-                    $"\u20B1{item.ActualCost:N2}",
+                    $"₱{item.ActualCost:N2}",
                     string.Empty // Actions column is custom painted
                 );
                 
@@ -994,7 +994,7 @@ public sealed class OffsiteControl : UserControl
 
     private int GetRecordsPageSize()
     {
-        return Width >= 1200 ? 13 : 4;
+        return Height > 700 ? 13 : 4;
     }
 
     private void UpdatePagination(int totalPages)
@@ -1074,7 +1074,6 @@ public sealed class OffsiteControl : UserControl
             if (_carComboBox.SelectedItem is not CarOption) { MessageBoxHelper.ShowWarning("Select a car before starting tracking."); return; }
             _startTrackingButton.Enabled = false; _stopTrackingButton.Enabled = true;
             _autoRefreshLabel.Text = "Refresh: 5s";
-            await DrawSimulationRouteAsync();
             _demoTimer.Start();
             await InsertDemoLocationAsync();
         }
@@ -1082,14 +1081,6 @@ public sealed class OffsiteControl : UserControl
         {
             _isStartingDemo = false;
         }
-    }
-
-    private async Task DrawSimulationRouteAsync()
-    {
-        if (!_mapReady || _mapWebView.CoreWebView2 is null) return;
-        var points = NatarakiCarRental.Helpers.VehicleTrackingSimulator.GetRoutePoints().Select(p => $"[{p.Lat}, {p.Lng}]");
-        string arrayStr = $"[{string.Join(",", points)}]";
-        await _mapWebView.ExecuteScriptAsync($"window.setSimulationRoute({arrayStr});");
     }
 
     private void StopDemoTracking() { _demoTimer.Stop(); _startTrackingButton.Enabled = true; _stopTrackingButton.Enabled = false; _autoRefreshLabel.Text = "Refresh: 10m"; }

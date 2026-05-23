@@ -497,6 +497,7 @@ public sealed class TransactionControl : UserControl
                 transaction.TransactionStatus,
                 actions);
         }
+        _emptyStateLabel.Text = _showArchived ? "No archived transaction records found." : "No active transaction records found.";
         _emptyStateLabel.Visible = totalItems == 0;
     }
 

@@ -132,7 +132,7 @@ public sealed class OffsiteCompletionForm : Form
     private GroupBox CreatePaymentSection()
     {
         GroupBox group = CreateSection("Payment Information", new Point(32, 378), new Size(696, 94));
-        AddInput(group, "Amount Paid (\u20B1)", _amountPaidInput, new Point(20, 32), InputWidth);
+        AddInput(group, "Amount Paid (₱)", _amountPaidInput, new Point(20, 32), InputWidth);
         AddProofPicker(group, "Proof / Receipt", new Point(360, 32));
         return group;
     }

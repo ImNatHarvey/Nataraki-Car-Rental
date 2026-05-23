@@ -494,6 +494,12 @@ public sealed class CustomerControl : UserControl
                 customer.BlacklistReason ?? "-");
         }
 
+        _emptyStateLabel.Text = _filter switch
+        {
+            CustomerListFilter.Archived => "No archived customer records found.",
+            CustomerListFilter.Blacklisted => "No blacklisted customer records found.",
+            _ => "No active customer records found."
+        };
         _emptyStateLabel.Visible = totalItems == 0;
     }
 

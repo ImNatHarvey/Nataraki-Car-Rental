@@ -541,6 +541,7 @@ public sealed class CarGarageControl : UserControl
                 car.Status);
         }
 
+        _emptyStateLabel.Text = _showArchived ? "No archived car records found." : "No active car records found.";
         _emptyStateLabel.Visible = totalItems == 0;
     }
 
