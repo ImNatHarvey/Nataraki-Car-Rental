@@ -63,7 +63,7 @@ public sealed class FleetScheduleDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(920, 570);
+        ClientSize = new Size(920, 600);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -108,7 +108,7 @@ public sealed class FleetScheduleDetailsForm : Form
         Panel contentPanel = new()
         {
             Location = new Point(32, _mode == FleetScheduleFormMode.Add ? 104 : 88),
-            Size = new Size(856, 400),
+            Size = new Size(856, 420),
             BackColor = ThemeHelper.Surface
         };
 
@@ -120,7 +120,7 @@ public sealed class FleetScheduleDetailsForm : Form
         };
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180F));
 
         contentLayout.Controls.Add(CreateSection("Car / Customer Information", CreateCarCustomerLayout()), 0, 0);
         contentLayout.Controls.Add(CreateSection("Schedule Information", CreateScheduleInfoLayout()), 0, 1);
@@ -128,18 +128,18 @@ public sealed class FleetScheduleDetailsForm : Form
         contentPanel.Controls.Add(contentLayout);
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(622, 512);
+        cancelButton.Location = new Point(622, 540);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
-        saveButton.Location = new Point(754, 512);
+        saveButton.Location = new Point(754, 540);
         saveButton.Click += SaveButton_Click;
 
         Button? archiveButton = null;
         if (_mode == FleetScheduleFormMode.Edit)
         {
             archiveButton = CreateDangerButton("Archive", 110, 38);
-            archiveButton.Location = new Point(32, 512);
+            archiveButton.Location = new Point(32, 540);
             archiveButton.Click += ArchiveButton_Click;
         }
 

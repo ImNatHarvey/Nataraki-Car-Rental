@@ -15,6 +15,10 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += Application_ThreadException;
+        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+
         try
         {
             AddressDataSeeder.EnsureSeededAsync().GetAwaiter().GetResult();
@@ -62,5 +66,18 @@ internal static class Program
             Environment.NewLine +
             Environment.NewLine +
             $"Stack trace:{Environment.NewLine}{exception.StackTrace}";
+    }
+
+    private static void Application_ThreadException(object sender, System.Threading.ThreadExceptionEventArgs e)
+    {
+        MessageBoxHelper.ShowError($"An unexpected application error occurred.\n\n{e.Exception.Message}", "System Error");
+    }
+
+    private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        if (e.ExceptionObject is Exception ex)
+        {
+            MessageBoxHelper.ShowError($"A critical system error occurred.\n\n{ex.Message}", "Fatal Error");
+        }
     }
 }
