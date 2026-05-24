@@ -16,20 +16,11 @@ public sealed class RoleDetailsForm : Form
     private readonly bool _isViewOnly;
 
     private readonly TextBox _roleNameInput = ControlFactory.CreateTextBox(InputWidth);
-    private readonly TextBox _descriptionInput = ControlFactory.CreateTextBox(680);
-    private readonly CheckBox _isActiveCheckBox = new()
-    {
-        Text = "Role is active",
-        AutoSize = true,
-        Checked = true,
-        Font = FontHelper.Regular(9.5F),
-        ForeColor = ThemeHelper.TextPrimary
-    };
-
-    private readonly Panel _permissionsPanel = new() { Dock = DockStyle.Fill, AutoScroll = true, BackColor = ThemeHelper.Surface };
+    private readonly Panel _permissionsPanel = new() { BackColor = ThemeHelper.Surface };
     private readonly Dictionary<string, List<CheckBox>> _moduleCheckBoxes = [];
     private readonly Dictionary<string, List<Permission>> _permissionsByModule = [];
     private Label? _protectedNote;
+    private Button? _saveButton;
     private bool _isProtectedRole;
 
     private static readonly IReadOnlyList<ModulePermissionMap> ModulePermissionMaps =
@@ -60,25 +51,87 @@ public sealed class RoleDetailsForm : Form
     {
         Text = _isViewOnly ? "View Role" : _isEdit ? "Edit Role / Permissions" : "Add Role";
         ThemeHelper.ApplyCompactDialogFormSettings(this);
-        ClientSize = new Size(880, 735);
+        ClientSize = new Size(740, _isViewOnly ? 500 : 520);
 
-        TableLayoutPanel root = new()
+        Panel root = new()
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
             BackColor = ThemeHelper.ContentBackground,
-            Padding = new Padding(24, 20, 24, 18)
+            Padding = new Padding(24, 20, 24, 0)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 182F));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64F));
 
-        root.Controls.Add(CreateHeader(), 0, 0);
-        root.Controls.Add(CreateRoleInformationGroup(), 0, 1);
-        root.Controls.Add(CreatePermissionsGroup(), 0, 2);
-        root.Controls.Add(CreateFooter(), 0, 3);
+        Panel header = CreateHeader();
+        header.Dock = DockStyle.Top;
+        header.Height = 54;
+
+        Panel content = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemeHelper.ContentBackground,
+            Padding = new Padding(0, 14, 0, 14)
+        };
+
+        GroupBox roleGroup = CreateGroupBox("Role Information");
+        roleGroup.Location = new Point(0, 0);
+        roleGroup.Size = new Size(686, 108);
+        AddLabeledControl(roleGroup, "Role Name *", _roleNameInput, 24, 34, InputWidth);
+
+        _protectedNote = new Label
+        {
+            Text = "This is a protected system role.",
+            AutoSize = false,
+            Location = new Point(372, 57),
+            Size = new Size(270, 24),
+            Font = FontHelper.SemiBold(9F),
+            ForeColor = ThemeHelper.TextSecondary,
+            Visible = false
+        };
+        roleGroup.Controls.Add(_protectedNote);
+        content.Controls.Add(roleGroup);
+
+        GroupBox permissionsGroup = CreatePermissionsGroup();
+        permissionsGroup.Location = new Point(0, roleGroup.Bottom + 14);
+        permissionsGroup.Size = new Size(686, 244);
+        content.Controls.Add(permissionsGroup);
+
+        Panel footer = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = 72,
+            BackColor = ThemeHelper.ContentBackground,
+            Padding = new Padding(0, 14, 0, 18)
+        };
+
+        Button cancelButton = ControlFactory.CreateSecondaryButton(_isViewOnly ? "Close" : "Cancel", 110, 38);
+        cancelButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+        cancelButton.DialogResult = DialogResult.Cancel;
+        cancelButton.Click += (_, _) =>
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        };
+        footer.Controls.Add(cancelButton);
+        CancelButton = cancelButton;
+
+        if (!_isViewOnly)
+        {
+            _saveButton = ControlFactory.CreatePrimaryButton(_isEdit ? "Save Role" : "Add Role", 132, 38);
+            _saveButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+            _saveButton.Click += SaveButton_Click;
+            footer.Controls.Add(_saveButton);
+            AcceptButton = _saveButton;
+        }
+        else
+        {
+            AcceptButton = cancelButton;
+        }
+
+        footer.Resize += (_, _) => LayoutFooterButtons(footer, cancelButton, _saveButton);
+        LayoutFooterButtons(footer, cancelButton, _saveButton);
+
+        root.Controls.Add(content);
+        root.Controls.Add(footer);
+        root.Controls.Add(header);
         Controls.Add(root);
     }
 
@@ -96,7 +149,7 @@ public sealed class RoleDetailsForm : Form
         });
         panel.Controls.Add(new Label
         {
-            Text = "Manage role identity and module permissions.",
+            Text = "Manage role identity and module access.",
             AutoSize = false,
             Location = new Point(1, 30),
             Size = new Size(500, 22),
@@ -106,82 +159,18 @@ public sealed class RoleDetailsForm : Form
         return panel;
     }
 
-    private GroupBox CreateRoleInformationGroup()
-    {
-        GroupBox group = CreateGroupBox("Role Information");
-        AddLabeledControl(group, "Role Name *", _roleNameInput, 24, 34, InputWidth);
-        AddLabeledControl(group, "Description", _descriptionInput, 24, 102, 680);
-        _isActiveCheckBox.Location = new Point(380, 58);
-        group.Controls.Add(_isActiveCheckBox);
-
-        _protectedNote = new Label
-        {
-            Text = "This is a protected system role.",
-            AutoSize = false,
-            Location = new Point(380, 92),
-            Size = new Size(360, 24),
-            Font = FontHelper.SemiBold(9F),
-            ForeColor = ThemeHelper.TextSecondary,
-            Visible = false
-        };
-        group.Controls.Add(_protectedNote);
-        return group;
-    }
-
     private GroupBox CreatePermissionsGroup()
     {
         GroupBox group = CreateGroupBox("Module Access");
-        group.Padding = new Padding(18, 46, 18, 18);
-
-        Button selectAllButton = ControlFactory.CreateSecondaryButton("Select All", 104, 30);
-        selectAllButton.Location = new Point(24, 24);
-        selectAllButton.Click += (_, _) => SetAllPermissions(true);
-        Button clearAllButton = ControlFactory.CreateSecondaryButton("Clear All", 104, 30);
-        clearAllButton.Location = new Point(138, 24);
-        clearAllButton.Click += (_, _) => SetAllPermissions(false);
-        group.Controls.Add(selectAllButton);
-        group.Controls.Add(clearAllButton);
-        Label helper = new()
-        {
-            Text = "Selecting a module grants the standard actions for that module.",
-            AutoSize = false,
-            Location = new Point(260, 28),
-            Size = new Size(420, 22),
-            Font = FontHelper.Regular(9F),
-            ForeColor = ThemeHelper.TextSecondary
-        };
-        group.Controls.Add(helper);
-
-        _permissionsPanel.Location = new Point(18, 62);
-        _permissionsPanel.Size = new Size(792, 330);
-        _permissionsPanel.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        _permissionsPanel.Location = new Point(22, 32);
+        _permissionsPanel.Size = new Size(640, 190);
         group.Controls.Add(_permissionsPanel);
         return group;
-    }
-
-    private Panel CreateFooter()
-    {
-        Panel footer = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        Button cancelButton = ControlFactory.CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(586, 14);
-        cancelButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
-        cancelButton.Click += (_, _) => Close();
-        footer.Controls.Add(cancelButton);
-        if (!_isViewOnly)
-        {
-            Button saveButton = ControlFactory.CreatePrimaryButton("Save Role", 132, 38);
-            saveButton.Location = new Point(710, 14);
-            saveButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
-            saveButton.Click += SaveButton_Click;
-            footer.Controls.Add(saveButton);
-        }
-        return footer;
     }
 
     private static GroupBox CreateGroupBox(string text) => new()
     {
         Text = text,
-        Dock = DockStyle.Fill,
         Font = FontHelper.SemiBold(10F),
         ForeColor = ThemeHelper.TextPrimary,
         BackColor = ThemeHelper.Surface
@@ -198,6 +187,20 @@ public sealed class RoleDetailsForm : Form
         parent.Controls.Add(input);
     }
 
+    private static void LayoutFooterButtons(Panel footer, Button cancelButton, Button? saveButton)
+    {
+        int y = 14;
+        int right = footer.ClientSize.Width;
+        if (saveButton is not null)
+        {
+            saveButton.Location = new Point(Math.Max(0, right - saveButton.Width), y);
+            cancelButton.Location = new Point(Math.Max(0, saveButton.Left - 12 - cancelButton.Width), y);
+            return;
+        }
+
+        cancelButton.Location = new Point(Math.Max(0, right - cancelButton.Width), y);
+    }
+
     private async void LoadPermissionsAndRoleData()
     {
         try
@@ -211,8 +214,6 @@ public sealed class RoleDetailsForm : Form
                 if (roleWithPerms != null)
                 {
                     _roleNameInput.Text = roleWithPerms.RoleName;
-                    _descriptionInput.Text = roleWithPerms.Description;
-                    _isActiveCheckBox.Checked = roleWithPerms.IsActive;
                     _isProtectedRole = roleWithPerms.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase);
 
                     foreach (KeyValuePair<string, List<CheckBox>> pair in _moduleCheckBoxes)
@@ -221,14 +222,15 @@ public sealed class RoleDetailsForm : Form
                             && permissions.Any(permission => roleWithPerms.PermissionKeys.Contains(permission.PermissionKey));
                         foreach (CheckBox checkBox in pair.Value)
                         {
-                            checkBox.Checked = string.Equals(pair.Key, "Overview", StringComparison.OrdinalIgnoreCase) || moduleGranted;
+                            checkBox.Checked = string.Equals(pair.Key, "Overview", StringComparison.OrdinalIgnoreCase)
+                                || _isProtectedRole
+                                || moduleGranted;
                         }
                     }
 
                     if (_isProtectedRole)
                     {
                         _roleNameInput.Enabled = false;
-                        _isActiveCheckBox.Enabled = false;
                         _permissionsPanel.Enabled = false;
                         _protectedNote!.Visible = true;
                     }
@@ -238,8 +240,6 @@ public sealed class RoleDetailsForm : Form
             if (_isViewOnly)
             {
                 _roleNameInput.ReadOnly = true;
-                _descriptionInput.ReadOnly = true;
-                _isActiveCheckBox.Enabled = false;
                 _permissionsPanel.Enabled = false;
             }
         }
@@ -256,44 +256,39 @@ public sealed class RoleDetailsForm : Form
         _permissionsByModule.Clear();
 
         Dictionary<string, Permission> permissionByKey = allPermissions.ToDictionary(permission => permission.PermissionKey, StringComparer.OrdinalIgnoreCase);
-        int y = 8;
-        for (int index = 0; index < ModulePermissionMaps.Count; index++)
+        string[] leftColumn = ["Overview", "Transactions", "Car Garage", "Activity Log", "Manage System"];
+        string[] rightColumn = ["Fleet Schedule", "Customers", "Offsite", "Reports & Analytics"];
+        foreach (ModulePermissionMap module in ModulePermissionMaps)
         {
-            ModulePermissionMap module = ModulePermissionMaps[index];
             List<Permission> permissions = module.PermissionKeys
                 .Where(permissionByKey.ContainsKey)
                 .Select(key => permissionByKey[key])
                 .ToList();
             _permissionsByModule[module.DisplayName] = permissions;
-            int column = index % 2;
-            int row = index / 2;
-            CheckBox moduleCheckBox = new()
-            {
-                Text = module.DisplayName,
-                Location = new Point(10 + (column * 370), y + (row * 38)),
-                Size = new Size(330, 28),
-                Font = FontHelper.SemiBold(10F),
-                ForeColor = ThemeHelper.TextPrimary,
-                Tag = module.DisplayName,
-                Checked = module.DisplayName == "Overview",
-                Enabled = module.DisplayName != "Overview"
-            };
-            if (module.DisplayName == "Overview")
-            {
-                moduleCheckBox.Text = "Overview (default)";
-            }
-            _moduleCheckBoxes[module.DisplayName] = [moduleCheckBox];
-            _permissionsPanel.Controls.Add(moduleCheckBox);
         }
+
+        AddModuleCheckBoxes(leftColumn, 10, 8);
+        AddModuleCheckBoxes(rightColumn, 330, 8);
     }
 
-    private void SetAllPermissions(bool isChecked)
+    private void AddModuleCheckBoxes(IReadOnlyList<string> moduleNames, int x, int startY)
     {
-        if (_isProtectedRole) return;
-        foreach (KeyValuePair<string, List<CheckBox>> pair in _moduleCheckBoxes)
+        for (int index = 0; index < moduleNames.Count; index++)
         {
-            foreach (CheckBox checkBox in pair.Value)
-                checkBox.Checked = pair.Key == "Overview" || isChecked;
+            string moduleName = moduleNames[index];
+            CheckBox moduleCheckBox = new()
+            {
+                Text = moduleName == "Overview" ? "Overview (default)" : moduleName,
+                Location = new Point(x, startY + (index * 34)),
+                Size = new Size(280, 28),
+                Font = FontHelper.SemiBold(10F),
+                ForeColor = ThemeHelper.TextPrimary,
+                Tag = moduleName,
+                Checked = moduleName == "Overview",
+                Enabled = moduleName != "Overview"
+            };
+            _moduleCheckBoxes[moduleName] = [moduleCheckBox];
+            _permissionsPanel.Controls.Add(moduleCheckBox);
         }
     }
 
@@ -309,16 +304,14 @@ public sealed class RoleDetailsForm : Form
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (!selectedKeys.Contains("Overview.View", StringComparer.OrdinalIgnoreCase))
-            {
                 selectedKeys.Add("Overview.View");
-            }
 
             RoleWithPermissions request = new()
             {
                 RoleId = _targetRoleId ?? 0,
                 RoleName = _roleNameInput.Text,
-                Description = _descriptionInput.Text,
-                IsActive = _isActiveCheckBox.Checked,
+                Description = null,
+                IsActive = true,
                 PermissionKeys = selectedKeys
             };
 
@@ -343,14 +336,4 @@ public sealed class RoleDetailsForm : Form
     }
 
     private sealed record ModulePermissionMap(string DisplayName, string[] PermissionKeys);
-}
-
-internal static class CheckBoxToolTipExtensions
-{
-    private static readonly ToolTip ToolTip = new();
-
-    public static void ToolTipText(this CheckBox checkBox, string text)
-    {
-        ToolTip.SetToolTip(checkBox, text);
-    }
 }

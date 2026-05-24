@@ -70,6 +70,8 @@ public sealed class ManageSystemControl : UserControl
     private string _selectedThemeHex = "#2563EB";
 
     private readonly DataGridView _usersGrid = CreateGrid();
+    private readonly IconButton _usersTabButton = CreateSubTabButton("Users", IconChar.Users);
+    private readonly IconButton _archivedUsersTabButton = CreateSubTabButton("Archived", IconChar.Archive);
     private readonly TextBox _userSearchInput = ControlFactory.CreateTextBox(260);
     private readonly ComboBox _roleFilter = CreateComboBox(160);
     private readonly ComboBox _userStatusFilter = CreateComboBox(140);
@@ -80,8 +82,11 @@ public sealed class ManageSystemControl : UserControl
     private readonly List<Role> _roles = [];
     private List<UserListItem> _filteredUsers = [];
     private int _usersPage = 1;
+    private bool _showArchivedUsers;
 
     private readonly DataGridView _rolesGrid = CreateGrid();
+    private readonly IconButton _rolesTabButton = CreateSubTabButton("Roles", IconChar.UserShield);
+    private readonly IconButton _archivedRolesTabButton = CreateSubTabButton("Archived", IconChar.Archive);
     private readonly TextBox _roleSearchInput = ControlFactory.CreateTextBox(260);
     private readonly ComboBox _roleStatusFilter = CreateComboBox(140);
     private readonly Label _rolesPaginationLabel = CreatePagingLabel();
@@ -91,6 +96,7 @@ public sealed class ManageSystemControl : UserControl
     private List<Role> _filteredRoles = [];
     private int _rolesPage = 1;
     private int _rolesLoadVersion;
+    private bool _showArchivedRoles;
 
     public ManageSystemControl(int currentUserId)
     {
@@ -170,11 +176,11 @@ public sealed class ManageSystemControl : UserControl
         if (AccessControlService.HasPermission("ManageSystem.Settings"))
             _availableTabs.Add(("Settings", "System Settings", IconChar.Gear, CreateSystemSettingsPanel));
         if (AccessControlService.HasPermission("ManageSystem.Branding"))
-            _availableTabs.Add(("Branding", "Branding & Theme", IconChar.Palette, CreateBrandingPanel));
+            _availableTabs.Add(("Branding", "Branding && Theme", IconChar.Palette, CreateBrandingPanel));
         if (AccessControlService.HasPermission("ManageSystem.Users"))
             _availableTabs.Add(("Users", "Users", IconChar.Users, CreateUsersPanel));
         if (AccessControlService.HasPermission("ManageSystem.Roles"))
-            _availableTabs.Add(("Roles", "Roles & Permissions", IconChar.UserShield, CreateRolesPanel));
+            _availableTabs.Add(("Roles", "Roles && Permissions", IconChar.UserShield, CreateRolesPanel));
     }
 
     private void RenderTabs()
@@ -379,6 +385,17 @@ public sealed class ManageSystemControl : UserControl
     private Panel CreateUsersPanel()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
+        Panel tabRow = new() { Dock = DockStyle.Top, Height = 42, BackColor = ThemeHelper.ContentBackground };
+        _usersTabButton.Location = new Point(0, 4);
+        _archivedUsersTabButton.Location = new Point(104, 4);
+        _usersTabButton.Click -= UsersTabButton_Click;
+        _usersTabButton.Click += UsersTabButton_Click;
+        _archivedUsersTabButton.Click -= ArchivedUsersTabButton_Click;
+        _archivedUsersTabButton.Click += ArchivedUsersTabButton_Click;
+        tabRow.Controls.Add(_usersTabButton);
+        tabRow.Controls.Add(_archivedUsersTabButton);
+        ApplyUserArchiveTabStyles();
+
         Panel toolbar = new() { Dock = DockStyle.Top, Height = 52, BackColor = ThemeHelper.ContentBackground };
         _userSearchInput.PlaceholderText = "Search users...";
         _userSearchInput.Location = new Point(0, 8);
@@ -389,13 +406,6 @@ public sealed class ManageSystemControl : UserControl
         _roleFilter.SelectedIndexChanged -= UserFilterChanged;
         _roleFilter.SelectedIndexChanged += UserFilterChanged;
 
-        _userStatusFilter.Items.Clear();
-        _userStatusFilter.Items.AddRange(["All Status", "Active", "Inactive"]);
-        if (_userStatusFilter.SelectedIndex < 0) _userStatusFilter.SelectedIndex = 0;
-        _userStatusFilter.Location = new Point(446, 8);
-        _userStatusFilter.SelectedIndexChanged -= UserFilterChanged;
-        _userStatusFilter.SelectedIndexChanged += UserFilterChanged;
-
         IconButton addButton = CreateToolbarIconButton("Add User", IconChar.UserPlus, 128);
         addButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         addButton.Location = new Point(0, 6);
@@ -403,7 +413,6 @@ public sealed class ManageSystemControl : UserControl
         toolbar.Resize += (_, _) => addButton.Left = Math.Max(0, toolbar.Width - addButton.Width);
         toolbar.Controls.Add(_userSearchInput);
         toolbar.Controls.Add(_roleFilter);
-        toolbar.Controls.Add(_userStatusFilter);
         toolbar.Controls.Add(addButton);
 
         Panel card = ControlFactory.CreateCardPanel(new Size(0, 0));
@@ -422,6 +431,7 @@ public sealed class ManageSystemControl : UserControl
         panel.Controls.Add(card);
         panel.Controls.Add(pager);
         panel.Controls.Add(toolbar);
+        panel.Controls.Add(tabRow);
         _ = LoadUsersAsync();
         return panel;
     }
@@ -429,18 +439,22 @@ public sealed class ManageSystemControl : UserControl
     private Panel CreateRolesPanel()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
+        Panel tabRow = new() { Dock = DockStyle.Top, Height = 42, BackColor = ThemeHelper.ContentBackground };
+        _rolesTabButton.Location = new Point(0, 4);
+        _archivedRolesTabButton.Location = new Point(104, 4);
+        _rolesTabButton.Click -= RolesTabButton_Click;
+        _rolesTabButton.Click += RolesTabButton_Click;
+        _archivedRolesTabButton.Click -= ArchivedRolesTabButton_Click;
+        _archivedRolesTabButton.Click += ArchivedRolesTabButton_Click;
+        tabRow.Controls.Add(_rolesTabButton);
+        tabRow.Controls.Add(_archivedRolesTabButton);
+        ApplyRoleArchiveTabStyles();
+
         Panel toolbar = new() { Dock = DockStyle.Top, Height = 52, BackColor = ThemeHelper.ContentBackground };
         _roleSearchInput.PlaceholderText = "Search roles...";
         _roleSearchInput.Location = new Point(0, 8);
         _roleSearchInput.TextChanged -= RoleFilterChanged;
         _roleSearchInput.TextChanged += RoleFilterChanged;
-
-        _roleStatusFilter.Items.Clear();
-        _roleStatusFilter.Items.AddRange(["All Status", "Active", "Inactive"]);
-        if (_roleStatusFilter.SelectedIndex < 0) _roleStatusFilter.SelectedIndex = 0;
-        _roleStatusFilter.Location = new Point(274, 8);
-        _roleStatusFilter.SelectedIndexChanged -= RoleFilterChanged;
-        _roleStatusFilter.SelectedIndexChanged += RoleFilterChanged;
 
         IconButton addButton = CreateToolbarIconButton("Add Role", IconChar.UserShield, 128);
         addButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -448,7 +462,6 @@ public sealed class ManageSystemControl : UserControl
         addButton.Click += async (_, _) => await OpenRoleFormAsync(null);
         toolbar.Resize += (_, _) => addButton.Left = Math.Max(0, toolbar.Width - addButton.Width);
         toolbar.Controls.Add(_roleSearchInput);
-        toolbar.Controls.Add(_roleStatusFilter);
         toolbar.Controls.Add(addButton);
 
         Panel card = ControlFactory.CreateCardPanel(new Size(0, 0));
@@ -467,6 +480,7 @@ public sealed class ManageSystemControl : UserControl
         panel.Controls.Add(card);
         panel.Controls.Add(pager);
         panel.Controls.Add(toolbar);
+        panel.Controls.Add(tabRow);
         _ = LoadRolesAsync();
         return panel;
     }
@@ -510,8 +524,9 @@ public sealed class ManageSystemControl : UserControl
                 Role? role = _roles.FirstOrDefault(r => r.RoleName == _roleFilter.SelectedItem?.ToString());
                 roleId = role?.RoleId;
             }
-            bool? isActive = _userStatusFilter.SelectedIndex == 1 ? true : _userStatusFilter.SelectedIndex == 2 ? false : null;
-            _filteredUsers = (await _userService.SearchUsersAsync(_userSearchInput.Text, roleId, isActive, includeArchived: true)).ToList();
+            _filteredUsers = (await _userService.SearchUsersAsync(_userSearchInput.Text, roleId, null, includeArchived: true))
+                .Where(user => user.IsArchived == _showArchivedUsers)
+                .ToList();
             int pageSize = GetPageSize();
             int totalPages = Math.Max(1, (int)Math.Ceiling(_filteredUsers.Count / (double)pageSize));
             if (_usersPage > totalPages) _usersPage = totalPages;
@@ -552,13 +567,10 @@ public sealed class ManageSystemControl : UserControl
             if (loadVersion != _rolesLoadVersion) return;
 
             string search = _roleSearchInput.Text.Trim();
-            bool? isActive = _roleStatusFilter.SelectedIndex == 1 ? true : _roleStatusFilter.SelectedIndex == 2 ? false : null;
             _filteredRoles = roles
-                .Where(role => !role.IsArchived)
+                .Where(role => role.IsArchived == _showArchivedRoles)
                 .Where(role => string.IsNullOrWhiteSpace(search)
-                    || role.RoleName.Contains(search, StringComparison.OrdinalIgnoreCase)
-                    || (role.Description ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase))
-                .Where(role => !isActive.HasValue || role.IsActive == isActive.Value)
+                    || role.RoleName.Contains(search, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             int pageSize = GetPageSize();
@@ -576,7 +588,6 @@ public sealed class ManageSystemControl : UserControl
 
                 int row = _rolesGrid.Rows.Add(
                     role.RoleName,
-                    role.Description ?? "-",
                     role.IsArchived ? "Archived" : role.IsActive ? "Active" : "Inactive",
                     users.Count(user => user.RoleName == role.RoleName && !user.IsArchived).ToString(),
                     (permissions?.PermissionKeys.Count ?? 0).ToString(),
@@ -619,7 +630,6 @@ public sealed class ManageSystemControl : UserControl
     {
         _rolesGrid.Columns.Clear();
         _rolesGrid.Columns.Add("RoleName", "Role Name");
-        _rolesGrid.Columns.Add("Description", "Description");
         _rolesGrid.Columns.Add("Status", "Status");
         _rolesGrid.Columns.Add("UsersCount", "Users Count");
         _rolesGrid.Columns.Add("PermissionsCount", "Permissions Count");
@@ -644,6 +654,7 @@ public sealed class ManageSystemControl : UserControl
             Dock = DockStyle.Fill,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
+            AllowUserToResizeColumns = false,
             AllowUserToResizeRows = false,
             BackgroundColor = ThemeHelper.Surface,
             BorderStyle = BorderStyle.FixedSingle,
@@ -673,20 +684,19 @@ public sealed class ManageSystemControl : UserControl
         _usersGrid.ScrollBars = ScrollBars.Both;
         _usersGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         SetColumnFill(_usersGrid, "FullName", 18F, 150);
-        SetColumnFill(_usersGrid, "Username", 15F, 130);
-        SetColumnFill(_usersGrid, "Role", 12F, 120);
+        SetColumnFill(_usersGrid, "Username", 16F, 130);
+        SetColumnFill(_usersGrid, "Role", 10F, 115);
         SetColumnFill(_usersGrid, "Status", 10F, 105);
-        SetColumnFill(_usersGrid, "LastLogin", 15F, 150);
-        SetColumnFill(_usersGrid, "CreatedAt", 15F, 120);
-        SetColumnFill(_usersGrid, "Actions", 20F, 270);
+        SetColumnFill(_usersGrid, "LastLogin", 16F, 150);
+        SetColumnFill(_usersGrid, "CreatedAt", 16F, 120);
+        SetColumnFill(_usersGrid, "Actions", 22F, 270);
     }
 
     private void ApplyRolesGridColumnLayout()
     {
         _rolesGrid.ScrollBars = ScrollBars.Both;
         _rolesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        SetColumnFill(_rolesGrid, "RoleName", 15F, 140);
-        SetColumnFill(_rolesGrid, "Description", 25F, 220);
+        SetColumnFill(_rolesGrid, "RoleName", 20F, 160);
         SetColumnFill(_rolesGrid, "Status", 10F, 105);
         SetColumnFill(_rolesGrid, "UsersCount", 10F, 105);
         SetColumnFill(_rolesGrid, "PermissionsCount", 12F, 135);
@@ -740,6 +750,44 @@ public sealed class ManageSystemControl : UserControl
         return button;
     }
 
+    private static IconButton CreateSubTabButton(string text, IconChar icon)
+    {
+        IconButton button = new()
+        {
+            Text = text,
+            IconChar = icon,
+            IconSize = 14,
+            TextImageRelation = TextImageRelation.ImageBeforeText,
+            Size = new Size(98, 32),
+            FlatStyle = FlatStyle.Flat,
+            Font = FontHelper.SemiBold(9F),
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderSize = 1;
+        return button;
+    }
+
+    private void ApplyUserArchiveTabStyles()
+    {
+        ApplySubTabStyle(_usersTabButton, !_showArchivedUsers);
+        ApplySubTabStyle(_archivedUsersTabButton, _showArchivedUsers);
+    }
+
+    private void ApplyRoleArchiveTabStyles()
+    {
+        ApplySubTabStyle(_rolesTabButton, !_showArchivedRoles);
+        ApplySubTabStyle(_archivedRolesTabButton, _showArchivedRoles);
+    }
+
+    private static void ApplySubTabStyle(IconButton button, bool active)
+    {
+        button.BackColor = active ? ThemeHelper.Primary : ThemeHelper.Surface;
+        button.ForeColor = active ? Color.White : ThemeHelper.TextPrimary;
+        button.IconColor = active ? Color.White : ThemeHelper.TextSecondary;
+        button.FlatAppearance.BorderColor = active ? ThemeHelper.Primary : ThemeHelper.Border;
+        button.FlatAppearance.MouseOverBackColor = active ? ThemeHelper.PrimaryHover : ThemeHelper.ContentBackground;
+    }
+
     private static Label CreatePagingLabel() => new()
     {
         AutoSize = false,
@@ -778,6 +826,38 @@ public sealed class ManageSystemControl : UserControl
     private async void RoleFilterChanged(object? sender, EventArgs e)
     {
         _rolesPage = 1;
+        await LoadRolesAsync();
+    }
+
+    private async void UsersTabButton_Click(object? sender, EventArgs e)
+    {
+        _showArchivedUsers = false;
+        _usersPage = 1;
+        ApplyUserArchiveTabStyles();
+        await LoadUsersAsync();
+    }
+
+    private async void ArchivedUsersTabButton_Click(object? sender, EventArgs e)
+    {
+        _showArchivedUsers = true;
+        _usersPage = 1;
+        ApplyUserArchiveTabStyles();
+        await LoadUsersAsync();
+    }
+
+    private async void RolesTabButton_Click(object? sender, EventArgs e)
+    {
+        _showArchivedRoles = false;
+        _rolesPage = 1;
+        ApplyRoleArchiveTabStyles();
+        await LoadRolesAsync();
+    }
+
+    private async void ArchivedRolesTabButton_Click(object? sender, EventArgs e)
+    {
+        _showArchivedRoles = true;
+        _rolesPage = 1;
+        ApplyRoleArchiveTabStyles();
         await LoadRolesAsync();
     }
 
@@ -1093,8 +1173,10 @@ public sealed class ManageSystemControl : UserControl
                 await ToggleRoleActiveAsync(role);
                 break;
             case "Archive":
-            case "Restore":
                 await ArchiveRoleAsync(role);
+                break;
+            case "Restore":
+                await RestoreRoleAsync(role);
                 break;
         }
     }
@@ -1147,6 +1229,8 @@ public sealed class ManageSystemControl : UserControl
                 if (!await ConfirmOwnerForSensitiveActionAsync($"Restore user: {user.Username}")) return;
                 await _userService.RestoreUserAsync(user.UserId, _currentUserId);
                 MessageBoxHelper.ShowSuccess("User restored successfully.");
+                _showArchivedUsers = false;
+                ApplyUserArchiveTabStyles();
             }
             else
             {
@@ -1154,7 +1238,10 @@ public sealed class ManageSystemControl : UserControl
                 if (!await ConfirmOwnerForSensitiveActionAsync($"Archive user: {user.Username}")) return;
                 await _userService.ArchiveUserAsync(user.UserId, _currentUserId);
                 MessageBoxHelper.ShowSuccess("User archived successfully.");
+                _showArchivedUsers = true;
+                ApplyUserArchiveTabStyles();
             }
+            _usersPage = 1;
             await LoadUsersAsync();
         }
         catch (Exception exception)
@@ -1241,6 +1328,33 @@ public sealed class ManageSystemControl : UserControl
             if (!await ConfirmOwnerForSensitiveActionAsync($"Archive role: {role.RoleName}")) return;
             await _roleService.ArchiveRoleAsync(role.RoleId, _currentUserId);
             MessageBoxHelper.ShowSuccess("Role archived successfully.");
+            _showArchivedRoles = true;
+            _rolesPage = 1;
+            ApplyRoleArchiveTabStyles();
+            await LoadRolesAsync();
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Message, "Manage System");
+        }
+    }
+
+    private async Task RestoreRoleAsync(Role role)
+    {
+        try
+        {
+            if (role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBoxHelper.ShowWarning("Owner role is protected.");
+                return;
+            }
+
+            if (!await ConfirmOwnerForSensitiveActionAsync($"Restore role: {role.RoleName}")) return;
+            await _roleService.RestoreRoleAsync(role.RoleId, _currentUserId);
+            MessageBoxHelper.ShowSuccess("Role restored successfully.");
+            _showArchivedRoles = false;
+            _rolesPage = 1;
+            ApplyRoleArchiveTabStyles();
             await LoadRolesAsync();
         }
         catch (Exception exception)
@@ -1284,7 +1398,7 @@ public sealed class ManageSystemControl : UserControl
     private static string GetUserActions(UserListItem user)
     {
         if (user.IsOwner) return "View | Edit";
-        if (user.IsArchived) return "View | Edit | Restore";
+        if (user.IsArchived) return "View | Restore";
         return "View | Edit | Archive";
     }
 
@@ -1292,7 +1406,7 @@ public sealed class ManageSystemControl : UserControl
     {
         if (role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase)) return "View";
         if (role.IsSystemRole) return "View | Permissions";
-        if (role.IsArchived) return "View | Edit | Permissions";
+        if (role.IsArchived) return "View | Restore";
         return "View | Edit | Permissions | Archive";
     }
 

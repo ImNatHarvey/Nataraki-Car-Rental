@@ -68,8 +68,8 @@ public sealed class RoleService
         Role role = new()
         {
             RoleName = request.RoleName.Trim(),
-            Description = request.Description?.Trim(),
-            IsActive = request.IsActive,
+            Description = null,
+            IsActive = true,
             IsSystemRole = false
         };
 
@@ -99,8 +99,7 @@ public sealed class RoleService
         }
 
         existing.RoleName = request.RoleName.Trim();
-        existing.Description = request.Description?.Trim();
-        existing.IsActive = request.IsActive;
+        existing.Description = null;
 
         await _roleRepository.UpdateAsync(existing);
         
@@ -114,7 +113,7 @@ public sealed class RoleService
             "Update",
             "Role",
             existing.RoleId,
-            $"Updated role {existing.RoleName}.",
+            $"Updated role permissions: {existing.RoleName}.",
             currentUserId);
     }
 
@@ -134,6 +133,22 @@ public sealed class RoleService
             "Role",
             roleId,
             $"Archived role {role.RoleName}.",
+            currentUserId);
+    }
+
+    public async Task RestoreRoleAsync(int roleId, int currentUserId)
+    {
+        Role? role = await _roleRepository.GetByIdAsync(roleId);
+        if (role == null) return;
+        if (role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Owner role is protected.");
+
+        await _roleRepository.RestoreAsync(roleId);
+
+        await _activityLogService.LogAsync(
+            "Restore",
+            "Role",
+            roleId,
+            $"Restored role {role.RoleName}.",
             currentUserId);
     }
 }

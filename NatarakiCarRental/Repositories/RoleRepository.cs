@@ -147,7 +147,7 @@ public sealed class RoleRepository
     {
         const string sql = """
             UPDATE dbo.Roles 
-            SET RoleName = @RoleName, Description = @Description, IsActive = @IsActive, UpdatedAt = sysdatetime()
+            SET RoleName = @RoleName, Description = @Description, UpdatedAt = sysdatetime()
             WHERE RoleId = @RoleId AND IsSystemRole = 0;
             """;
         
@@ -157,7 +157,14 @@ public sealed class RoleRepository
 
     public async Task<int> ArchiveAsync(int roleId, IDbTransaction? transaction = null)
     {
-        const string sql = "UPDATE dbo.Roles SET IsArchived = 1, UpdatedAt = sysdatetime() WHERE RoleId = @RoleId AND IsSystemRole = 0";
+        const string sql = "UPDATE dbo.Roles SET IsArchived = 1, IsActive = 0, UpdatedAt = sysdatetime() WHERE RoleId = @RoleId AND IsSystemRole = 0";
+        using var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(sql, new { RoleId = roleId }, transaction);
+    }
+
+    public async Task<int> RestoreAsync(int roleId, IDbTransaction? transaction = null)
+    {
+        const string sql = "UPDATE dbo.Roles SET IsArchived = 0, IsActive = 1, UpdatedAt = sysdatetime() WHERE RoleId = @RoleId AND IsSystemRole = 0";
         using var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(sql, new { RoleId = roleId }, transaction);
     }
