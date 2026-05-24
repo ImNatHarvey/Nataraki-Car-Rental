@@ -27,6 +27,11 @@ public sealed class RoleService
         return _roleRepository.GetAllAsync(includeArchived);
     }
 
+    public Task NormalizeDuplicateOwnerRolesAsync()
+    {
+        return _roleRepository.NormalizeDuplicateOwnerRolesAsync();
+    }
+
     public Task<IReadOnlyList<Permission>> GetAllPermissionsAsync()
     {
         return _permissionRepository.GetAllAsync();
@@ -55,6 +60,11 @@ public sealed class RoleService
             throw new ValidationException([new ValidationFailure("RoleName", "Role name is required.")]);
         }
 
+        if (await _roleRepository.ExistsByNameAsync(request.RoleName))
+        {
+            throw new ValidationException([new ValidationFailure("RoleName", "Role name is already in use.")]);
+        }
+
         Role role = new()
         {
             RoleName = request.RoleName.Trim(),
@@ -78,6 +88,10 @@ public sealed class RoleService
     {
         Role? existing = await _roleRepository.GetByIdAsync(request.RoleId);
         if (existing == null) throw new InvalidOperationException("Role not found.");
+        if (await _roleRepository.ExistsByNameAsync(request.RoleName, request.RoleId))
+        {
+            throw new ValidationException([new ValidationFailure("RoleName", "Role name is already in use.")]);
+        }
         if (existing.IsSystemRole && !existing.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase))
         {
              // System roles (except Owner) can have description/status updated but not name if we want to be strict.

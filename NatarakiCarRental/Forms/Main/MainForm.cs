@@ -19,6 +19,7 @@ public sealed class MainForm : Form
     private readonly Panel _contentPanel = new();
     private readonly List<IconButton> _navigationButtons = [];
     private readonly Label _brandLabel = new();
+    private readonly Panel _brandIconHost = new();
 
     public event EventHandler? LoggedOut;
 
@@ -35,14 +36,18 @@ public sealed class MainForm : Form
 
     private void UpdateBranding()
     {
+        Text = AppBrandingManager.CurrentSettings.BusinessName;
         _brandLabel.Text = AppBrandingManager.CurrentSettings.BusinessName;
+        ApplyWindowIcon();
+        RenderBrandIcon();
         SetActiveNavigation(_navigationButtons.FirstOrDefault(b => b.BackColor != Color.Transparent)?.Text ?? "Overview");
     }
 
     private void InitializeMainForm()
     {
-        Text = string.Empty;
+        Text = AppBrandingManager.CurrentSettings.BusinessName;
         ThemeHelper.ApplyStandardMainFormSettings(this);
+        ApplyWindowIcon();
 
         Panel sidebarPanel = new()
         {
@@ -58,15 +63,10 @@ public sealed class MainForm : Form
             Height = 64
         };
 
-        IconPictureBox brandIcon = new()
-        {
-            IconChar = IconChar.Car,
-            IconColor = ThemeHelper.Primary,
-            IconSize = 30,
-            BackColor = ThemeHelper.Surface,
-            Location = new Point(0, 8),
-            Size = new Size(34, 34)
-        };
+        _brandIconHost.Location = new Point(0, 8);
+        _brandIconHost.Size = new Size(34, 34);
+        _brandIconHost.BackColor = ThemeHelper.Surface;
+        RenderBrandIcon();
 
         _brandLabel.Text = AppBrandingManager.CurrentSettings.BusinessName;
         _brandLabel.AutoSize = false;
@@ -136,7 +136,7 @@ public sealed class MainForm : Form
         logoutButton.Width = 228;
         logoutButton.Click += LogoutButton_Click;
 
-        brandPanel.Controls.Add(brandIcon);
+        brandPanel.Controls.Add(_brandIconHost);
         brandPanel.Controls.Add(_brandLabel);
 
         sidebarPanel.Controls.Add(menuPanel);
@@ -149,6 +149,70 @@ public sealed class MainForm : Form
 
         Controls.Add(_contentPanel);
         Controls.Add(sidebarPanel);
+    }
+
+    private void RenderBrandIcon()
+    {
+        _brandIconHost.Controls.Clear();
+        SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
+        string iconPath = settings.SystemIconPath;
+        if (string.Equals(settings.SystemLogoMode, "File", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(iconPath)
+            && File.Exists(iconPath)
+            && !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        {
+            _brandIconHost.Controls.Add(new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                ImageLocation = iconPath,
+                BackColor = ThemeHelper.Surface
+            });
+            return;
+        }
+
+        _brandIconHost.Controls.Add(new IconPictureBox
+        {
+            Dock = DockStyle.Fill,
+            IconChar = ResolveBuiltInLogoIcon(settings.SystemLogoIconKey),
+            IconColor = ThemeHelper.Primary,
+            IconSize = 30,
+            BackColor = ThemeHelper.Surface
+        });
+    }
+
+    private void ApplyWindowIcon()
+    {
+        string iconPath = AppBrandingManager.CurrentSettings.SystemIconPath;
+        if (string.IsNullOrWhiteSpace(iconPath)
+            || !File.Exists(iconPath)
+            || !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            Icon = new System.Drawing.Icon(iconPath);
+        }
+        catch
+        {
+            // Ignore invalid icon files and keep the default window icon.
+        }
+    }
+
+    private static IconChar ResolveBuiltInLogoIcon(string? key)
+    {
+        return key switch
+        {
+            "CarSide" => IconChar.CarSide,
+            "Taxi" => IconChar.Taxi,
+            "Truck" => IconChar.Truck,
+            "Road" => IconChar.Road,
+            "Warehouse" => IconChar.Warehouse,
+            "Key" => IconChar.Key,
+            _ => IconChar.Car
+        };
     }
 
     private void Navigate(string pageName)

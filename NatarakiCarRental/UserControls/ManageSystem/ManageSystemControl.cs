@@ -4,6 +4,7 @@ using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
 using System.Diagnostics;
+using System.Drawing.Drawing2D;
 using System.Text.RegularExpressions;
 
 namespace NatarakiCarRental.UserControls.ManageSystem;
@@ -12,11 +13,14 @@ public sealed class ManageSystemControl : UserControl
 {
     private const int WidePageSize = 13;
     private const int NarrowPageSize = 4;
+    private const string NotApplicableProvinceCode = "__NA__";
+    private const string NotApplicableProvinceName = "N/A";
 
     private readonly int _currentUserId;
     private readonly SystemSettingsService _service = new();
     private readonly UserService _userService = new();
     private readonly RoleService _roleService = new();
+    private readonly LocalAddressService _addressService = new();
 
     private readonly FlowLayoutPanel _tabPanel = new();
     private readonly Panel _contentPanel = new();
@@ -24,29 +28,46 @@ public sealed class ManageSystemControl : UserControl
     private string _activeTabKey = string.Empty;
 
     private readonly TextBox _businessNameInput = ControlFactory.CreateTextBox(360);
-    private readonly TextBox _contactNumberInput = ControlFactory.CreateTextBox(280);
+    private readonly TextBox _contactNumberInput = ControlFactory.CreateTextBox(360);
     private readonly TextBox _emailInput = ControlFactory.CreateTextBox(360);
     private readonly TextBox _addressInput = ControlFactory.CreateTextBox(360);
+    private readonly TextBox _loginDescriptionInput = ControlFactory.CreateTextBox(360);
+    private readonly ComboBox _businessRegionComboBox = CreateComboBox(360);
+    private readonly ComboBox _businessProvinceComboBox = CreateComboBox(360);
+    private readonly ComboBox _businessCityComboBox = CreateComboBox(360);
+    private readonly ComboBox _businessBarangayComboBox = CreateComboBox(360);
+    private readonly TextBox _businessStreetInput = ControlFactory.CreateTextBox(360);
+    private bool _isInitializingAddress;
 
-    private readonly PictureBox _iconPreview = new() { SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(88, 88), BackColor = ThemeHelper.Background };
+    private readonly Panel _iconPreview = new() { Size = new Size(88, 88), BackColor = ThemeHelper.Background, BorderStyle = BorderStyle.FixedSingle };
     private readonly Label _iconPathLabel = CreatePathLabel();
     private string _currentIconPath = string.Empty;
+    private string _currentLogoMode = "BuiltIn";
+    private string _currentLogoIconKey = "Car";
 
     private readonly PictureBox _posterPreview = new() { SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(150, 210), BackColor = ThemeHelper.Background };
     private readonly Label _posterPathLabel = CreatePathLabel();
     private string _currentPosterPath = string.Empty;
     private readonly CheckBox _useCustomPosterToggle = new() { Text = "Use custom login poster", AutoSize = true, Font = FontHelper.Regular(10F), ForeColor = ThemeHelper.TextPrimary };
+    private readonly ComboBox _themePresetComboBox = CreateComboBox(280);
+    private readonly TextBox _themeHexInput = ControlFactory.CreateTextBox(110);
+    private readonly Panel _themeColorPreview = new() { Size = new Size(34, 30), BackColor = ThemeHelper.Primary };
 
     private readonly Dictionary<string, string> _themeColors = new()
     {
         { "Blue", "#2563EB" },
-        { "Purple", "#7C3AED" },
-        { "Green", "#16A34A" },
+        { "Navy", "#1E3A8A" },
+        { "Indigo", "#4F46E5" },
+        { "Slate", "#334155" },
+        { "Emerald", "#059669" },
+        { "Teal", "#0F766E" },
+        { "Violet", "#7C3AED" },
         { "Red", "#DC2626" },
         { "Orange", "#EA580C" },
         { "Dark", "#111827" }
     };
     private string _selectedThemeName = "Blue";
+    private string _selectedThemeHex = "#2563EB";
 
     private readonly DataGridView _usersGrid = CreateGrid();
     private readonly TextBox _userSearchInput = ControlFactory.CreateTextBox(260);
@@ -241,88 +262,117 @@ public sealed class ManageSystemControl : UserControl
 
     private Control CreateSystemSettingsPanel()
     {
-        Panel card = ControlFactory.CreateCardPanel(new Size(0, 0));
+        Panel viewport = new()
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = ThemeHelper.ContentBackground,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        Panel card = ControlFactory.CreateCardPanel(new Size(0, 330));
         card.Dock = DockStyle.Top;
-        card.Height = 315;
+        card.Height = 330;
         card.Padding = new Padding(24);
         card.Controls.Add(CreateSectionTitle("Business Information", new Point(24, 22), 320));
 
         AddLabeledInput(card, "Business Name *", _businessNameInput, new Point(24, 70), 360);
-        AddLabeledInput(card, "Contact Number", _contactNumberInput, new Point(420, 70), 280);
-        AddLabeledInput(card, "Email Address", _emailInput, new Point(24, 138), 360);
-        AddLabeledInput(card, "Business Address", _addressInput, new Point(420, 138), 420);
+        AddLabeledInput(card, "Contact Number", _contactNumberInput, new Point(420, 70), 360);
+        AddLabeledInput(card, "Email Address", _emailInput, new Point(816, 70), 360);
+
+        card.Controls.Add(CreateSectionTitle("Business Address", new Point(24, 138), 320));
+        AddLabeledCombo(card, "Region", _businessRegionComboBox, new Point(24, 186), 360);
+        AddLabeledCombo(card, "Province", _businessProvinceComboBox, new Point(420, 186), 360);
+        AddLabeledCombo(card, "City / Municipality", _businessCityComboBox, new Point(816, 186), 360);
+        AddLabeledCombo(card, "Barangay", _businessBarangayComboBox, new Point(24, 254), 360);
+        AddLabeledInput(card, "Street / House / Block", _businessStreetInput, new Point(420, 254), 360);
 
         Button resetButton = ControlFactory.CreateSecondaryButton("Reset to Defaults", 150, 36);
         Button saveButton = ControlFactory.CreatePrimaryButton("Save Settings", 140, 36);
-        card.Resize += (_, _) =>
-        {
-            saveButton.Location = new Point(card.Width - 24 - saveButton.Width, 250);
-            resetButton.Location = new Point(saveButton.Left - 14 - resetButton.Width, 250);
-        };
         resetButton.Click += async (_, _) => await ResetDefaultsAsync();
         saveButton.Click += async (_, _) => await SaveSystemSettingsAsync();
-        card.Controls.Add(resetButton);
-        card.Controls.Add(saveButton);
+        WireAddressSelectors();
+        LayoutSystemSettingsCard(card);
+        card.Resize += (_, _) => LayoutSystemSettingsCard(card);
 
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
-        panel.Controls.Add(card);
-        return panel;
+        Panel footer = new() { Dock = DockStyle.Top, Height = 54, BackColor = ThemeHelper.ContentBackground };
+        footer.Controls.Add(resetButton);
+        footer.Controls.Add(saveButton);
+        footer.Resize += (_, _) => LayoutSystemSettingsFooter(footer, resetButton, saveButton);
+        LayoutSystemSettingsFooter(footer, resetButton, saveButton);
+
+        viewport.Controls.Add(footer);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(card);
+        _ = InitializeBusinessAddressSelectorsAsync();
+        return viewport;
     }
 
     private Control CreateBrandingPanel()
     {
-        Panel panel = new() { Dock = DockStyle.Fill, AutoScroll = true, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
+        Panel viewport = new() { Dock = DockStyle.Fill, AutoScroll = true, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
 
-        Panel iconCard = CreateBrandingCard("System Icon / Logo", 150);
-        _iconPreview.Location = new Point(24, 48);
-        iconCard.Controls.Add(_iconPreview);
-        AddBrandingButtons(iconCard, new Point(140, 56), BrowseIconBtn_Click, OpenIcon, ClearIcon, _iconPathLabel, "Browse", "Open File", "Use Default");
+        Panel themeCard = CreateBrandingCard("Main Theme Color", 154);
+        AddLabeledCombo(themeCard, "Preset Theme", _themePresetComboBox, new Point(24, 56), 280);
+        PopulateThemePresetComboBox();
+        AddLabeledInput(themeCard, "Hex Color", _themeHexInput, new Point(330, 56), 110);
+        _themeColorPreview.Location = new Point(462, 80);
+        _themeColorPreview.Paint -= ThemeColorPreview_Paint;
+        _themeColorPreview.Paint += ThemeColorPreview_Paint;
+        Button customColorButton = ControlFactory.CreateSecondaryButton("Pick Custom Color", 158, 32);
+        customColorButton.Location = new Point(514, 78);
+        customColorButton.Click += PickCustomColorButton_Click;
+        themeCard.Controls.Add(_themeColorPreview);
+        themeCard.Controls.Add(customColorButton);
 
-        Panel themeCard = CreateBrandingCard("Main Theme Color", 145);
-        int x = 24;
-        foreach (string name in _themeColors.Keys)
-        {
-            Button themeButton = CreateThemeButton(name);
-            themeButton.Location = new Point(x, 58);
-            themeButton.Click += (_, _) => SelectTheme(name);
-            themeCard.Controls.Add(themeButton);
-            x += 104;
-        }
-        Button saveThemeButton = ControlFactory.CreatePrimaryButton("Save Theme", 130, 34);
-        saveThemeButton.Location = new Point(24, 100);
-        saveThemeButton.Click += async (_, _) => await SaveBrandingAsync();
-        themeCard.Controls.Add(saveThemeButton);
+        Panel logoCard = CreateBrandingCard("System Icon / Logo", 210);
+        _iconPreview.Location = new Point(24, 58);
+        logoCard.Controls.Add(_iconPreview);
+        AddBrandingButtons(logoCard, new Point(130, 64), BrowseIconBtn_Click, OpenIcon, ClearIcon, _iconPathLabel, "Browse", "Open File", "Use Default");
+        Button builtInIconButton = ControlFactory.CreateSecondaryButton("Choose Built-in Icon", 178, 32);
+        builtInIconButton.Location = new Point(130, 148);
+        builtInIconButton.Click += ChooseBuiltInIconButton_Click;
+        logoCard.Controls.Add(builtInIconButton);
 
-        Panel posterCard = CreateBrandingCard("Login Poster", 295);
-        _posterPreview.Location = new Point(24, 52);
+        Panel posterCard = CreateBrandingCard("Login Poster", 300);
+        _posterPreview.Location = new Point(24, 58);
         posterCard.Controls.Add(_posterPreview);
-        AddBrandingButtons(posterCard, new Point(200, 64), BrowsePosterBtn_Click, OpenPoster, ClearPoster, _posterPathLabel, "Browse Poster", "Open File", "Remove Custom");
-        _useCustomPosterToggle.Location = new Point(200, 150);
+        AddBrandingButtons(posterCard, new Point(196, 64), BrowsePosterBtn_Click, OpenPoster, ClearPoster, _posterPathLabel, "Browse", "Open File", "Remove");
+        _useCustomPosterToggle.Location = new Point(196, 156);
+        _useCustomPosterToggle.CheckedChanged -= UseCustomPosterToggle_CheckedChanged;
+        _useCustomPosterToggle.CheckedChanged += UseCustomPosterToggle_CheckedChanged;
         posterCard.Controls.Add(_useCustomPosterToggle);
+        AddLabeledInput(posterCard, "Login Description", _loginDescriptionInput, new Point(196, 196), 420);
         Label posterHint = new()
         {
-            Text = "Default login branding will be used when no custom poster is selected.",
+            Text = "Used only when no custom poster is shown.",
             AutoSize = false,
-            Location = new Point(200, 184),
-            Size = new Size(420, 24),
+            Location = new Point(196, 250),
+            Size = new Size(420, 22),
             Font = FontHelper.Regular(9F),
             ForeColor = ThemeHelper.TextSecondary
         };
         posterCard.Controls.Add(posterHint);
-        Button saveBrandingButton = ControlFactory.CreatePrimaryButton("Save Branding & Theme", 210, 36);
-        saveBrandingButton.Location = new Point(200, 226);
-        saveBrandingButton.Click += async (_, _) => await SaveBrandingAsync();
-        posterCard.Controls.Add(saveBrandingButton);
 
-        posterCard.Dock = DockStyle.Top;
-        themeCard.Dock = DockStyle.Top;
-        iconCard.Dock = DockStyle.Top;
-        panel.Controls.Add(posterCard);
-        panel.Controls.Add(CreateSpacer());
-        panel.Controls.Add(themeCard);
-        panel.Controls.Add(CreateSpacer());
-        panel.Controls.Add(iconCard);
-        return panel;
+        Panel footer = new() { Dock = DockStyle.Top, Height = 54, BackColor = ThemeHelper.ContentBackground };
+
+        Button resetBrandingButton = ControlFactory.CreateSecondaryButton("Reset Branding", 140, 36);
+        Button saveBrandingButton = ControlFactory.CreatePrimaryButton("Save Branding & Theme", 210, 36);
+        resetBrandingButton.Click += (_, _) => ResetBrandingFields();
+        saveBrandingButton.Click += async (_, _) => await SaveBrandingAsync();
+        footer.Controls.Add(resetBrandingButton);
+        footer.Controls.Add(saveBrandingButton);
+        footer.Resize += (_, _) => AlignFooterButtons(footer, resetBrandingButton, saveBrandingButton);
+        AlignFooterButtons(footer, resetBrandingButton, saveBrandingButton);
+
+        viewport.Controls.Add(footer);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(posterCard);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(logoCard);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(themeCard);
+        return viewport;
     }
 
     private Panel CreateUsersPanel()
@@ -345,7 +395,7 @@ public sealed class ManageSystemControl : UserControl
         _userStatusFilter.SelectedIndexChanged -= UserFilterChanged;
         _userStatusFilter.SelectedIndexChanged += UserFilterChanged;
 
-        Button addButton = ControlFactory.CreatePrimaryButton("Add User", 120, 34);
+        IconButton addButton = CreateToolbarIconButton("Add User", IconChar.UserPlus, 128);
         addButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         addButton.Location = new Point(0, 6);
         addButton.Click += async (_, _) => await OpenUserFormAsync(null);
@@ -391,7 +441,7 @@ public sealed class ManageSystemControl : UserControl
         _roleStatusFilter.SelectedIndexChanged -= RoleFilterChanged;
         _roleStatusFilter.SelectedIndexChanged += RoleFilterChanged;
 
-        Button addButton = ControlFactory.CreatePrimaryButton("Add Role", 120, 34);
+        IconButton addButton = CreateToolbarIconButton("Add Role", IconChar.UserShield, 128);
         addButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         addButton.Location = new Point(0, 6);
         addButton.Click += async (_, _) => await OpenRoleFormAsync(null);
@@ -424,6 +474,7 @@ public sealed class ManageSystemControl : UserControl
     {
         try
         {
+            await _roleService.NormalizeDuplicateOwnerRolesAsync();
             _roles.Clear();
             _roles.AddRange(await _roleService.GetAllRolesAsync(includeArchived: true));
             PopulateRoleFilter();
@@ -493,10 +544,12 @@ public sealed class ManageSystemControl : UserControl
 
         try
         {
+            await _roleService.NormalizeDuplicateOwnerRolesAsync();
             IReadOnlyList<Role> roles = await _roleService.GetAllRolesAsync(includeArchived: true);
             string search = _roleSearchInput.Text.Trim();
             bool? isActive = _roleStatusFilter.SelectedIndex == 1 ? true : _roleStatusFilter.SelectedIndex == 2 ? false : null;
             _filteredRoles = roles
+                .Where(role => !role.IsArchived)
                 .Where(role => string.IsNullOrWhiteSpace(search)
                     || role.RoleName.Contains(search, StringComparison.OrdinalIgnoreCase)
                     || (role.Description ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase))
@@ -518,7 +571,7 @@ public sealed class ManageSystemControl : UserControl
                     role.IsArchived ? "Archived" : role.IsActive ? "Active" : "Inactive",
                     users.Count(user => user.RoleName == role.RoleName && !user.IsArchived).ToString(),
                     (permissions?.PermissionKeys.Count ?? 0).ToString(),
-                    role.IsSystemRole ? "System" : "Custom",
+                    role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase) ? "Protected" : role.IsSystemRole ? "System" : "Custom",
                     GetRoleActions(role));
                 _rolesGrid.Rows[row].Tag = role;
             }
@@ -544,7 +597,13 @@ public sealed class ManageSystemControl : UserControl
         _usersGrid.CellDoubleClick -= UsersGrid_CellDoubleClick;
         _usersGrid.CellDoubleClick += UsersGrid_CellDoubleClick;
         _usersGrid.CellContentClick -= UsersGrid_CellContentClick;
-        _usersGrid.CellContentClick += UsersGrid_CellContentClick;
+        _usersGrid.CellMouseClick -= UsersGrid_CellMouseClick;
+        _usersGrid.CellMouseClick += UsersGrid_CellMouseClick;
+        _usersGrid.CellFormatting -= UsersGrid_CellFormatting;
+        _usersGrid.CellFormatting += UsersGrid_CellFormatting;
+        _usersGrid.CellPainting -= ManageGrid_CellPainting;
+        _usersGrid.CellPainting += ManageGrid_CellPainting;
+        ApplyUsersGridColumnLayout();
     }
 
     private void SetupRolesGrid()
@@ -560,7 +619,13 @@ public sealed class ManageSystemControl : UserControl
         _rolesGrid.CellDoubleClick -= RolesGrid_CellDoubleClick;
         _rolesGrid.CellDoubleClick += RolesGrid_CellDoubleClick;
         _rolesGrid.CellContentClick -= RolesGrid_CellContentClick;
-        _rolesGrid.CellContentClick += RolesGrid_CellContentClick;
+        _rolesGrid.CellMouseClick -= RolesGrid_CellMouseClick;
+        _rolesGrid.CellMouseClick += RolesGrid_CellMouseClick;
+        _rolesGrid.CellFormatting -= RolesGrid_CellFormatting;
+        _rolesGrid.CellFormatting += RolesGrid_CellFormatting;
+        _rolesGrid.CellPainting -= ManageGrid_CellPainting;
+        _rolesGrid.CellPainting += ManageGrid_CellPainting;
+        ApplyRolesGridColumnLayout();
     }
 
     private static DataGridView CreateGrid()
@@ -581,7 +646,8 @@ public sealed class ManageSystemControl : UserControl
             RowHeadersVisible = false,
             RowTemplate = { Height = 38 },
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            ScrollBars = ScrollBars.Both
         };
         grid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
@@ -591,6 +657,43 @@ public sealed class ManageSystemControl : UserControl
         grid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
         grid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
         return grid;
+    }
+
+    private void ApplyUsersGridColumnLayout()
+    {
+        _usersGrid.ScrollBars = ScrollBars.Both;
+        _usersGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        SetColumnFill(_usersGrid, "FullName", 18F, 150);
+        SetColumnFill(_usersGrid, "Username", 15F, 130);
+        SetColumnFill(_usersGrid, "Role", 12F, 120);
+        SetColumnFill(_usersGrid, "Status", 10F, 105);
+        SetColumnFill(_usersGrid, "LastLogin", 15F, 150);
+        SetColumnFill(_usersGrid, "CreatedAt", 15F, 120);
+        SetColumnFill(_usersGrid, "Actions", 20F, 270);
+    }
+
+    private void ApplyRolesGridColumnLayout()
+    {
+        _rolesGrid.ScrollBars = ScrollBars.Both;
+        _rolesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        SetColumnFill(_rolesGrid, "RoleName", 15F, 140);
+        SetColumnFill(_rolesGrid, "Description", 25F, 220);
+        SetColumnFill(_rolesGrid, "Status", 10F, 105);
+        SetColumnFill(_rolesGrid, "UsersCount", 10F, 105);
+        SetColumnFill(_rolesGrid, "PermissionsCount", 12F, 135);
+        SetColumnFill(_rolesGrid, "Type", 10F, 105);
+        SetColumnFill(_rolesGrid, "Actions", 20F, 250);
+    }
+
+    private static void SetColumnFill(DataGridView grid, string columnName, float fillWeight, int minimumWidth)
+    {
+        DataGridViewColumn? column = grid.Columns[columnName];
+        if (column is not null)
+        {
+            column.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            column.FillWeight = fillWeight;
+            column.MinimumWidth = minimumWidth;
+        }
     }
 
     private static Panel CreatePager(Button previous, Button next, Label label)
@@ -606,6 +709,27 @@ public sealed class ManageSystemControl : UserControl
     }
 
     private static Button CreatePagingButton(string text) => ControlFactory.CreateSecondaryButton(text, 80, 32);
+
+    private static IconButton CreateToolbarIconButton(string text, IconChar icon, int width)
+    {
+        IconButton button = new()
+        {
+            Text = text,
+            IconChar = icon,
+            IconSize = 15,
+            IconColor = Color.White,
+            TextImageRelation = TextImageRelation.ImageBeforeText,
+            Size = new Size(width, 34),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ThemeHelper.Primary,
+            ForeColor = Color.White,
+            Font = FontHelper.SemiBold(9F),
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = ThemeHelper.PrimaryHover;
+        return button;
+    }
 
     private static Label CreatePagingLabel() => new()
     {
@@ -686,9 +810,16 @@ public sealed class ManageSystemControl : UserControl
 
     private async void UsersGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
     {
+        await Task.CompletedTask;
+    }
+
+    private async void UsersGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || _usersGrid.Columns[e.ColumnIndex].Name != "Actions") return;
         if (_usersGrid.Rows[e.RowIndex].Tag is not UserListItem user) return;
-        await OpenUserActionsAsync(user);
+        string? action = GetActionAt(_usersGrid, e.RowIndex, e.ColumnIndex, e.Location);
+        if (string.IsNullOrWhiteSpace(action)) return;
+        await PerformUserActionAsync(user, action);
     }
 
     private async void RolesGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
@@ -699,33 +830,264 @@ public sealed class ManageSystemControl : UserControl
 
     private async void RolesGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
     {
+        await Task.CompletedTask;
+    }
+
+    private async void RolesGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || _rolesGrid.Columns[e.ColumnIndex].Name != "Actions") return;
         if (_rolesGrid.Rows[e.RowIndex].Tag is not Role role) return;
-        await OpenRoleActionsAsync(role);
+        string? action = GetActionAt(_rolesGrid, e.RowIndex, e.ColumnIndex, e.Location);
+        if (string.IsNullOrWhiteSpace(action)) return;
+        await PerformRoleActionAsync(role, action);
     }
 
-    private async Task OpenUserActionsAsync(UserListItem user)
+    private void UsersGrid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        ContextMenuStrip menu = new();
-        menu.Items.Add("View", null, async (_, _) => await OpenUserFormAsync(user.UserId, isViewOnly: true));
-        if (!user.IsOwner)
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        string columnName = _usersGrid.Columns[e.ColumnIndex].Name;
+        if (columnName == "Status")
         {
-            menu.Items.Add("Edit", null, async (_, _) => await OpenUserFormAsync(user.UserId));
-            menu.Items.Add("Change Password", null, async (_, _) => await OpenPasswordFormAsync(user));
-            menu.Items.Add(user.IsArchived ? "Restore" : "Archive", null, async (_, _) => await ToggleUserArchiveAsync(user));
+            ApplyBadgeStyle(e.CellStyle, e.Value?.ToString());
         }
-        menu.Show(Cursor.Position);
-        await Task.CompletedTask;
+        else if (columnName is "Role" or "Actions")
+        {
+            e.CellStyle.Font = FontHelper.SemiBold(8.8F);
+            e.CellStyle.ForeColor = columnName == "Actions" ? ThemeHelper.Primary : ThemeHelper.TextPrimary;
+        }
     }
 
-    private async Task OpenRoleActionsAsync(Role role)
+    private void RolesGrid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        ContextMenuStrip menu = new();
-        menu.Items.Add("Edit / Permissions", null, async (_, _) => await OpenRoleFormAsync(role.RoleId));
-        if (!role.IsSystemRole)
-            menu.Items.Add("Archive", null, async (_, _) => await ArchiveRoleAsync(role));
-        menu.Show(Cursor.Position);
-        await Task.CompletedTask;
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        string columnName = _rolesGrid.Columns[e.ColumnIndex].Name;
+        if (columnName == "Status")
+        {
+            ApplyBadgeStyle(e.CellStyle, e.Value?.ToString());
+        }
+        else if (columnName is "Type" or "PermissionsCount" or "Actions")
+        {
+            e.CellStyle.Font = FontHelper.SemiBold(8.8F);
+            e.CellStyle.ForeColor = columnName == "Actions" ? ThemeHelper.Primary : ThemeHelper.TextPrimary;
+        }
+    }
+
+    private static void ApplyBadgeStyle(DataGridViewCellStyle style, string? value)
+    {
+        style.Font = FontHelper.SemiBold(8.8F);
+        style.Alignment = DataGridViewContentAlignment.MiddleCenter;
+        style.SelectionForeColor = ThemeHelper.TextPrimary;
+        style.SelectionBackColor = ThemeHelper.Surface;
+        style.ForeColor = value switch
+        {
+            "Active" => ThemeHelper.Success,
+            "Inactive" => ThemeHelper.Warning,
+            "Archived" => ThemeHelper.Danger,
+            _ => ThemeHelper.TextSecondary
+        };
+    }
+
+    private void ManageGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (sender is not DataGridView grid || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        string columnName = grid.Columns[e.ColumnIndex].Name;
+        bool isAction = columnName == "Actions";
+        bool isBadge = columnName is "Status" or "Role" or "Type";
+        if (!isAction && !isBadge) return;
+
+        e.PaintBackground(e.CellBounds, true);
+        string text = e.FormattedValue?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Graphics is null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (isAction)
+        {
+            DrawActionPills(e.Graphics, e.CellBounds, text);
+        }
+        else
+        {
+            DrawSinglePill(e.Graphics, e.CellBounds, text, GetManagePillBackColor(columnName, text), Color.White, minWidth: columnName == "Role" ? 86 : 78);
+        }
+
+        e.Handled = true;
+    }
+
+    private static void DrawActionPills(Graphics graphics, Rectangle cellBounds, string actionsText)
+    {
+        string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        using Font font = FontHelper.SemiBold(8.4F);
+        int x = cellBounds.Left + 8;
+        int y = cellBounds.Top + (cellBounds.Height - 24) / 2;
+
+        foreach (string action in actions)
+        {
+            int width = Math.Max(54, (int)Math.Ceiling(graphics.MeasureString(action, font).Width) + 20);
+            if (x + width > cellBounds.Right - 6) break;
+            Rectangle rect = new(x, y, width, 24);
+            DrawRoundedPill(graphics, rect, action, font, GetActionPillBackColor(action), Color.White);
+            x += width + 6;
+        }
+    }
+
+    private static void DrawSinglePill(Graphics graphics, Rectangle cellBounds, string text, Color backColor, Color foreColor, int minWidth)
+    {
+        using Font font = FontHelper.SemiBold(8.6F);
+        int width = Math.Min(cellBounds.Width - 12, Math.Max(minWidth, (int)Math.Ceiling(graphics.MeasureString(text, font).Width) + 22));
+        Rectangle rect = new(cellBounds.Left + 8, cellBounds.Top + (cellBounds.Height - 24) / 2, width, 24);
+        DrawRoundedPill(graphics, rect, text, font, backColor, foreColor);
+    }
+
+    private static void DrawRoundedPill(Graphics graphics, Rectangle rect, string text, Font font, Color backColor, Color foreColor)
+    {
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using GraphicsPath path = GetRoundedRect(rect, rect.Height / 2F);
+        using SolidBrush backBrush = new(backColor);
+        using SolidBrush foreBrush = new(foreColor);
+        graphics.FillPath(backBrush, path);
+        using StringFormat format = new()
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoWrap,
+            Trimming = StringTrimming.EllipsisCharacter
+        };
+        graphics.DrawString(text, font, foreBrush, rect, format);
+    }
+
+    private static Color GetManagePillBackColor(string columnName, string text)
+    {
+        if (columnName == "Status")
+        {
+            return text switch
+            {
+                "Active" => ThemeHelper.Success,
+                "Inactive" => ThemeHelper.Warning,
+                "Archived" => ThemeHelper.GrayIcon,
+                _ => ThemeHelper.GrayIcon
+            };
+        }
+
+        if (columnName == "Type")
+        {
+            return text switch
+            {
+                "Protected" => ThemeHelper.Danger,
+                "System" => ThemeHelper.Primary,
+                _ => ThemeHelper.GrayIcon
+            };
+        }
+
+        return ThemeHelper.GrayIcon;
+    }
+
+    private static Color GetActionPillBackColor(string action)
+    {
+        return action switch
+        {
+            "Edit" => ThemeHelper.Success,
+            "Permissions" => ThemeHelper.Primary,
+            "Activate" or "Restore" => ThemeHelper.Success,
+            "Deactivate" => ThemeHelper.Warning,
+            "Archive" => ThemeHelper.Danger,
+            _ => ThemeHelper.Primary
+        };
+    }
+
+    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
+    {
+        GraphicsPath path = new();
+        float diameter = radius * 2;
+        SizeF size = new(diameter, diameter);
+        RectangleF arc = new(rect.Location, size);
+        path.AddArc(arc, 180, 90);
+        arc.X = rect.Right - diameter;
+        path.AddArc(arc, 270, 90);
+        arc.Y = rect.Bottom - diameter;
+        path.AddArc(arc, 0, 90);
+        arc.X = rect.Left;
+        path.AddArc(arc, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private static string? GetActionAt(DataGridView grid, int rowIndex, int columnIndex, Point cellLocation)
+    {
+        if (rowIndex < 0 || columnIndex < 0) return null;
+        if (rowIndex >= grid.Rows.Count || columnIndex >= grid.Columns.Count) return null;
+        if (grid.Columns[columnIndex].Name != "Actions") return null;
+
+        string actionsText = grid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(actionsText)) return null;
+
+        string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        using Graphics graphics = grid.CreateGraphics();
+        using Font font = FontHelper.SemiBold(8.4F);
+        int x = 8;
+        int y = (grid.Rows[rowIndex].Height - 24) / 2;
+
+        foreach (string action in actions)
+        {
+            int width = Math.Max(54, (int)Math.Ceiling(graphics.MeasureString(action, font).Width) + 20);
+            Rectangle rect = new(x, y, width, 24);
+            if (rect.Contains(cellLocation)) return action;
+            x += width + 6;
+        }
+
+        return null;
+    }
+
+    private async Task PerformUserActionAsync(UserListItem user, string action)
+    {
+        switch (action)
+        {
+            case "View":
+                await OpenUserFormAsync(user.UserId, isViewOnly: true);
+                break;
+            case "Edit":
+                await OpenUserFormAsync(user.UserId);
+                break;
+            case "Password":
+                break;
+            case "Activate":
+            case "Deactivate":
+                await ToggleUserActiveAsync(user);
+                break;
+            case "Archive":
+            case "Restore":
+                await ToggleUserArchiveAsync(user);
+                break;
+        }
+    }
+
+    private async Task PerformRoleActionAsync(Role role, string action)
+    {
+        switch (action)
+        {
+            case "View":
+                await OpenRoleFormAsync(role.RoleId, isViewOnly: true);
+                break;
+            case "Edit":
+            case "Permissions":
+                await OpenRoleFormAsync(role.RoleId);
+                break;
+            case "Activate":
+            case "Deactivate":
+                await ToggleRoleActiveAsync(role);
+                break;
+            case "Archive":
+            case "Restore":
+                await ArchiveRoleAsync(role);
+                break;
+        }
     }
 
     private async Task OpenUserFormAsync(int? userId, bool isViewOnly = false)
@@ -752,6 +1114,11 @@ public sealed class ManageSystemControl : UserControl
             return;
         }
 
+        if (!await ConfirmOwnerForSensitiveActionAsync($"Change password for user: {user.Username}"))
+        {
+            return;
+        }
+
         using var form = new UserPasswordForm(_currentUserId, user.UserId, user.Username);
         if (form.ShowDialog() == DialogResult.OK) await LoadUsersAsync();
     }
@@ -768,12 +1135,14 @@ public sealed class ManageSystemControl : UserControl
 
             if (user.IsArchived)
             {
+                if (!await ConfirmOwnerForSensitiveActionAsync($"Restore user: {user.Username}")) return;
                 await _userService.RestoreUserAsync(user.UserId, _currentUserId);
                 MessageBoxHelper.ShowSuccess("User restored successfully.");
             }
             else
             {
                 if (!MessageBoxHelper.Confirm($"Archive user {user.Username}?")) return;
+                if (!await ConfirmOwnerForSensitiveActionAsync($"Archive user: {user.Username}")) return;
                 await _userService.ArchiveUserAsync(user.UserId, _currentUserId);
                 MessageBoxHelper.ShowSuccess("User archived successfully.");
             }
@@ -785,7 +1154,49 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
-    private async Task OpenRoleFormAsync(int? roleId)
+    private async Task ToggleUserActiveAsync(UserListItem user)
+    {
+        try
+        {
+            if (user.IsOwner)
+            {
+                MessageBoxHelper.ShowWarning("The system owner account is protected.");
+                return;
+            }
+
+            string action = user.IsActive ? "Deactivate" : "Activate";
+            if (!MessageBoxHelper.Confirm($"{action} user {user.Username}?")) return;
+            if (!await ConfirmOwnerForSensitiveActionAsync($"{action} user: {user.Username}")) return;
+
+            User? details = await _userService.GetUserByIdAsync(user.UserId);
+            Role? role = _roles.FirstOrDefault(item => item.RoleName == user.RoleName);
+            if (details is null || role is null)
+            {
+                MessageBoxHelper.ShowWarning("Unable to load the selected user.");
+                return;
+            }
+
+            await _userService.UpdateUserAsync(new UpdateUserRequest
+            {
+                UserId = user.UserId,
+                Username = details.Username,
+                FirstName = details.FirstName,
+                LastName = details.LastName,
+                RoleId = role.RoleId,
+                IsActive = !user.IsActive,
+                Email = details.Email,
+                PhoneNumber = details.PhoneNumber
+            }, _currentUserId);
+            MessageBoxHelper.ShowSuccess($"User {action.ToLowerInvariant()}d successfully.");
+            await LoadUsersAsync();
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Message, "Manage System");
+        }
+    }
+
+    private async Task OpenRoleFormAsync(int? roleId, bool isViewOnly = false)
     {
         if (!AccessControlService.HasPermission("ManageSystem.Roles"))
         {
@@ -793,7 +1204,12 @@ public sealed class ManageSystemControl : UserControl
             return;
         }
 
-        using var form = new RoleDetailsForm(_currentUserId, roleId);
+        if (!isViewOnly && !await ConfirmOwnerForSensitiveActionAsync(roleId.HasValue ? "Edit role permissions" : "Create role"))
+        {
+            return;
+        }
+
+        using var form = new RoleDetailsForm(_currentUserId, roleId, isViewOnly);
         if (form.ShowDialog() == DialogResult.OK)
         {
             _rolesPage = 1;
@@ -813,6 +1229,7 @@ public sealed class ManageSystemControl : UserControl
             }
 
             if (!MessageBoxHelper.Confirm($"Archive role {role.RoleName}?")) return;
+            if (!await ConfirmOwnerForSensitiveActionAsync($"Archive role: {role.RoleName}")) return;
             await _roleService.ArchiveRoleAsync(role.RoleId, _currentUserId);
             MessageBoxHelper.ShowSuccess("Role archived successfully.");
             await LoadRolesAsync();
@@ -823,15 +1240,60 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
+    private async Task ToggleRoleActiveAsync(Role role)
+    {
+        try
+        {
+            if (role.IsSystemRole)
+            {
+                MessageBoxHelper.ShowWarning("System roles are protected.");
+                return;
+            }
+
+            string action = role.IsActive ? "Deactivate" : "Activate";
+            if (!MessageBoxHelper.Confirm($"{action} role {role.RoleName}?")) return;
+            if (!await ConfirmOwnerForSensitiveActionAsync($"{action} role: {role.RoleName}")) return;
+
+            RoleWithPermissions? details = await _roleService.GetRoleWithPermissionsAsync(role.RoleId);
+            if (details is null)
+            {
+                MessageBoxHelper.ShowWarning("Unable to load the selected role.");
+                return;
+            }
+
+            details.IsActive = !role.IsActive;
+            await _roleService.UpdateRoleAsync(details, _currentUserId);
+            MessageBoxHelper.ShowSuccess($"Role {action.ToLowerInvariant()}d successfully.");
+            await LoadRolesAsync();
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Message, "Manage System");
+        }
+    }
+
     private static string GetUserActions(UserListItem user)
     {
-        if (user.IsOwner) return "View";
-        return user.IsArchived ? "View | Edit | Password | Restore" : "View | Edit | Password | Archive";
+        if (user.IsOwner) return "View | Edit";
+        if (user.IsArchived) return "View | Edit | Restore";
+        return "View | Edit | Archive";
     }
 
     private static string GetRoleActions(Role role)
     {
-        return role.IsSystemRole ? "View | Permissions" : "Edit | Permissions | Archive";
+        if (role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase)) return "View";
+        if (role.IsSystemRole) return "View | Permissions";
+        if (role.IsArchived) return "View | Edit | Permissions";
+        return "View | Edit | Permissions | Archive";
+    }
+
+    private async Task<bool> ConfirmOwnerForSensitiveActionAsync(string actionName)
+    {
+        if (AccessControlService.CurrentUser?.IsOwner == true) return true;
+        User? currentUser = await _userService.GetUserByIdAsync(_currentUserId);
+        if (currentUser?.IsOwner == true) return true;
+        using OwnerPasswordConfirmationForm form = new(actionName);
+        return form.ShowDialog() == DialogResult.OK;
     }
 
     private async Task SaveSystemSettingsAsync()
@@ -855,7 +1317,24 @@ public sealed class ManageSystemControl : UserControl
             model.BusinessName = _businessNameInput.Text.Trim();
             model.ContactNumber = _contactNumberInput.Text.Trim();
             model.EmailAddress = _emailInput.Text.Trim();
-            model.BusinessAddress = _addressInput.Text.Trim();
+            model.LoginDescription = string.IsNullOrWhiteSpace(_loginDescriptionInput.Text)
+                ? "Internal scheduling and record management system"
+                : _loginDescriptionInput.Text.Trim();
+
+            AddressOption? region = _businessRegionComboBox.SelectedItem as AddressOption;
+            AddressOption? province = _businessProvinceComboBox.SelectedItem as AddressOption;
+            AddressOption? city = _businessCityComboBox.SelectedItem as AddressOption;
+            AddressOption? barangay = _businessBarangayComboBox.SelectedItem as AddressOption;
+            model.BusinessRegionCode = region?.Code ?? string.Empty;
+            model.BusinessRegionName = region?.Name ?? string.Empty;
+            model.BusinessProvinceCode = province is null || IsNotApplicableProvince(province) ? string.Empty : province.Code;
+            model.BusinessProvinceName = province is null || IsNotApplicableProvince(province) ? string.Empty : province.Name;
+            model.BusinessCityCode = city?.Code ?? string.Empty;
+            model.BusinessCityName = city?.Name ?? string.Empty;
+            model.BusinessBarangayCode = barangay?.Code ?? string.Empty;
+            model.BusinessBarangayName = barangay?.Name ?? string.Empty;
+            model.BusinessStreetAddress = _businessStreetInput.Text.Trim();
+            model.BusinessAddress = BuildFullBusinessAddress(model);
             await _service.SaveSystemSettingsAsync(model, _currentUserId);
             await AppBrandingManager.LoadSettingsAsync();
             MessageBoxHelper.ShowSuccess("System settings saved successfully.");
@@ -870,17 +1349,28 @@ public sealed class ManageSystemControl : UserControl
     {
         try
         {
-            if (!_themeColors.TryGetValue(_selectedThemeName, out string? colorHex)) colorHex = "#2563EB";
+            string colorHex = _themeHexInput.Text.Trim();
+            if (!Regex.IsMatch(colorHex, "^#[0-9A-Fa-f]{6}$"))
+            {
+                MessageBoxHelper.ShowWarning("Please enter a valid hex color, such as #2563EB.");
+                return;
+            }
+
             SystemSettingsModel model = AppBrandingManager.CurrentSettings;
             model.ThemeColor = colorHex;
             model.SystemIconPath = _currentIconPath;
+            model.SystemLogoMode = _currentLogoMode;
+            model.SystemLogoIconKey = _currentLogoIconKey;
             model.LoginPosterPath = _currentPosterPath;
             model.UseCustomLoginPoster = _useCustomPosterToggle.Checked;
+            model.LoginDescription = string.IsNullOrWhiteSpace(_loginDescriptionInput.Text)
+                ? "Internal scheduling and record management system"
+                : _loginDescriptionInput.Text.Trim();
             await _service.SaveBrandingSettingsAsync(model, _currentUserId);
             await AppBrandingManager.LoadSettingsAsync();
             ThemeHelper.SetPrimaryColor(ColorTranslator.FromHtml(colorHex));
-            MessageBoxHelper.ShowSuccess($"Updated theme color: {_selectedThemeName}.");
-            RenderTabs();
+            MessageBoxHelper.ShowSuccess("Branding and theme settings saved successfully.");
+            ApplyThemeToCurrentManageSystemUi();
         }
         catch (Exception exception)
         {
@@ -904,16 +1394,52 @@ public sealed class ManageSystemControl : UserControl
         _contactNumberInput.Text = settings.ContactNumber;
         _emailInput.Text = settings.EmailAddress;
         _addressInput.Text = settings.BusinessAddress;
+        _loginDescriptionInput.Text = settings.LoginDescription;
+        _businessStreetInput.Text = settings.BusinessStreetAddress;
         _selectedThemeName = _themeColors.FirstOrDefault(x => x.Value.Equals(settings.ThemeColor, StringComparison.OrdinalIgnoreCase)).Key ?? "Blue";
+        _selectedThemeHex = settings.ThemeColor;
+        SetSelectedThemeHex(_selectedThemeHex);
 
         _currentIconPath = settings.SystemIconPath ?? string.Empty;
+        _currentLogoMode = string.IsNullOrWhiteSpace(settings.SystemLogoMode) ? "BuiltIn" : settings.SystemLogoMode;
+        _currentLogoIconKey = string.IsNullOrWhiteSpace(settings.SystemLogoIconKey) ? "Car" : settings.SystemLogoIconKey;
         _iconPathLabel.Text = GetDisplayPath(_currentIconPath);
-        _iconPreview.ImageLocation = File.Exists(_currentIconPath) ? _currentIconPath : null;
+        RefreshLogoPreview();
 
         _currentPosterPath = settings.LoginPosterPath ?? string.Empty;
         _posterPathLabel.Text = GetDisplayPath(_currentPosterPath);
-        _posterPreview.ImageLocation = File.Exists(_currentPosterPath) ? _currentPosterPath : null;
         _useCustomPosterToggle.Checked = settings.UseCustomLoginPoster;
+        RefreshPosterPreview();
+    }
+
+    private void ResetBrandingFields()
+    {
+        _currentIconPath = string.Empty;
+        _currentLogoMode = "BuiltIn";
+        _currentLogoIconKey = "Car";
+        _iconPathLabel.Text = "No file selected";
+        RefreshLogoPreview();
+        _currentPosterPath = string.Empty;
+        _posterPathLabel.Text = "No file selected";
+        _useCustomPosterToggle.Checked = false;
+        RefreshPosterPreview();
+        _loginDescriptionInput.Text = "Internal scheduling and record management system";
+        _selectedThemeName = "Blue";
+        SetSelectedThemeHex("#2563EB");
+        PopulateThemePresetComboBox();
+    }
+
+    private static string BuildFullBusinessAddress(SystemSettingsModel model)
+    {
+        return string.Join(", ", new[]
+            {
+                model.BusinessStreetAddress,
+                model.BusinessBarangayName,
+                model.BusinessCityName,
+                model.BusinessProvinceName,
+                model.BusinessRegionName
+            }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
     }
 
     private void BrowseIconBtn_Click(object? sender, EventArgs e)
@@ -923,8 +1449,9 @@ public sealed class ManageSystemControl : UserControl
         string newPath = UploadPathHelper.GetBrandingUploadPath(Path.GetFileName(dialog.FileName));
         File.Copy(dialog.FileName, newPath, true);
         _currentIconPath = newPath;
-        _iconPreview.ImageLocation = _currentIconPath;
+        _currentLogoMode = "File";
         _iconPathLabel.Text = Path.GetFileName(_currentIconPath);
+        RefreshLogoPreview();
     }
 
     private void BrowsePosterBtn_Click(object? sender, EventArgs e)
@@ -934,9 +1461,9 @@ public sealed class ManageSystemControl : UserControl
         string newPath = UploadPathHelper.GetBrandingUploadPath(Path.GetFileName(dialog.FileName));
         File.Copy(dialog.FileName, newPath, true);
         _currentPosterPath = newPath;
-        _posterPreview.ImageLocation = _currentPosterPath;
         _posterPathLabel.Text = Path.GetFileName(_currentPosterPath);
         _useCustomPosterToggle.Checked = true;
+        RefreshPosterPreview();
     }
 
     private void OpenIcon() => OpenPath(_currentIconPath);
@@ -945,16 +1472,178 @@ public sealed class ManageSystemControl : UserControl
     private void ClearIcon()
     {
         _currentIconPath = string.Empty;
-        _iconPreview.ImageLocation = null;
+        _currentLogoMode = "BuiltIn";
+        _currentLogoIconKey = "Car";
         _iconPathLabel.Text = "No file selected";
+        RefreshLogoPreview();
     }
 
     private void ClearPoster()
     {
         _currentPosterPath = string.Empty;
-        _posterPreview.ImageLocation = null;
         _posterPathLabel.Text = "No file selected";
         _useCustomPosterToggle.Checked = false;
+        RefreshPosterPreview();
+    }
+
+    private void UseCustomPosterToggle_CheckedChanged(object? sender, EventArgs e) => RefreshPosterPreview();
+
+    private void ChooseBuiltInIconButton_Click(object? sender, EventArgs e)
+    {
+        ContextMenuStrip menu = new();
+        foreach ((string key, string label) in GetBuiltInLogoChoices())
+        {
+            menu.Items.Add(label, null, (_, _) =>
+            {
+                _currentLogoMode = "BuiltIn";
+                _currentLogoIconKey = key;
+                _currentIconPath = string.Empty;
+                _iconPathLabel.Text = $"Built-in: {label}";
+                RefreshLogoPreview();
+            });
+        }
+
+        if (sender is Control control)
+        {
+            menu.Show(control, new Point(0, control.Height + 2));
+        }
+        else
+        {
+            menu.Show(Cursor.Position);
+        }
+    }
+
+    private static IReadOnlyList<(string Key, string Label)> GetBuiltInLogoChoices() =>
+    [
+        ("Car", "Car"),
+        ("CarSide", "Car Side"),
+        ("Taxi", "Taxi"),
+        ("Truck", "Truck"),
+        ("Road", "Road"),
+        ("Warehouse", "Garage / Warehouse"),
+        ("Key", "Key")
+    ];
+
+    private void RefreshLogoPreview()
+    {
+        _iconPreview.Controls.Clear();
+        if (string.Equals(_currentLogoMode, "File", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(_currentIconPath)
+            && File.Exists(_currentIconPath))
+        {
+            _iconPreview.Controls.Add(new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                ImageLocation = _currentIconPath,
+                BackColor = ThemeHelper.Background
+            });
+            return;
+        }
+
+        string label = GetBuiltInLogoChoices().FirstOrDefault(choice => choice.Key == _currentLogoIconKey).Label;
+        label = string.IsNullOrWhiteSpace(label) ? "Default Logo" : label;
+        IconPictureBox icon = new()
+        {
+            IconChar = ResolveBuiltInLogoIcon(_currentLogoIconKey),
+            IconColor = ThemeHelper.Primary,
+            IconSize = 38,
+            BackColor = ThemeHelper.Background,
+            Location = new Point((_iconPreview.Width - 42) / 2, 14),
+            Size = new Size(42, 42)
+        };
+        Label text = new()
+        {
+            Text = _currentLogoIconKey == "Car" ? "Default Logo" : label,
+            AutoSize = false,
+            Location = new Point(4, 58),
+            Size = new Size(_iconPreview.Width - 8, 20),
+            Font = FontHelper.SemiBold(7.8F),
+            ForeColor = ThemeHelper.TextSecondary,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        _iconPreview.Controls.Add(icon);
+        _iconPreview.Controls.Add(text);
+    }
+
+    private static IconChar ResolveBuiltInLogoIcon(string? key)
+    {
+        return key switch
+        {
+            "CarSide" => IconChar.CarSide,
+            "Taxi" => IconChar.Taxi,
+            "Truck" => IconChar.Truck,
+            "Road" => IconChar.Road,
+            "Warehouse" => IconChar.Warehouse,
+            "Key" => IconChar.Key,
+            _ => IconChar.Car
+        };
+    }
+
+    private void RefreshPosterPreview()
+    {
+        _posterPreview.ImageLocation = null;
+        if (_useCustomPosterToggle.Checked
+            && !string.IsNullOrWhiteSpace(_currentPosterPath)
+            && File.Exists(_currentPosterPath))
+        {
+            _posterPreview.Image = null;
+            _posterPreview.ImageLocation = _currentPosterPath;
+            return;
+        }
+
+        _posterPreview.Image = CreatePreviewPlaceholder("Default Login", "Branding", _posterPreview.Size);
+    }
+
+    private static Bitmap CreatePreviewPlaceholder(string title, string subtitle, Size size)
+    {
+        Bitmap bitmap = new(Math.Max(1, size.Width), Math.Max(1, size.Height));
+        using Graphics graphics = Graphics.FromImage(bitmap);
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        graphics.Clear(ThemeHelper.Background);
+        using Pen borderPen = new(ThemeHelper.Border);
+        graphics.DrawRectangle(borderPen, 0, 0, bitmap.Width - 1, bitmap.Height - 1);
+        using Font titleFont = FontHelper.SemiBold(size.Width > 120 ? 10F : 8.5F);
+        using Font subtitleFont = FontHelper.Regular(size.Width > 120 ? 8.5F : 7.5F);
+        using SolidBrush titleBrush = new(ThemeHelper.TextPrimary);
+        using SolidBrush subtitleBrush = new(ThemeHelper.TextSecondary);
+        using StringFormat format = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        Rectangle titleRect = new(8, (bitmap.Height / 2) - 24, bitmap.Width - 16, 24);
+        Rectangle subtitleRect = new(8, (bitmap.Height / 2), bitmap.Width - 16, 24);
+        graphics.DrawString(title, titleFont, titleBrush, titleRect, format);
+        graphics.DrawString(subtitle, subtitleFont, subtitleBrush, subtitleRect, format);
+        return bitmap;
+    }
+
+    private void ApplyThemeToCurrentManageSystemUi()
+    {
+        foreach (IconButton button in _tabPanel.Controls.OfType<IconButton>())
+        {
+            bool active = _availableTabs.FirstOrDefault(tab => tab.Key == _activeTabKey).Text == button.Text;
+            ApplyTabStyle(button, active);
+        }
+
+        _usersGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
+        _usersGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
+        _rolesGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
+        _rolesGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
+        _themeColorPreview.BackColor = ColorTranslator.FromHtml(_selectedThemeHex);
+        RefreshLogoPreview();
+        RefreshPosterPreview();
+        InvalidateManageSystemControls(this);
+    }
+
+    private static void InvalidateManageSystemControls(Control parent)
+    {
+        parent.Invalidate();
+        foreach (Control child in parent.Controls)
+        {
+            if (child is Button button && button.ForeColor == Color.White)
+            {
+                button.BackColor = ThemeHelper.Primary;
+            }
+            InvalidateManageSystemControls(child);
+        }
     }
 
     private static void OpenPath(string path)
@@ -971,27 +1660,108 @@ public sealed class ManageSystemControl : UserControl
     private void SelectTheme(string themeName)
     {
         _selectedThemeName = themeName;
-        foreach (Button button in _contentPanel.Controls.Find("ThemeButton", true).OfType<Button>())
+        if (_themeColors.TryGetValue(themeName, out string? hex))
+            SetSelectedThemeHex(hex);
+    }
+
+    private void PopulateThemePresetComboBox()
+    {
+        _themePresetComboBox.SelectedIndexChanged -= ThemePresetComboBox_SelectedIndexChanged;
+        _themePresetComboBox.Items.Clear();
+        foreach (KeyValuePair<string, string> pair in _themeColors)
+            _themePresetComboBox.Items.Add($"{pair.Key} - {pair.Value}");
+        string selected = $"{_selectedThemeName} - {_selectedThemeHex}";
+        _themePresetComboBox.SelectedItem = _themePresetComboBox.Items.Contains(selected) ? selected : null;
+        _themePresetComboBox.SelectedIndexChanged += ThemePresetComboBox_SelectedIndexChanged;
+    }
+
+    private void ThemePresetComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        string? selected = _themePresetComboBox.SelectedItem?.ToString();
+        if (string.IsNullOrWhiteSpace(selected)) return;
+        string themeName = selected.Split(" - ")[0];
+        SelectTheme(themeName);
+    }
+
+    private void PickCustomColorButton_Click(object? sender, EventArgs e)
+    {
+        using ColorDialog dialog = new() { Color = _themeColorPreview.BackColor, FullOpen = true };
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        SetSelectedThemeHex(ColorTranslator.ToHtml(dialog.Color));
+        _selectedThemeName = _themeColors.FirstOrDefault(pair => pair.Value.Equals(_selectedThemeHex, StringComparison.OrdinalIgnoreCase)).Key ?? "Custom";
+        PopulateThemePresetComboBox();
+    }
+
+    private void ThemeColorPreview_Paint(object? sender, PaintEventArgs e)
+    {
+        using Pen pen = new(ThemeHelper.Border);
+        e.Graphics.DrawRectangle(pen, 0, 0, _themeColorPreview.Width - 1, _themeColorPreview.Height - 1);
+    }
+
+    private void SetSelectedThemeHex(string hex)
+    {
+        _selectedThemeHex = hex.ToUpperInvariant();
+        _themeHexInput.Text = _selectedThemeHex;
+        try
         {
-            bool selected = button.Text == themeName;
-            button.BackColor = selected ? ThemeHelper.Primary : ThemeHelper.Surface;
-            button.ForeColor = selected ? Color.White : ThemeHelper.TextPrimary;
+            _themeColorPreview.BackColor = ColorTranslator.FromHtml(_selectedThemeHex);
+        }
+        catch
+        {
+            _themeColorPreview.BackColor = ThemeHelper.Primary;
         }
     }
 
-    private Button CreateThemeButton(string name)
+    private void LayoutSystemSettingsCard(Panel card)
     {
-        Button button = ControlFactory.CreateSecondaryButton(name, 94, 34);
-        button.Name = "ThemeButton";
-        bool selected = name == _selectedThemeName;
-        button.BackColor = selected ? ThemeHelper.Primary : ThemeHelper.Surface;
-        button.ForeColor = selected ? Color.White : ThemeHelper.TextPrimary;
-        return button;
+        const int contentPadding = 24;
+        const int columnGap = 24;
+        int availableWidth = Math.Max(1, card.ClientSize.Width - (contentPadding * 2));
+        int columnWidth = Math.Max(1, (availableWidth - (columnGap * 2)) / 3);
+        int leftX = contentPadding;
+        int rightX = contentPadding + columnWidth + columnGap;
+        int thirdX = contentPadding + ((columnWidth + columnGap) * 2);
+
+        MoveLabeledControl(card, "Business Name *", _businessNameInput, leftX, 70, columnWidth);
+        MoveLabeledControl(card, "Contact Number", _contactNumberInput, rightX, 70, columnWidth);
+        MoveLabeledControl(card, "Email Address", _emailInput, thirdX, 70, columnWidth);
+
+        MoveLabeledControl(card, "Region", _businessRegionComboBox, leftX, 186, columnWidth);
+        MoveLabeledControl(card, "Province", _businessProvinceComboBox, rightX, 186, columnWidth);
+        MoveLabeledControl(card, "City / Municipality", _businessCityComboBox, thirdX, 186, columnWidth);
+        MoveLabeledControl(card, "Barangay", _businessBarangayComboBox, leftX, 254, columnWidth);
+        MoveLabeledControl(card, "Street / House / Block", _businessStreetInput, rightX, 254, columnWidth);
+    }
+
+    private static void LayoutSystemSettingsFooter(Panel footer, Button resetButton, Button saveButton)
+    {
+        saveButton.Location = new Point(Math.Max(24, footer.ClientSize.Width - 24 - saveButton.Width), 8);
+        resetButton.Location = new Point(Math.Max(24, saveButton.Left - 14 - resetButton.Width), 8);
+    }
+
+    private static void MoveLabeledControl(Control parent, string labelText, Control input, int x, int y, int width)
+    {
+        Label? label = parent.Controls.OfType<Label>().FirstOrDefault(item => item.Text == labelText);
+        if (label is not null)
+        {
+            label.Location = new Point(x, y);
+            label.Width = width;
+        }
+
+        input.Location = new Point(x, y + 24);
+        input.Size = new Size(width, input.Height);
+    }
+
+    private static void AlignFooterButtons(Panel footer, Button resetButton, Button saveButton)
+    {
+        saveButton.Location = new Point(Math.Max(0, footer.ClientSize.Width - saveButton.Width), 8);
+        resetButton.Location = new Point(Math.Max(0, saveButton.Left - 14 - resetButton.Width), 8);
     }
 
     private static Panel CreateBrandingCard(string title, int height)
     {
         Panel card = ControlFactory.CreateCardPanel(new Size(0, height));
+        card.Dock = DockStyle.Top;
         card.Height = height;
         card.Padding = new Padding(24);
         card.Controls.Add(CreateSectionTitle(title, new Point(24, 20), 320));
@@ -1038,6 +1808,211 @@ public sealed class ManageSystemControl : UserControl
         parent.Controls.Add(input);
     }
 
+    private static void AddLabeledCombo(Control parent, string labelText, ComboBox input, Point labelLocation, int width)
+    {
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = labelLocation;
+        input.Location = new Point(labelLocation.X, labelLocation.Y + 24);
+        input.Size = new Size(width, 30);
+        input.Font = FontHelper.Regular(10F);
+        parent.Controls.Add(label);
+        parent.Controls.Add(input);
+    }
+
+    private void WireAddressSelectors()
+    {
+        _businessRegionComboBox.SelectedIndexChanged -= BusinessRegionComboBox_SelectedIndexChanged;
+        _businessProvinceComboBox.SelectedIndexChanged -= BusinessProvinceComboBox_SelectedIndexChanged;
+        _businessCityComboBox.SelectedIndexChanged -= BusinessCityComboBox_SelectedIndexChanged;
+        _businessRegionComboBox.SelectedIndexChanged += BusinessRegionComboBox_SelectedIndexChanged;
+        _businessProvinceComboBox.SelectedIndexChanged += BusinessProvinceComboBox_SelectedIndexChanged;
+        _businessCityComboBox.SelectedIndexChanged += BusinessCityComboBox_SelectedIndexChanged;
+    }
+
+    private async Task InitializeBusinessAddressSelectorsAsync()
+    {
+        try
+        {
+            _isInitializingAddress = true;
+            IReadOnlyList<PsgcRegionDto> regions = await _addressService.GetRegionsAsync();
+            SetAddressItems(
+                _businessRegionComboBox,
+                regions.Select(region => new AddressOption(region.Code, region.Name)),
+                "Select a region",
+                true);
+
+            SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
+            if (SelectByName(_businessRegionComboBox, settings.BusinessRegionName)
+                && _businessRegionComboBox.SelectedItem is AddressOption region)
+            {
+                await LoadBusinessProvincesAsync(region.Code, settings.BusinessProvinceName);
+                if (_businessProvinceComboBox.SelectedItem is AddressOption province)
+                {
+                    if (IsNotApplicableProvince(province))
+                    {
+                        await LoadBusinessCitiesByRegionAsync(region.Code, settings.BusinessCityName);
+                    }
+                    else
+                    {
+                        await LoadBusinessCitiesAsync(province.Code, settings.BusinessCityName);
+                    }
+
+                    if (_businessCityComboBox.SelectedItem is AddressOption city)
+                    {
+                        await LoadBusinessBarangaysAsync(city.Code, settings.BusinessBarangayName);
+                    }
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            ResetComboBox(_businessRegionComboBox, "Unable to load regions", false);
+            ResetComboBox(_businessProvinceComboBox, "Address lookup unavailable", false);
+            ResetComboBox(_businessCityComboBox, "Address lookup unavailable", false);
+            ResetComboBox(_businessBarangayComboBox, "Address lookup unavailable", false);
+            MessageBoxHelper.ShowWarning(exception.Message, "Address Lookup");
+        }
+        finally
+        {
+            _isInitializingAddress = false;
+        }
+    }
+
+    private async void BusinessRegionComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_isInitializingAddress) return;
+        if (_businessRegionComboBox.SelectedItem is not AddressOption region)
+        {
+            ResetComboBox(_businessProvinceComboBox, "Select a region first", false);
+            ResetComboBox(_businessCityComboBox, "Select a province first", false);
+            ResetComboBox(_businessBarangayComboBox, "Select a city first", false);
+            return;
+        }
+
+        await LoadBusinessProvincesAsync(region.Code);
+    }
+
+    private async void BusinessProvinceComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_isInitializingAddress) return;
+        if (_businessProvinceComboBox.SelectedItem is not AddressOption province)
+        {
+            ResetComboBox(_businessCityComboBox, "Select a province first", false);
+            ResetComboBox(_businessBarangayComboBox, "Select a city first", false);
+            return;
+        }
+
+        if (IsNotApplicableProvince(province))
+        {
+            if (_businessRegionComboBox.SelectedItem is AddressOption region)
+                await LoadBusinessCitiesByRegionAsync(region.Code);
+            return;
+        }
+
+        await LoadBusinessCitiesAsync(province.Code);
+    }
+
+    private async void BusinessCityComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_isInitializingAddress) return;
+        if (_businessCityComboBox.SelectedItem is not AddressOption city)
+        {
+            ResetComboBox(_businessBarangayComboBox, "Select a city first", false);
+            return;
+        }
+
+        await LoadBusinessBarangaysAsync(city.Code);
+    }
+
+    private async Task LoadBusinessProvincesAsync(string regionCode, string? selectedName = null)
+    {
+        ResetComboBox(_businessProvinceComboBox, "Loading provinces...", false);
+        ResetComboBox(_businessCityComboBox, "Select a province first", false);
+        ResetComboBox(_businessBarangayComboBox, "Select a city first", false);
+
+        IReadOnlyList<PsgcProvinceDto> provinces = await _addressService.GetProvincesByRegionAsync(regionCode);
+        if (provinces.Count == 0)
+        {
+            SetNotApplicableProvince();
+            await LoadBusinessCitiesByRegionAsync(regionCode, selectedName);
+            return;
+        }
+
+        SetAddressItems(_businessProvinceComboBox, provinces.Select(province => new AddressOption(province.Code, province.Name)), "Select a province", true);
+        SelectByName(_businessProvinceComboBox, selectedName);
+    }
+
+    private async Task LoadBusinessCitiesAsync(string provinceCode, string? selectedName = null)
+    {
+        ResetComboBox(_businessCityComboBox, "Loading cities...", false);
+        ResetComboBox(_businessBarangayComboBox, "Select a city first", false);
+        IReadOnlyList<PsgcCityMunicipalityDto> cities = await _addressService.GetCitiesByProvinceAsync(provinceCode);
+        SetAddressItems(_businessCityComboBox, cities.Select(city => new AddressOption(city.Code, city.Name)), "Select a city / municipality", true);
+        SelectByName(_businessCityComboBox, selectedName);
+    }
+
+    private async Task LoadBusinessCitiesByRegionAsync(string regionCode, string? selectedName = null)
+    {
+        ResetComboBox(_businessCityComboBox, "Loading cities...", false);
+        ResetComboBox(_businessBarangayComboBox, "Select a city first", false);
+        IReadOnlyList<PsgcCityMunicipalityDto> cities = await _addressService.GetCitiesByRegionAsync(regionCode);
+        SetAddressItems(_businessCityComboBox, cities.Select(city => new AddressOption(city.Code, city.Name)), "Select a city / municipality", true);
+        SelectByName(_businessCityComboBox, selectedName);
+    }
+
+    private async Task LoadBusinessBarangaysAsync(string cityCode, string? selectedName = null)
+    {
+        ResetComboBox(_businessBarangayComboBox, "Loading barangays...", false);
+        IReadOnlyList<PsgcBarangayDto> barangays = await _addressService.GetBarangaysByCityAsync(cityCode);
+        SetAddressItems(_businessBarangayComboBox, barangays.Select(barangay => new AddressOption(barangay.Code, barangay.Name)), "Select a barangay", true);
+        SelectByName(_businessBarangayComboBox, selectedName);
+    }
+
+    private void SetNotApplicableProvince()
+    {
+        _businessProvinceComboBox.BeginUpdate();
+        _businessProvinceComboBox.Items.Clear();
+        _businessProvinceComboBox.Items.Add(new AddressOption(NotApplicableProvinceCode, NotApplicableProvinceName));
+        _businessProvinceComboBox.SelectedIndex = 0;
+        _businessProvinceComboBox.Enabled = false;
+        _businessProvinceComboBox.EndUpdate();
+    }
+
+    private static void ResetComboBox(ComboBox comboBox, string text, bool enabled)
+    {
+        comboBox.BeginUpdate();
+        comboBox.Items.Clear();
+        comboBox.Items.Add(text);
+        comboBox.SelectedIndex = 0;
+        comboBox.Enabled = enabled;
+        comboBox.EndUpdate();
+    }
+
+    private static void SetAddressItems(ComboBox comboBox, IEnumerable<AddressOption> options, string placeholder, bool enabled)
+    {
+        comboBox.BeginUpdate();
+        comboBox.Items.Clear();
+        comboBox.Items.Add(placeholder);
+        comboBox.Items.AddRange(options.OrderBy(option => option.Name).Cast<object>().ToArray());
+        comboBox.SelectedIndex = 0;
+        comboBox.Enabled = enabled;
+        comboBox.EndUpdate();
+    }
+
+    private static bool SelectByName(ComboBox comboBox, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        AddressOption? option = comboBox.Items
+            .OfType<AddressOption>()
+            .FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (option is null) return false;
+        comboBox.SelectedItem = option;
+        return true;
+    }
+
+    private static bool IsNotApplicableProvince(AddressOption option)
+        => string.Equals(option.Code, NotApplicableProvinceCode, StringComparison.Ordinal);
+
     private static ComboBox CreateComboBox(int width)
     {
         return new ComboBox
@@ -1063,8 +2038,19 @@ public sealed class ManageSystemControl : UserControl
 
     private static Panel CreateSpacer() => new() { Dock = DockStyle.Top, Height = 16, BackColor = ThemeHelper.ContentBackground };
 
+    private static void PositionBoundedCard(Panel viewport, Control card)
+    {
+        int left = Math.Max(0, (viewport.ClientSize.Width - card.Width - SystemInformation.VerticalScrollBarWidth) / 2);
+        card.Location = new Point(left, 0);
+    }
+
     private static void ShowPermissionDenied()
     {
         MessageBoxHelper.ShowWarning("You do not have permission to perform this action.", "Permission Denied");
+    }
+
+    private sealed record AddressOption(string Code, string Name)
+    {
+        public override string ToString() => Name;
     }
 }

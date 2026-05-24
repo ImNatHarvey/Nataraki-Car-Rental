@@ -24,6 +24,7 @@ public sealed class LoginForm : Form
     {
         Text = AppBrandingManager.CurrentSettings.BusinessName;
         ThemeHelper.ApplyCompactDialogFormSettings(this);
+        ApplyWindowIcon(this);
 
         TableLayoutPanel rootLayout = new()
         {
@@ -58,15 +59,7 @@ public sealed class LoginForm : Form
         }
         else
         {
-            IconPictureBox carIcon = new()
-            {
-                IconChar = IconChar.Car,
-                IconColor = ThemeHelper.Primary,
-                IconSize = 46,
-                BackColor = ThemeHelper.ContentBackground,
-                Location = new Point(56, 140),
-                Size = new Size(52, 52)
-            };
+            Control brandIcon = CreateBrandIcon(new Point(56, 140), new Size(52, 52), ThemeHelper.ContentBackground);
 
             Label titleLabel = new()
             {
@@ -82,7 +75,7 @@ public sealed class LoginForm : Form
             Label descriptionLabel = new()
             {
                 AutoSize = false,
-                Text = "Internal scheduling and record management system",
+                Text = AppBrandingManager.CurrentSettings.LoginDescription,
                 Font = FontHelper.Regular(10.5F),
                 ForeColor = ThemeHelper.TextSecondary,
                 Location = new Point(58, 248),
@@ -97,7 +90,7 @@ public sealed class LoginForm : Form
                 Size = new Size(72, 3)
             };
 
-            brandingPanel.Controls.Add(carIcon);
+            brandingPanel.Controls.Add(brandIcon);
             brandingPanel.Controls.Add(titleLabel);
             brandingPanel.Controls.Add(descriptionLabel);
             brandingPanel.Controls.Add(accentLine);
@@ -158,6 +151,70 @@ public sealed class LoginForm : Form
 
         Controls.Add(rootLayout);
         AcceptButton = loginButton;
+    }
+
+    private static Control CreateBrandIcon(Point location, Size size, Color backColor)
+    {
+        SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
+        string iconPath = settings.SystemIconPath;
+        if (string.Equals(settings.SystemLogoMode, "File", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(iconPath)
+            && File.Exists(iconPath)
+            && !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        {
+            return new PictureBox
+            {
+                Location = location,
+                Size = size,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                ImageLocation = iconPath,
+                BackColor = backColor
+            };
+        }
+
+        return new IconPictureBox
+        {
+            IconChar = ResolveBuiltInLogoIcon(settings.SystemLogoIconKey),
+            IconColor = ThemeHelper.Primary,
+            IconSize = 46,
+            BackColor = backColor,
+            Location = location,
+            Size = size
+        };
+    }
+
+    private static IconChar ResolveBuiltInLogoIcon(string? key)
+    {
+        return key switch
+        {
+            "CarSide" => IconChar.CarSide,
+            "Taxi" => IconChar.Taxi,
+            "Truck" => IconChar.Truck,
+            "Road" => IconChar.Road,
+            "Warehouse" => IconChar.Warehouse,
+            "Key" => IconChar.Key,
+            _ => IconChar.Car
+        };
+    }
+
+    private static void ApplyWindowIcon(Form form)
+    {
+        string iconPath = AppBrandingManager.CurrentSettings.SystemIconPath;
+        if (string.IsNullOrWhiteSpace(iconPath)
+            || !File.Exists(iconPath)
+            || !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            form.Icon = new System.Drawing.Icon(iconPath);
+        }
+        catch
+        {
+            // Ignore invalid icon files and keep the default window icon.
+        }
     }
 
     private async void LoginButton_Click(object? sender, EventArgs e)

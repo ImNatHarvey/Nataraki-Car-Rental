@@ -1,6 +1,8 @@
+using FontAwesome.Sharp;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
+using NatarakiCarRental.UserControls.Common;
 
 namespace NatarakiCarRental.Forms.ManageSystem;
 
@@ -34,6 +36,7 @@ public sealed class UserDetailsForm : Form
     private readonly List<Role> _roles = [];
     private Button? _saveButton;
     private Label? _protectedNote;
+    private bool _loadedUserIsOwner;
 
     public UserDetailsForm(int currentUserId, int? targetUserId = null, bool isViewOnly = false)
     {
@@ -50,23 +53,27 @@ public sealed class UserDetailsForm : Form
     {
         Text = _isViewOnly ? "View User" : _isEdit ? "Edit User" : "Add User";
         ThemeHelper.ApplyCompactDialogFormSettings(this);
-        ClientSize = new Size(760, _isEdit || _isViewOnly ? 430 : 535);
+        ClientSize = new Size(760, _isViewOnly ? 430 : 600);
 
-        TableLayoutPanel root = new()
+        Panel root = new()
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 3,
             BackColor = ThemeHelper.ContentBackground,
-            Padding = new Padding(24, 20, 24, 18)
+            Padding = new Padding(24, 20, 24, 0)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64F));
 
-        root.Controls.Add(CreateHeader(), 0, 0);
+        Panel header = CreateHeader();
+        header.Dock = DockStyle.Top;
+        header.Height = 52;
 
-        Panel content = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+        Panel content = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemeHelper.ContentBackground,
+            AutoScroll = true,
+            Padding = new Padding(0, 14, 0, 14)
+        };
+
         GroupBox accountGroup = CreateGroupBox("Account Information", _isEdit || _isViewOnly ? 220 : 220);
         accountGroup.Location = new Point(0, 0);
         accountGroup.Width = 706;
@@ -90,57 +97,82 @@ public sealed class UserDetailsForm : Form
         accountGroup.Controls.Add(_protectedNote);
         content.Controls.Add(accountGroup);
 
-        GroupBox securityGroup = CreateGroupBox("Security", _isEdit || _isViewOnly ? 86 : 156);
-        securityGroup.Location = new Point(0, accountGroup.Bottom + 14);
-        securityGroup.Width = 706;
-        if (_isEdit || _isViewOnly)
+        if (!_isViewOnly)
         {
-            Label note = new()
+            GroupBox securityGroup = CreateGroupBox("Security", 166);
+            securityGroup.Location = new Point(0, accountGroup.Bottom + 14);
+            securityGroup.Width = 706;
+            if (_isEdit)
             {
-                Text = "Use the Change Password action to update this account password.",
-                AutoSize = false,
-                Location = new Point(24, 36),
-                Size = new Size(620, 28),
-                Font = FontHelper.Regular(9.5F),
-                ForeColor = ThemeHelper.TextSecondary
-            };
-            securityGroup.Controls.Add(note);
-        }
-        else
-        {
-            AddLabeledControl(securityGroup, "Password *", _passwordInput, 24, 34);
-            AddLabeledControl(securityGroup, "Confirm Password *", _confirmPasswordInput, 372, 34);
-            Label helper = new()
+                AddLabeledPasswordControl(securityGroup, "New Password", _passwordInput, 24, 34);
+                AddLabeledPasswordControl(securityGroup, "Confirm Password", _confirmPasswordInput, 372, 34);
+                Label helper = new()
+                {
+                    Text = "Leave blank to keep the current password. Minimum 8 characters.",
+                    AutoSize = false,
+                    Location = new Point(24, 108),
+                    Size = new Size(540, 24),
+                    Font = FontHelper.Regular(9F),
+                    ForeColor = ThemeHelper.TextSecondary
+                };
+                securityGroup.Controls.Add(helper);
+            }
+            else
             {
-                Text = "Minimum 8 characters.",
-                AutoSize = false,
-                Location = new Point(24, 104),
-                Size = new Size(300, 22),
-                Font = FontHelper.Regular(9F),
-                ForeColor = ThemeHelper.TextSecondary
-            };
-            securityGroup.Controls.Add(helper);
+                AddLabeledPasswordControl(securityGroup, "Password *", _passwordInput, 24, 34);
+                AddLabeledPasswordControl(securityGroup, "Confirm Password *", _confirmPasswordInput, 372, 34);
+                Label helper = new()
+                {
+                    Text = "Minimum 8 characters.",
+                    AutoSize = false,
+                    Location = new Point(24, 108),
+                    Size = new Size(300, 24),
+                    Font = FontHelper.Regular(9F),
+                    ForeColor = ThemeHelper.TextSecondary
+                };
+                securityGroup.Controls.Add(helper);
+            }
+            content.Controls.Add(securityGroup);
         }
-        content.Controls.Add(securityGroup);
-        root.Controls.Add(content, 0, 1);
 
-        Panel footer = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+        Panel footer = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = 72,
+            BackColor = ThemeHelper.ContentBackground,
+            Padding = new Padding(0, 14, 0, 18)
+        };
+
         Button cancelButton = ControlFactory.CreateSecondaryButton(_isViewOnly ? "Close" : "Cancel", 110, 38);
-        cancelButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
-        cancelButton.Location = new Point(_isViewOnly ? 572 : 440, 14);
-        cancelButton.Click += (_, _) => Close();
+        cancelButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+        cancelButton.DialogResult = DialogResult.Cancel;
+        cancelButton.Click += (_, _) =>
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        };
         footer.Controls.Add(cancelButton);
+        CancelButton = cancelButton;
 
         if (!_isViewOnly)
         {
-            _saveButton = ControlFactory.CreatePrimaryButton(_isEdit ? "Save User" : "Save User", 132, 38);
-            _saveButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
-            _saveButton.Location = new Point(566, 14);
+            _saveButton = ControlFactory.CreatePrimaryButton(_isEdit ? "Save User" : "Add User", 142, 38);
+            _saveButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             _saveButton.Click += SaveButton_Click;
             footer.Controls.Add(_saveButton);
+            AcceptButton = _saveButton;
         }
-        root.Controls.Add(footer, 0, 2);
+        else
+        {
+            AcceptButton = cancelButton;
+        }
 
+        footer.Resize += (_, _) => LayoutFooterButtons(footer, cancelButton, _saveButton);
+        LayoutFooterButtons(footer, cancelButton, _saveButton);
+
+        root.Controls.Add(content);
+        root.Controls.Add(footer);
+        root.Controls.Add(header);
         Controls.Add(root);
     }
 
@@ -188,6 +220,63 @@ public sealed class UserDetailsForm : Form
         parent.Controls.Add(input);
     }
 
+    private static void AddLabeledPasswordControl(Control parent, string labelText, TextBox input, int x, int y)
+    {
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = new Point(x, y);
+        BorderedPanel fieldPanel = CreatePasswordFieldPanel(input, InputWidth);
+        fieldPanel.Location = new Point(x, y + 23);
+        parent.Controls.Add(label);
+        parent.Controls.Add(fieldPanel);
+    }
+
+    private static BorderedPanel CreatePasswordFieldPanel(TextBox input, int width)
+    {
+        IconButton previewButton = new();
+        BorderedPanel panel = new()
+        {
+            Size = new Size(width, InputHeight),
+            BackColor = ThemeHelper.Surface,
+            BorderColor = ThemeHelper.Border,
+            Cursor = Cursors.IBeam
+        };
+        panel.Click += (_, _) => input.Focus();
+
+        input.BorderStyle = BorderStyle.None;
+        input.BackColor = ThemeHelper.Surface;
+        input.Location = new Point(8, 6);
+        input.Size = new Size(width - 48, InputHeight - 4);
+        input.Font = FontHelper.Regular(10F);
+        input.Cursor = Cursors.IBeam;
+
+        previewButton.Size = new Size(34, InputHeight - 2);
+        previewButton.Location = new Point(width - 35, 1);
+        previewButton.IconChar = IconChar.Eye;
+        previewButton.IconColor = ThemeHelper.TextSecondary;
+        previewButton.IconSize = 16;
+        previewButton.BackColor = ThemeHelper.Surface;
+        previewButton.FlatStyle = FlatStyle.Flat;
+        previewButton.Cursor = Cursors.Hand;
+        previewButton.TabStop = false;
+        previewButton.Text = string.Empty;
+        previewButton.FlatAppearance.BorderSize = 0;
+        previewButton.FlatAppearance.MouseOverBackColor = ThemeHelper.ContentBackground;
+        previewButton.FlatAppearance.MouseDownBackColor = ThemeHelper.Secondary;
+        previewButton.Click += (_, _) => TogglePasswordPreview(input, previewButton);
+
+        panel.Controls.Add(input);
+        panel.Controls.Add(previewButton);
+        return panel;
+    }
+
+    private static void TogglePasswordPreview(TextBox input, IconButton previewButton)
+    {
+        bool showPassword = input.UseSystemPasswordChar;
+        input.UseSystemPasswordChar = !showPassword;
+        previewButton.IconChar = showPassword ? IconChar.EyeSlash : IconChar.Eye;
+        input.Focus();
+    }
+
     private static ComboBox CreateComboBox(int width) => new()
     {
         DropDownStyle = ComboBoxStyle.DropDownList,
@@ -196,6 +285,20 @@ public sealed class UserDetailsForm : Form
         Font = FontHelper.Regular(10F),
         ForeColor = ThemeHelper.TextPrimary
     };
+
+    private static void LayoutFooterButtons(Panel footer, Button cancelButton, Button? saveButton)
+    {
+        int y = 14;
+        int right = footer.ClientSize.Width;
+        if (saveButton is not null)
+        {
+            saveButton.Location = new Point(Math.Max(0, right - saveButton.Width), y);
+            cancelButton.Location = new Point(Math.Max(0, saveButton.Left - 12 - cancelButton.Width), y);
+            return;
+        }
+
+        cancelButton.Location = new Point(Math.Max(0, right - cancelButton.Width), y);
+    }
 
     private async void LoadRolesAndUserData()
     {
@@ -216,12 +319,14 @@ public sealed class UserDetailsForm : Form
                     _lastNameInput.Text = user.LastName;
                     _usernameInput.Text = user.Username;
                     _isActiveCheckBox.Checked = user.IsActive;
+                    _loadedUserIsOwner = user.IsOwner;
 
                     Role? role = _roles.FirstOrDefault(role => role.RoleId == user.RoleId);
                     if (role != null) _roleComboBox.SelectedItem = role.RoleName;
 
                     if (user.IsOwner)
                     {
+                        _usernameInput.Enabled = false;
                         _roleComboBox.Enabled = false;
                         _isActiveCheckBox.Enabled = false;
                         _protectedNote!.Visible = true;
@@ -231,7 +336,6 @@ public sealed class UserDetailsForm : Form
 
             if (!_isEdit && _roleComboBox.Items.Count > 0) _roleComboBox.SelectedIndex = 0;
             if (_isViewOnly) SetReadOnly();
-            if (_isEdit) _usernameInput.Enabled = false;
         }
         catch (Exception ex)
         {
@@ -267,6 +371,7 @@ public sealed class UserDetailsForm : Form
                 await _userService.UpdateUserAsync(new UpdateUserRequest
                 {
                     UserId = _targetUserId.Value,
+                    Username = _usernameInput.Text,
                     FirstName = _firstNameInput.Text,
                     LastName = _lastNameInput.Text,
                     RoleId = selectedRoleId,
@@ -275,7 +380,10 @@ public sealed class UserDetailsForm : Form
                     PhoneNumber = null
                 }, _currentUserId);
 
-                MessageBoxHelper.ShowSuccess("User updated successfully.");
+                await SaveOptionalPasswordAsync(_targetUserId.Value);
+                MessageBoxHelper.ShowSuccess(_loadedUserIsOwner
+                    ? "Owner account updated successfully."
+                    : "User updated successfully.");
             }
             else
             {
@@ -307,5 +415,33 @@ public sealed class UserDetailsForm : Form
         {
             MessageBoxHelper.ShowWarning(ex.Message, "Manage System");
         }
+    }
+
+    private async Task SaveOptionalPasswordAsync(int userId)
+    {
+        bool hasNewPassword = !string.IsNullOrWhiteSpace(_passwordInput.Text);
+        bool hasConfirmPassword = !string.IsNullOrWhiteSpace(_confirmPasswordInput.Text);
+        if (!hasNewPassword && !hasConfirmPassword) return;
+
+        if (!hasNewPassword || !hasConfirmPassword)
+        {
+            throw new InvalidOperationException("Enter both password fields or leave both blank.");
+        }
+
+        if (_passwordInput.Text != _confirmPasswordInput.Text)
+        {
+            throw new InvalidOperationException("Passwords do not match.");
+        }
+
+        if (_passwordInput.Text.Length < 8)
+        {
+            throw new InvalidOperationException("Password must be at least 8 characters.");
+        }
+
+        await _userService.ChangePasswordAsync(new ChangePasswordRequest
+        {
+            UserId = userId,
+            NewPassword = _passwordInput.Text
+        }, _currentUserId);
     }
 }

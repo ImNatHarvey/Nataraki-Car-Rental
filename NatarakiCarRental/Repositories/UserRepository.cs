@@ -33,6 +33,31 @@ public sealed class UserRepository
         return await connection.QuerySingleOrDefaultAsync<User>(sql, new { UserId = userId });
     }
 
+    public async Task<User?> GetActiveOwnerAsync()
+    {
+        const string sql = """
+            SELECT TOP 1 *
+            FROM dbo.Users
+            WHERE IsOwner = 1 AND IsActive = 1 AND IsArchived = 0
+            ORDER BY COALESCE(UpdatedAt, CreatedAt) DESC, UserId DESC;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<User>(sql);
+    }
+
+    public async Task<IReadOnlyList<User>> GetActiveOwnersAsync()
+    {
+        const string sql = """
+            SELECT *
+            FROM dbo.Users
+            WHERE IsOwner = 1 AND IsActive = 1 AND IsArchived = 0
+            ORDER BY COALESCE(UpdatedAt, CreatedAt) DESC, UserId DESC;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<User>(sql);
+        return results.ToList();
+    }
+
     public async Task<IReadOnlyList<UserListItem>> SearchAsync(string? searchTerm, int? roleId, bool? isActive, bool includeArchived = false)
     {
         string sql = """
@@ -92,8 +117,15 @@ public sealed class UserRepository
     {
         const string sql = """
             UPDATE dbo.Users 
-            SET RoleId = @RoleId, FirstName = @FirstName, LastName = @LastName, Email = @Email, PhoneNumber = @PhoneNumber, IsActive = @IsActive, UpdatedAt = sysdatetime()
-            WHERE UserId = @UserId AND IsOwner = 0;
+            SET Username = @Username,
+                RoleId = @RoleId,
+                FirstName = @FirstName,
+                LastName = @LastName,
+                Email = @Email,
+                PhoneNumber = @PhoneNumber,
+                IsActive = @IsActive,
+                UpdatedAt = sysdatetime()
+            WHERE UserId = @UserId;
             """;
         using var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(sql, user, transaction);

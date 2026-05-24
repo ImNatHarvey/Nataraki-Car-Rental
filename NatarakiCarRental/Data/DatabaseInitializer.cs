@@ -18,6 +18,7 @@ public static class DatabaseInitializer
         SeedPermissions();
         SeedRolePermissions();
         SeedDefaultDemoOwner();
+        RepairInvalidOwnerPasswordHash();
     }
 
     public static void ResetApplicationDataIfRequested()
@@ -1382,10 +1383,22 @@ public static class DatabaseInitializer
                 (N'ContactNumber', N''),
                 (N'EmailAddress', N''),
                 (N'BusinessAddress', N''),
+                (N'BusinessRegionCode', N''),
+                (N'BusinessRegionName', N''),
+                (N'BusinessProvinceCode', N''),
+                (N'BusinessProvinceName', N''),
+                (N'BusinessCityCode', N''),
+                (N'BusinessCityName', N''),
+                (N'BusinessBarangayCode', N''),
+                (N'BusinessBarangayName', N''),
+                (N'BusinessStreetAddress', N''),
                 (N'ThemeColor', N'#2563EB'),
                 (N'SystemIconPath', N''),
+                (N'SystemLogoMode', N'BuiltIn'),
+                (N'SystemLogoIconKey', N'Car'),
                 (N'LoginPosterPath', N''),
                 (N'UseCustomLoginPoster', N'false'),
+                (N'LoginDescription', N'Internal scheduling and record management system'),
                 (N'ReportHeaderName', N'Nataraki Car Rental');
             END;
             """);
@@ -1394,16 +1407,117 @@ public static class DatabaseInitializer
     private static void SeedRoles()
     {
         InsertRoleIfMissing("Owner", "Full system owner access", isSystemRole: true);
-        InsertRoleIfMissing("Admin", "Administrative access", isSystemRole: true);
-        InsertRoleIfMissing("Manager", "Manages daily operations and reports", isSystemRole: true);
-        InsertRoleIfMissing("Agent", "Handles bookings and customer transactions", isSystemRole: true);
-        InsertRoleIfMissing("Staff", "Basic staff access", isSystemRole: true);
+        NormalizeDuplicateOwnerRoles();
+        ArchiveUnusedPresetRoles();
+    }
+
+    private static void NormalizeDuplicateOwnerRoles()
+    {
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+            BEGIN
+                ;WITH OwnerCandidates AS
+                (
+                    SELECT
+                        r.RoleId,
+                        KeepRank = ROW_NUMBER() OVER
+                        (
+                            ORDER BY
+                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                                r.IsArchived,
+                                r.RoleId
+                        )
+                    FROM dbo.Roles r
+                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                )
+                UPDATE r
+                SET RoleName = N'Owner',
+                    IsSystemRole = 1,
+                    IsActive = 1,
+                    IsArchived = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
+                WHERE c.KeepRank = 1;
+
+                ;WITH OwnerCandidates AS
+                (
+                    SELECT
+                        r.RoleId,
+                        KeepRank = ROW_NUMBER() OVER
+                        (
+                            ORDER BY
+                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                                r.IsArchived,
+                                r.RoleId
+                        )
+                    FROM dbo.Roles r
+                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                )
+                UPDATE r
+                SET IsArchived = 1,
+                    IsActive = 0,
+                    IsSystemRole = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
+                WHERE c.KeepRank > 1
+                  AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
+
+                ;WITH OwnerCandidates AS
+                (
+                    SELECT
+                        r.RoleId,
+                        KeepRank = ROW_NUMBER() OVER
+                        (
+                            ORDER BY
+                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                                r.IsArchived,
+                                r.RoleId
+                        )
+                    FROM dbo.Roles r
+                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                )
+                UPDATE r
+                SET RoleName = CONCAT(N'Owner Duplicate ', r.RoleId),
+                    IsSystemRole = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
+                WHERE c.KeepRank > 1
+                  AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
+            END;
+            """);
+    }
+
+    private static void ArchiveUnusedPresetRoles()
+    {
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+            BEGIN
+                UPDATE r
+                SET IsArchived = 1,
+                    IsActive = 0,
+                    IsSystemRole = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                WHERE r.RoleName IN (N'Admin', N'Manager', N'Agent', N'Staff')
+                  AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
+
+                UPDATE r
+                SET IsSystemRole = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                WHERE r.RoleName IN (N'Admin', N'Manager', N'Agent', N'Staff')
+                  AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
+            END;
+            """);
     }
 
     private static void InsertRoleIfMissing(string roleName, string description, bool isSystemRole = false)
     {
         const string sql = """
-            IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE RoleName = @RoleName)
+            IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE UPPER(LTRIM(RTRIM(RoleName))) = UPPER(LTRIM(RTRIM(@RoleName))))
             BEGIN
                 INSERT INTO dbo.Roles (RoleName, Description, IsSystemRole)
                 VALUES (@RoleName, @Description, @IsSystemRole);
@@ -1509,48 +1623,6 @@ public static class DatabaseInitializer
               AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
             """);
 
-        // 2. Admin - Most Permissions
-        ExecuteDatabaseCommand("""
-            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
-            SELECT r.RoleId, p.PermissionId
-            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
-            WHERE r.RoleName = N'Admin'
-              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
-            """);
-
-        // 3. Manager
-        ExecuteDatabaseCommand("""
-            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
-            SELECT r.RoleId, p.PermissionId
-            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
-            WHERE r.RoleName = N'Manager'
-              AND p.ModuleName NOT IN (N'Manage System')
-              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
-            """);
-
-        // 4. Agent
-        ExecuteDatabaseCommand("""
-            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
-            SELECT r.RoleId, p.PermissionId
-            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
-            WHERE r.RoleName = N'Agent'
-              AND p.ModuleName NOT IN (N'Manage System', N'Activity Log')
-              AND p.PermissionKey NOT IN (N'Reports.Export', N'Transactions.ArchiveRestore', N'Customers.ArchiveRestore', N'Cars.ArchiveRestore', N'Offsite.ArchiveRestore')
-              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
-            """);
-
-        // 5. Staff
-        ExecuteDatabaseCommand("""
-            INSERT INTO dbo.RolePermissions (RoleId, PermissionId)
-            SELECT r.RoleId, p.PermissionId
-            FROM dbo.Roles r CROSS JOIN dbo.Permissions p
-            WHERE r.RoleName = N'Staff'
-              AND p.ModuleName IN (N'Overview', N'Fleet Schedule', N'Transactions', N'Customers', N'Car Garage', N'Offsite')
-              AND p.PermissionKey NOT LIKE N'%.ArchiveRestore'
-              AND p.PermissionKey NOT LIKE N'%.Cancel'
-              AND p.PermissionKey NOT IN (N'Transactions.AddPayment', N'Transactions.Complete')
-              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
-            """);
     }
 
     private static void SeedDefaultDemoOwner()
@@ -1605,6 +1677,50 @@ public static class DatabaseInitializer
         command.Parameters.AddWithValue("@FirstName", "System");
         command.Parameters.AddWithValue("@LastName", "Owner");
         command.ExecuteNonQuery();
+    }
+
+    private static void RepairInvalidOwnerPasswordHash()
+    {
+        string defaultPasswordHash = BCrypt.Net.BCrypt.HashPassword(DefaultDemoBootstrapOwnerPassword);
+        const string selectSql = """
+            SELECT TOP 1 UserId, PasswordHash
+            FROM dbo.Users
+            WHERE IsOwner = 1 AND IsActive = 1 AND IsArchived = 0
+            ORDER BY UserId;
+            """;
+        const string updateSql = """
+            UPDATE dbo.Users
+            SET PasswordHash = @PasswordHash,
+                UpdatedAt = sysdatetime()
+            WHERE UserId = @UserId
+              AND IsOwner = 1;
+            """;
+
+        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
+        connection.Open();
+
+        using SqlCommand selectCommand = new(selectSql, connection);
+        using SqlDataReader reader = selectCommand.ExecuteReader();
+        if (!reader.Read()) return;
+
+        int userId = reader.GetInt32(0);
+        string passwordHash = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+        reader.Close();
+
+        if (IsValidBCryptHash(passwordHash)) return;
+
+        using SqlCommand updateCommand = new(updateSql, connection);
+        updateCommand.Parameters.AddWithValue("@UserId", userId);
+        updateCommand.Parameters.AddWithValue("@PasswordHash", defaultPasswordHash);
+        updateCommand.ExecuteNonQuery();
+    }
+
+    private static bool IsValidBCryptHash(string? passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash)) return false;
+        return passwordHash.StartsWith("$2a$", StringComparison.Ordinal)
+               || passwordHash.StartsWith("$2b$", StringComparison.Ordinal)
+               || passwordHash.StartsWith("$2y$", StringComparison.Ordinal);
     }
 
     private static void ExecuteDatabaseCommand(string sql)

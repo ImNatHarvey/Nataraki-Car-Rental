@@ -31,9 +31,9 @@ public static class MessageBoxHelper
         ShowError($"Database connection failed.\n\n{exception.Message}");
     }
 
-    public static bool Confirm(string message, string title = AppConstants.ApplicationName)
+    public static bool Confirm(string message, string? title = null)
     {
-        return ShowConfirmDanger(message, title);
+        return ShowConfirmDanger(message, title ?? AppBrandingManager.CurrentSettings.BusinessName);
     }
 
     public static bool ShowConfirmWarning(string message, string title = "Warning")

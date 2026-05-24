@@ -20,10 +20,117 @@ public sealed class RoleRepository
 
     public async Task<IReadOnlyList<Role>> GetAllAsync(bool includeArchived = false)
     {
-        const string sql = "SELECT * FROM dbo.Roles WHERE IsArchived = 0 OR @IncludeArchived = 1 ORDER BY RoleName";
+        const string sql = """
+            WITH RankedRoles AS
+            (
+                SELECT
+                    r.*,
+                    rn = ROW_NUMBER() OVER
+                    (
+                        PARTITION BY UPPER(LTRIM(RTRIM(r.RoleName)))
+                        ORDER BY
+                            CASE
+                                WHEN UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                                     AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1)
+                                    THEN 0
+                                ELSE 1
+                            END,
+                            r.IsArchived,
+                            CASE WHEN r.IsSystemRole = 1 THEN 0 ELSE 1 END,
+                            r.RoleId
+                    )
+                FROM dbo.Roles r
+                WHERE r.IsArchived = 0 OR @IncludeArchived = 1
+            )
+            SELECT *
+            FROM RankedRoles
+            WHERE rn = 1
+            ORDER BY RoleName;
+            """;
         using var connection = _connectionFactory.CreateConnection();
         var results = await connection.QueryAsync<Role>(sql, new { IncludeArchived = includeArchived });
         return results.ToList();
+    }
+
+    public async Task NormalizeDuplicateOwnerRolesAsync()
+    {
+        const string sql = """
+            IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+            BEGIN
+                ;WITH OwnerCandidates AS
+                (
+                    SELECT
+                        r.RoleId,
+                        KeepRank = ROW_NUMBER() OVER
+                        (
+                            ORDER BY
+                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                                r.IsArchived,
+                                r.RoleId
+                        )
+                    FROM dbo.Roles r
+                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                )
+                UPDATE r
+                SET RoleName = N'Owner',
+                    IsSystemRole = 1,
+                    IsActive = 1,
+                    IsArchived = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
+                WHERE c.KeepRank = 1;
+
+                ;WITH OwnerCandidates AS
+                (
+                    SELECT
+                        r.RoleId,
+                        KeepRank = ROW_NUMBER() OVER
+                        (
+                            ORDER BY
+                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                                r.IsArchived,
+                                r.RoleId
+                        )
+                    FROM dbo.Roles r
+                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                )
+                UPDATE r
+                SET IsArchived = 1,
+                    IsActive = 0,
+                    IsSystemRole = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
+                WHERE c.KeepRank > 1
+                  AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
+
+                ;WITH OwnerCandidates AS
+                (
+                    SELECT
+                        r.RoleId,
+                        KeepRank = ROW_NUMBER() OVER
+                        (
+                            ORDER BY
+                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                                r.IsArchived,
+                                r.RoleId
+                        )
+                    FROM dbo.Roles r
+                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                )
+                UPDATE r
+                SET RoleName = CONCAT(N'Owner Duplicate ', r.RoleId),
+                    IsSystemRole = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Roles r
+                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
+                WHERE c.KeepRank > 1
+                  AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
+            END;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(sql);
     }
 
     public async Task<Role?> GetByIdAsync(int roleId)
@@ -31,6 +138,18 @@ public sealed class RoleRepository
         const string sql = "SELECT * FROM dbo.Roles WHERE RoleId = @RoleId";
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Role>(sql, new { RoleId = roleId });
+    }
+
+    public async Task<bool> ExistsByNameAsync(string roleName, int? excludeRoleId = null)
+    {
+        const string sql = """
+            SELECT COUNT(1)
+            FROM dbo.Roles
+            WHERE UPPER(LTRIM(RTRIM(RoleName))) = UPPER(LTRIM(RTRIM(@RoleName)))
+              AND (@ExcludeRoleId IS NULL OR RoleId <> @ExcludeRoleId);
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<int>(sql, new { RoleName = roleName, ExcludeRoleId = excludeRoleId }) > 0;
     }
 
     public async Task<int> AddAsync(Role role, IDbTransaction? transaction = null)

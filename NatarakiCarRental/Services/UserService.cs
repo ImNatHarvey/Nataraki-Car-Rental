@@ -68,14 +68,27 @@ public sealed class UserService
 
         User? existing = await _userRepository.GetByIdAsync(request.UserId);
         if (existing == null) throw new InvalidOperationException("User not found.");
-        if (existing.IsOwner) throw new InvalidOperationException("System owner account cannot be edited.");
+
+        string username = request.Username.Trim();
+        if (await _userRepository.ExistsByUsernameAsync(username, request.UserId))
+        {
+            throw new ValidationException([new ValidationFailure("Username", "Username is already taken.")]);
+        }
 
         existing.FirstName = request.FirstName.Trim();
         existing.LastName = request.LastName.Trim();
         existing.Email = request.Email?.Trim();
         existing.PhoneNumber = request.PhoneNumber?.Trim();
-        existing.RoleId = request.RoleId;
-        existing.IsActive = request.IsActive;
+        if (existing.IsOwner)
+        {
+            existing.IsActive = true;
+        }
+        else
+        {
+            existing.Username = username;
+            existing.RoleId = request.RoleId;
+            existing.IsActive = request.IsActive;
+        }
 
         await _userRepository.UpdateAsync(existing);
 
@@ -149,6 +162,7 @@ public sealed class UserService
     private static void ValidateUpdateRequest(UpdateUserRequest request)
     {
         List<ValidationFailure> failures = [];
+        if (string.IsNullOrWhiteSpace(request.Username)) failures.Add(new("Username", "Username is required."));
         if (string.IsNullOrWhiteSpace(request.FirstName)) failures.Add(new("FirstName", "First Name is required."));
         if (string.IsNullOrWhiteSpace(request.LastName)) failures.Add(new("LastName", "Last Name is required."));
         if (request.RoleId <= 0) failures.Add(new("RoleId", "Role is required."));
