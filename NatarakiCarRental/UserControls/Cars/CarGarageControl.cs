@@ -193,7 +193,7 @@ public sealed class CarGarageControl : UserControl
         };
 
         ConfigureTabButton(_activeCarsButton, "Cars", IconChar.Car, new Point(0, 10));
-        ConfigureTabButton(_archivedCarsButton, "Archived", IconChar.BoxArchive, new Point(112, 10));
+        ConfigureTabButton(_archivedCarsButton, "Archived", IconChar.BoxArchive, new Point(128, 10));
 
         IconButton addCarButton = new()
         {

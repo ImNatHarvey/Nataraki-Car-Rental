@@ -387,7 +387,7 @@ public sealed class ManageSystemControl : UserControl
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
         Panel tabRow = new() { Dock = DockStyle.Top, Height = 42, BackColor = ThemeHelper.ContentBackground };
         _usersTabButton.Location = new Point(0, 4);
-        _archivedUsersTabButton.Location = new Point(104, 4);
+        _archivedUsersTabButton.Location = new Point(106, 4);
         _usersTabButton.Click -= UsersTabButton_Click;
         _usersTabButton.Click += UsersTabButton_Click;
         _archivedUsersTabButton.Click -= ArchivedUsersTabButton_Click;
@@ -441,7 +441,7 @@ public sealed class ManageSystemControl : UserControl
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
         Panel tabRow = new() { Dock = DockStyle.Top, Height = 42, BackColor = ThemeHelper.ContentBackground };
         _rolesTabButton.Location = new Point(0, 4);
-        _archivedRolesTabButton.Location = new Point(104, 4);
+        _archivedRolesTabButton.Location = new Point(106, 4);
         _rolesTabButton.Click -= RolesTabButton_Click;
         _rolesTabButton.Click += RolesTabButton_Click;
         _archivedRolesTabButton.Click -= ArchivedRolesTabButton_Click;
@@ -763,7 +763,7 @@ public sealed class ManageSystemControl : UserControl
             Font = FontHelper.SemiBold(9F),
             Cursor = Cursors.Hand
         };
-        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderSize = 0;
         return button;
     }
 
@@ -784,7 +784,8 @@ public sealed class ManageSystemControl : UserControl
         button.BackColor = active ? ThemeHelper.Primary : ThemeHelper.Surface;
         button.ForeColor = active ? Color.White : ThemeHelper.TextPrimary;
         button.IconColor = active ? Color.White : ThemeHelper.TextSecondary;
-        button.FlatAppearance.BorderColor = active ? ThemeHelper.Primary : ThemeHelper.Border;
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.BorderColor = button.BackColor;
         button.FlatAppearance.MouseOverBackColor = active ? ThemeHelper.PrimaryHover : ThemeHelper.ContentBackground;
     }
 

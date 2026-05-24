@@ -204,7 +204,7 @@ public sealed class OffsiteControl : UserControl
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
         
         ConfigureTabButton(_mapTrackingTabButton, "Map Tracking", IconChar.MapLocationDot, new Point(0, 10), 160);
-        ConfigureTabButton(_offsiteRecordsTabButton, "Offsite Records", IconChar.ClipboardList, new Point(164, 10), 160);
+        ConfigureTabButton(_offsiteRecordsTabButton, "Offsite Records", IconChar.ClipboardList, new Point(168, 10), 160);
 
         _mapTrackingTabButton.Click += (_, _) => ShowMapTrackingView();
         _offsiteRecordsTabButton.Click += async (_, _) => await ShowRecordsViewAsync();
