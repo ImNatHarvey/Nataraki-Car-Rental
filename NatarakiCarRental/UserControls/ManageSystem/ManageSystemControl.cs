@@ -90,6 +90,7 @@ public sealed class ManageSystemControl : UserControl
     private readonly Label _rolesEmptyLabel = CreateEmptyLabel("No roles found.");
     private List<Role> _filteredRoles = [];
     private int _rolesPage = 1;
+    private int _rolesLoadVersion;
 
     public ManageSystemControl(int currentUserId)
     {
@@ -542,10 +543,14 @@ public sealed class ManageSystemControl : UserControl
     {
         if (_rolesGrid.Columns.Count == 0) return;
 
+        int loadVersion = Interlocked.Increment(ref _rolesLoadVersion);
+
         try
         {
             await _roleService.NormalizeDuplicateOwnerRolesAsync();
             IReadOnlyList<Role> roles = await _roleService.GetAllRolesAsync(includeArchived: true);
+            if (loadVersion != _rolesLoadVersion) return;
+
             string search = _roleSearchInput.Text.Trim();
             bool? isActive = _roleStatusFilter.SelectedIndex == 1 ? true : _roleStatusFilter.SelectedIndex == 2 ? false : null;
             _filteredRoles = roles
@@ -561,10 +566,14 @@ public sealed class ManageSystemControl : UserControl
             if (_rolesPage > totalPages) _rolesPage = totalPages;
 
             List<UserListItem> users = (await _userService.SearchUsersAsync(includeArchived: true)).ToList();
+            if (loadVersion != _rolesLoadVersion) return;
+
             _rolesGrid.Rows.Clear();
             foreach (Role role in _filteredRoles.Skip((_rolesPage - 1) * pageSize).Take(pageSize))
             {
                 RoleWithPermissions? permissions = await _roleService.GetRoleWithPermissionsAsync(role.RoleId);
+                if (loadVersion != _rolesLoadVersion) return;
+
                 int row = _rolesGrid.Rows.Add(
                     role.RoleName,
                     role.Description ?? "-",

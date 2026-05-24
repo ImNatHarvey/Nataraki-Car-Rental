@@ -18,6 +18,7 @@ public static class DatabaseInitializer
         SeedPermissions();
         SeedRolePermissions();
         SeedDefaultDemoOwner();
+        NormalizeOwnerUserFlags();
         RepairInvalidOwnerPasswordHash();
     }
 
@@ -1677,6 +1678,36 @@ public static class DatabaseInitializer
         command.Parameters.AddWithValue("@FirstName", "System");
         command.Parameters.AddWithValue("@LastName", "Owner");
         command.ExecuteNonQuery();
+    }
+
+    private static void NormalizeOwnerUserFlags()
+    {
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE IsOwner = 1 AND IsActive = 1 AND IsArchived = 0)
+                BEGIN
+                    UPDATE u
+                    SET IsOwner = 1,
+                        IsActive = 1,
+                        IsArchived = 0,
+                        UpdatedAt = sysdatetime()
+                    FROM dbo.Users u
+                    INNER JOIN dbo.Roles r ON r.RoleId = u.RoleId
+                    WHERE u.UserId =
+                    (
+                        SELECT TOP 1 u2.UserId
+                        FROM dbo.Users u2
+                        INNER JOIN dbo.Roles r2 ON r2.RoleId = u2.RoleId
+                        WHERE UPPER(LTRIM(RTRIM(r2.RoleName))) = N'OWNER'
+                          AND u2.IsArchived = 0
+                        ORDER BY
+                            CASE WHEN u2.Username = N'NatarakiCar' THEN 0 ELSE 1 END,
+                            u2.UserId
+                    );
+                END;
+            END;
+            """);
     }
 
     private static void RepairInvalidOwnerPasswordHash()

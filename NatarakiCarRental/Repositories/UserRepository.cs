@@ -21,20 +21,90 @@ public sealed class UserRepository
 
     public async Task<User?> GetActiveUserByUsernameAsync(string username)
     {
-        const string sql = "SELECT * FROM dbo.Users WHERE Username = @Username AND IsActive = 1 AND IsArchived = 0";
+        const string sql = """
+            SELECT
+                u.UserId,
+                u.RoleId,
+                u.Username,
+                u.PasswordHash,
+                u.FirstName,
+                u.LastName,
+                u.Email,
+                u.PhoneNumber,
+                u.IsActive,
+                IsOwner = CAST(CASE WHEN u.IsOwner = 1 OR UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 1 ELSE 0 END AS bit),
+                u.IsArchived,
+                u.CreatedAt,
+                u.UpdatedAt,
+                u.LastLoginAt,
+                u.ArchivedAt
+            FROM dbo.Users u
+            LEFT JOIN dbo.Roles r ON r.RoleId = u.RoleId
+            WHERE u.Username = @Username AND u.IsActive = 1 AND u.IsArchived = 0;
+            """;
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<User>(sql, new { Username = username });
     }
 
     public async Task<User?> GetByIdAsync(int userId)
     {
-        const string sql = "SELECT * FROM dbo.Users WHERE UserId = @UserId";
+        const string sql = """
+            SELECT
+                u.UserId,
+                u.RoleId,
+                u.Username,
+                u.PasswordHash,
+                u.FirstName,
+                u.LastName,
+                u.Email,
+                u.PhoneNumber,
+                u.IsActive,
+                IsOwner = CAST(CASE WHEN u.IsOwner = 1 OR UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 1 ELSE 0 END AS bit),
+                u.IsArchived,
+                u.CreatedAt,
+                u.UpdatedAt,
+                u.LastLoginAt,
+                u.ArchivedAt
+            FROM dbo.Users u
+            LEFT JOIN dbo.Roles r ON r.RoleId = u.RoleId
+            WHERE u.UserId = @UserId;
+            """;
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<User>(sql, new { UserId = userId });
     }
 
+    public async Task EnsureOwnerUserFlagAsync()
+    {
+        const string sql = """
+            IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE IsOwner = 1 AND IsActive = 1 AND IsArchived = 0)
+            BEGIN
+                UPDATE u
+                SET IsOwner = 1,
+                    IsActive = 1,
+                    IsArchived = 0,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Users u
+                INNER JOIN dbo.Roles r ON r.RoleId = u.RoleId
+                WHERE u.UserId =
+                (
+                    SELECT TOP 1 u2.UserId
+                    FROM dbo.Users u2
+                    INNER JOIN dbo.Roles r2 ON r2.RoleId = u2.RoleId
+                    WHERE UPPER(LTRIM(RTRIM(r2.RoleName))) = N'OWNER'
+                      AND u2.IsArchived = 0
+                    ORDER BY
+                        CASE WHEN u2.Username = N'NatarakiCar' THEN 0 ELSE 1 END,
+                        u2.UserId
+                );
+            END;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(sql);
+    }
+
     public async Task<User?> GetActiveOwnerAsync()
     {
+        await EnsureOwnerUserFlagAsync();
         const string sql = """
             SELECT TOP 1 *
             FROM dbo.Users
@@ -47,6 +117,7 @@ public sealed class UserRepository
 
     public async Task<IReadOnlyList<User>> GetActiveOwnersAsync()
     {
+        await EnsureOwnerUserFlagAsync();
         const string sql = """
             SELECT *
             FROM dbo.Users

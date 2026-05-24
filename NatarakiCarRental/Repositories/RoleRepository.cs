@@ -21,30 +21,9 @@ public sealed class RoleRepository
     public async Task<IReadOnlyList<Role>> GetAllAsync(bool includeArchived = false)
     {
         const string sql = """
-            WITH RankedRoles AS
-            (
-                SELECT
-                    r.*,
-                    rn = ROW_NUMBER() OVER
-                    (
-                        PARTITION BY UPPER(LTRIM(RTRIM(r.RoleName)))
-                        ORDER BY
-                            CASE
-                                WHEN UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                                     AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1)
-                                    THEN 0
-                                ELSE 1
-                            END,
-                            r.IsArchived,
-                            CASE WHEN r.IsSystemRole = 1 THEN 0 ELSE 1 END,
-                            r.RoleId
-                    )
-                FROM dbo.Roles r
-                WHERE r.IsArchived = 0 OR @IncludeArchived = 1
-            )
             SELECT *
-            FROM RankedRoles
-            WHERE rn = 1
+            FROM dbo.Roles
+            WHERE IsArchived = 0 OR @IncludeArchived = 1
             ORDER BY RoleName;
             """;
         using var connection = _connectionFactory.CreateConnection();
