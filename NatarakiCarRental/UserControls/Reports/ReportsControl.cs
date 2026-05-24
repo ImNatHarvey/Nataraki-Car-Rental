@@ -1,4 +1,5 @@
 using NatarakiCarRental.Helpers;
+using NatarakiCarRental.Services;
 
 namespace NatarakiCarRental.UserControls.Reports;
 
@@ -101,7 +102,11 @@ public sealed class ReportsControl : UserControl
         AddReportTab("Fleet Performance", new ReportsFleetPerformanceTab());
         AddReportTab("Operations", new ReportsOperationsTab());
         AddReportTab("Customers", new ReportsCustomersTab());
-        AddReportTab("Exports", new ReportsExportsTab());
+        
+        if (AccessControlService.HasPermission("Reports.Export"))
+        {
+            AddReportTab("Exports", new ReportsExportsTab());
+        }
 
         return _reportTabs;
     }
@@ -127,7 +132,19 @@ public sealed class ReportsControl : UserControl
     private async void ReportsControl_Load(object? sender, EventArgs e)
     {
         Load -= ReportsControl_Load;
+
+        if (!AccessControlService.HasPermission("Reports.View"))
+        {
+            ShowPermissionDenied();
+            return;
+        }
+
         await RefreshSelectedTabAsync(forceReload: true);
+    }
+
+    private static void ShowPermissionDenied()
+    {
+        MessageBoxHelper.ShowWarning("You do not have permission to access this feature.", "Permission Denied");
     }
 
     private async Task RefreshSelectedTabAsync(bool forceReload)

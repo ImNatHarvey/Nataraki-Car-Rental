@@ -99,6 +99,7 @@ public sealed class TransactionService
 
     public async Task<int> CreateFromReservationAsync(CreateTransactionFromReservationRequest request)
     {
+        AccessControlService.EnforcePermission("Transactions.Create");
         FleetSchedule? reservation = await _scheduleRepository.GetByIdAsync(request.FleetScheduleId);
 
         if (reservation is null || reservation.IsArchived)
@@ -209,6 +210,7 @@ public sealed class TransactionService
 
     public async Task<int> CreateWalkInTransactionAsync(CreateWalkInTransactionRequest request)
     {
+        AccessControlService.EnforcePermission("Transactions.Create");
         string transactionType = string.IsNullOrWhiteSpace(request.TransactionType)
             ? FleetScheduleConstants.Type.Rental
             : request.TransactionType.Trim();
@@ -309,6 +311,7 @@ public sealed class TransactionService
 
     public async Task CompleteTransactionAsync(CompleteTransactionRequest request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("Transactions.Complete");
         Transaction transaction = await GetActiveTransactionAsync(request.TransactionId);
 
         if (transaction.TransactionStatus != TransactionConstants.Status.Active)
@@ -437,6 +440,7 @@ public sealed class TransactionService
 
     public async Task StartRentalAsync(int transactionId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("Transactions.StartRental");
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
 
         if (transaction.TransactionStatus != TransactionConstants.Status.Reserved)
@@ -460,6 +464,7 @@ public sealed class TransactionService
 
     public async Task CancelTransactionAsync(int transactionId, int currentUserId, string? reason = null)
     {
+        AccessControlService.EnforcePermission("Transactions.Cancel");
         string? trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
         string scheduleType = transaction.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved
@@ -471,6 +476,7 @@ public sealed class TransactionService
 
     public async Task ArchiveTransactionAsync(int transactionId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("Transactions.ArchiveRestore");
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
 
         if (transaction.TransactionStatus is not (TransactionConstants.Status.Completed or TransactionConstants.Status.Cancelled))
@@ -514,6 +520,7 @@ public sealed class TransactionService
         string? receiptFilePath,
         int currentUserId)
     {
+        AccessControlService.EnforcePermission("Transactions.Edit");
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
 
         if (transaction.TransactionStatus != TransactionConstants.Status.Active)
@@ -625,6 +632,7 @@ public sealed class TransactionService
 
     public async Task RestoreTransactionAsync(int transactionId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("Transactions.ArchiveRestore");
         Transaction? transaction = await _transactionRepository.GetByIdAsync(transactionId);
 
         if (transaction is null || !transaction.IsArchived)
@@ -667,6 +675,7 @@ public sealed class TransactionService
 
     public async Task AddPaymentAsync(AddTransactionPaymentRequest request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("Transactions.AddPayment");
         Transaction transaction = await GetActiveTransactionAsync(request.TransactionId);
 
         if (transaction.TransactionStatus == TransactionConstants.Status.Cancelled)

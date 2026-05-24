@@ -89,6 +89,7 @@ public sealed class CarService
 
     public async Task<int> AddCarAsync(Car car)
     {
+        AccessControlService.EnforcePermission("Cars.Create");
         NormalizeCar(car);
 
         CarValidator validator = new();
@@ -132,6 +133,7 @@ public sealed class CarService
 
     public async Task UpdateCarAsync(Car car)
     {
+        AccessControlService.EnforcePermission("Cars.Edit");
         NormalizeCar(car);
 
         CarValidator validator = new();
@@ -180,6 +182,7 @@ public sealed class CarService
 
     public async Task ArchiveCarAsync(int carId)
     {
+        AccessControlService.EnforcePermission("Cars.ArchiveRestore");
         Car? car = await _carRepository.GetCarByIdAsync(carId);
         FleetSchedule? blockingSchedule = await _fleetScheduleRepository.GetActiveOrUpcomingOperationalScheduleAsync(carId, DateTime.Today);
 
@@ -222,6 +225,7 @@ public sealed class CarService
 
     public async Task RestoreCarAsync(int carId)
     {
+        AccessControlService.EnforcePermission("Cars.ArchiveRestore");
         Car? car = await _carRepository.GetCarByIdAsync(carId);
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();

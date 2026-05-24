@@ -257,6 +257,12 @@ public sealed class OverviewControl : UserControl
     {
         Load -= OverviewControl_Load;
 
+        if (!AccessControlService.HasPermission("Overview.View"))
+        {
+            ShowPermissionDenied();
+            return;
+        }
+
         try
         {
             CarCounts carCounts = await _carService.GetCarCountsAsync();
@@ -275,6 +281,11 @@ public sealed class OverviewControl : UserControl
         {
             MessageBoxHelper.ShowWarning($"Unable to load overview data.\n\n{exception.Message}", "Overview");
         }
+    }
+
+    private static void ShowPermissionDenied()
+    {
+        MessageBoxHelper.ShowWarning("You do not have permission to access this feature.", "Permission Denied");
     }
 
     private void UpdateMetricCards(CarCounts carCounts, CustomerCounts customerCounts, FleetScheduleOverviewCounts scheduleCounts)

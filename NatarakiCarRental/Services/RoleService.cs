@@ -55,6 +55,7 @@ public sealed class RoleService
 
     public async Task CreateRoleAsync(RoleWithPermissions request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Roles");
         if (string.IsNullOrWhiteSpace(request.RoleName))
         {
             throw new ValidationException([new ValidationFailure("RoleName", "Role name is required.")]);
@@ -86,6 +87,7 @@ public sealed class RoleService
 
     public async Task UpdateRoleAsync(RoleWithPermissions request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Roles");
         Role? existing = await _roleRepository.GetByIdAsync(request.RoleId);
         if (existing == null) throw new InvalidOperationException("Role not found.");
         if (await _roleRepository.ExistsByNameAsync(request.RoleName, request.RoleId))
@@ -119,6 +121,7 @@ public sealed class RoleService
 
     public async Task ArchiveRoleAsync(int roleId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Roles");
         Role? role = await _roleRepository.GetByIdAsync(roleId);
         if (role == null) return;
         if (role.IsSystemRole) throw new InvalidOperationException("System roles cannot be archived.");
@@ -138,6 +141,7 @@ public sealed class RoleService
 
     public async Task RestoreRoleAsync(int roleId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Roles");
         Role? role = await _roleRepository.GetByIdAsync(roleId);
         if (role == null) return;
         if (role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Owner role is protected.");

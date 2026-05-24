@@ -357,6 +357,13 @@ public sealed class ActivityLogControl : UserControl
     private async void ActivityLogControl_Load(object? sender, EventArgs e)
     {
         Load -= ActivityLogControl_Load;
+
+        if (!AccessControlService.HasPermission("ActivityLog.View"))
+        {
+            ShowPermissionDenied();
+            return;
+        }
+
         _lastHeight = Height;
         Resize += async (_, _) =>
         {
@@ -371,6 +378,11 @@ public sealed class ActivityLogControl : UserControl
 
         await InitializeFiltersAsync();
         await LoadLogsAsync();
+    }
+
+    private static void ShowPermissionDenied()
+    {
+        MessageBoxHelper.ShowWarning("You do not have permission to access this feature.", "Permission Denied");
     }
 
     private async Task InitializeFiltersAsync()

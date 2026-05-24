@@ -82,6 +82,7 @@ public sealed class OffsiteService
 
     public async Task<int> CreateAsync(CreateOffsiteRecordRequest request)
     {
+        AccessControlService.EnforcePermission("Offsite.Create");
         await ValidateCreateRequestAsync(request);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
@@ -174,6 +175,7 @@ public sealed class OffsiteService
 
     public async Task UpdateAsync(UpdateOffsiteRecordRequest request)
     {
+        AccessControlService.EnforcePermission("Offsite.Edit");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(request.OffsiteRecordId);
         if (existing == null || existing.IsArchived)
             throw new RecordNotFoundException($"Offsite record #{request.OffsiteRecordId} not found.");
@@ -253,6 +255,7 @@ public sealed class OffsiteService
 
     public async Task CompleteAsync(CompleteOffsiteRecordRequest request)
     {
+        AccessControlService.EnforcePermission("Offsite.Complete");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(request.OffsiteRecordId);
         ValidateCompleteRequest(request, existing);
         if (existing is null)
@@ -326,6 +329,7 @@ public sealed class OffsiteService
 
     public async Task CancelAsync(int recordId)
     {
+        AccessControlService.EnforcePermission("Offsite.Cancel");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
         if (existing == null || existing.IsArchived || existing.Status != "Ongoing")
             throw new RecordNotFoundException("Record not found or not in Ongoing status.");
@@ -368,6 +372,7 @@ public sealed class OffsiteService
 
     public async Task ArchiveAsync(int recordId)
     {
+        AccessControlService.EnforcePermission("Offsite.ArchiveRestore");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
         if (existing == null || existing.IsArchived) return;
 
@@ -380,6 +385,7 @@ public sealed class OffsiteService
 
     public async Task RestoreAsync(int recordId)
     {
+        AccessControlService.EnforcePermission("Offsite.ArchiveRestore");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
         if (existing == null || !existing.IsArchived) return;
 

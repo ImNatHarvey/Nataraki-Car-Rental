@@ -32,6 +32,7 @@ public sealed class UserService
 
     public async Task CreateUserAsync(CreateUserRequest request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Users");
         ValidateCreateRequest(request);
 
         if (await _userRepository.ExistsByUsernameAsync(request.Username))
@@ -64,6 +65,7 @@ public sealed class UserService
 
     public async Task UpdateUserAsync(UpdateUserRequest request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Users");
         ValidateUpdateRequest(request);
 
         User? existing = await _userRepository.GetByIdAsync(request.UserId);
@@ -102,6 +104,7 @@ public sealed class UserService
 
     public async Task ChangePasswordAsync(ChangePasswordRequest request, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Users");
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
         {
             throw new ValidationException([new ValidationFailure("NewPassword", "Password must be at least 8 characters.")]);
@@ -121,6 +124,7 @@ public sealed class UserService
 
     public async Task ArchiveUserAsync(int userId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Users");
         User? user = await _userRepository.GetByIdAsync(userId);
         if (user == null) return;
         if (user.IsOwner) throw new InvalidOperationException("System owner account cannot be archived.");
@@ -137,6 +141,7 @@ public sealed class UserService
 
     public async Task RestoreUserAsync(int userId, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Users");
         await _userRepository.RestoreAsync(userId);
         User? user = await _userRepository.GetByIdAsync(userId);
 

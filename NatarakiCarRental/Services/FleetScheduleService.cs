@@ -93,6 +93,7 @@ public sealed class FleetScheduleService
 
     public async Task<int> CreateAsync(FleetSchedule schedule)
     {
+        AccessControlService.EnforcePermission("FleetSchedule.Create");
         await PrepareForSaveAsync(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
@@ -121,6 +122,7 @@ public sealed class FleetScheduleService
 
     public async Task UpdateAsync(FleetSchedule schedule)
     {
+        AccessControlService.EnforcePermission("FleetSchedule.Edit");
         await ValidateTransactionLifecycleLockAsync(schedule);
         await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId);
 
@@ -180,6 +182,7 @@ public sealed class FleetScheduleService
 
     public async Task ArchiveAsync(int scheduleId)
     {
+        AccessControlService.EnforcePermission("FleetSchedule.Cancel");
         FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(scheduleId);
         if (schedule is null || schedule.IsArchived)
         {

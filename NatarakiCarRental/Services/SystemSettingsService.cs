@@ -56,6 +56,7 @@ public sealed class SystemSettingsService
 
     public async Task SaveSystemSettingsAsync(SystemSettingsModel model, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Settings");
         var dict = new Dictionary<string, string?>
         {
             { "BusinessName", model.BusinessName.Trim() },
@@ -87,6 +88,7 @@ public sealed class SystemSettingsService
 
     public async Task SaveBrandingSettingsAsync(SystemSettingsModel model, int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Branding");
         var dict = new Dictionary<string, string?>
         {
             { "ThemeColor", model.ThemeColor },
@@ -110,6 +112,7 @@ public sealed class SystemSettingsService
 
     public async Task ResetDefaultsAsync(int currentUserId)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Settings");
         var dict = new Dictionary<string, string?>
         {
             { "BusinessName", "Nataraki Car Rental" },

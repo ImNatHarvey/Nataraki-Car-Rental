@@ -93,7 +93,7 @@ public sealed class CustomerService
 
     public async Task<int> AddCustomerAsync(Customer customer)
     {
-        NormalizeCustomer(customer);
+        AccessControlService.EnforcePermission("Customers.Create");
         ValidateCustomer(customer);
 
         bool phoneExists = await _customerRepository.PhoneNumberExistsAsync(customer.PhoneNumber);
@@ -134,7 +134,7 @@ public sealed class CustomerService
 
     public async Task UpdateCustomerAsync(Customer customer)
     {
-        NormalizeCustomer(customer);
+        AccessControlService.EnforcePermission("Customers.Edit");
         ValidateCustomer(customer);
 
         bool phoneExists = await _customerRepository.PhoneNumberExistsAsync(customer.PhoneNumber, customer.CustomerId);
@@ -180,6 +180,7 @@ public sealed class CustomerService
 
     public async Task ArchiveCustomerAsync(int customerId)
     {
+        AccessControlService.EnforcePermission("Customers.ArchiveRestore");
         Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
         FleetSchedule? blockingSchedule = await _fleetScheduleRepository.GetActiveOrUpcomingOperationalScheduleForCustomerAsync(customerId, DateTime.Today);
 
@@ -222,6 +223,7 @@ public sealed class CustomerService
 
     public async Task RestoreCustomerAsync(int customerId)
     {
+        AccessControlService.EnforcePermission("Customers.ArchiveRestore");
         Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
@@ -254,6 +256,7 @@ public sealed class CustomerService
 
     public async Task ToggleBlacklistAsync(int customerId, bool isBlacklisted, string? reason = null)
     {
+        AccessControlService.EnforcePermission("Customers.Blacklist");
         reason = NullIfWhiteSpace(reason);
 
         if (isBlacklisted && string.IsNullOrWhiteSpace(reason))

@@ -236,6 +236,8 @@ public sealed class ManageSystemControl : UserControl
         button.BackColor = active ? ThemeHelper.Primary : ThemeHelper.Surface;
         button.ForeColor = active ? Color.White : ThemeHelper.TextPrimary;
         button.IconColor = active ? Color.White : ThemeHelper.TextSecondary;
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = active ? ThemeHelper.PrimaryHover : Color.Empty;
     }
 
     private Control CreateAccessRestrictedPanel()
@@ -619,6 +621,10 @@ public sealed class ManageSystemControl : UserControl
         _usersGrid.CellContentClick -= UsersGrid_CellContentClick;
         _usersGrid.CellMouseClick -= UsersGrid_CellMouseClick;
         _usersGrid.CellMouseClick += UsersGrid_CellMouseClick;
+        _usersGrid.CellMouseMove -= UsersGrid_CellMouseMove;
+        _usersGrid.CellMouseMove += UsersGrid_CellMouseMove;
+        _usersGrid.CellMouseLeave -= UsersGrid_CellMouseLeave;
+        _usersGrid.CellMouseLeave += UsersGrid_CellMouseLeave;
         _usersGrid.CellFormatting -= UsersGrid_CellFormatting;
         _usersGrid.CellFormatting += UsersGrid_CellFormatting;
         _usersGrid.CellPainting -= ManageGrid_CellPainting;
@@ -640,6 +646,8 @@ public sealed class ManageSystemControl : UserControl
         _rolesGrid.CellContentClick -= RolesGrid_CellContentClick;
         _rolesGrid.CellMouseClick -= RolesGrid_CellMouseClick;
         _rolesGrid.CellMouseClick += RolesGrid_CellMouseClick;
+        _rolesGrid.CellMouseMove -= RolesGrid_CellMouseMove;
+        _rolesGrid.CellMouseMove += RolesGrid_CellMouseMove;
         _rolesGrid.CellFormatting -= RolesGrid_CellFormatting;
         _rolesGrid.CellFormatting += RolesGrid_CellFormatting;
         _rolesGrid.CellPainting -= ManageGrid_CellPainting;
@@ -764,6 +772,7 @@ public sealed class ManageSystemControl : UserControl
             Cursor = Cursors.Hand
         };
         button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = Color.Empty;
         return button;
     }
 
@@ -786,7 +795,7 @@ public sealed class ManageSystemControl : UserControl
         button.IconColor = active ? Color.White : ThemeHelper.TextSecondary;
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.BorderColor = button.BackColor;
-        button.FlatAppearance.MouseOverBackColor = active ? ThemeHelper.PrimaryHover : ThemeHelper.ContentBackground;
+        button.FlatAppearance.MouseOverBackColor = active ? ThemeHelper.PrimaryHover : Color.Empty;
     }
 
     private static Label CreatePagingLabel() => new()
@@ -890,6 +899,30 @@ public sealed class ManageSystemControl : UserControl
         if (_rolesPage >= totalPages) return;
         _rolesPage++;
         await LoadRolesAsync();
+    }
+
+    private void UsersGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        _usersGrid.Cursor = GetActionAt(_usersGrid, e.RowIndex, e.ColumnIndex, e.Location) is null
+            ? Cursors.Default
+            : Cursors.Hand;
+    }
+
+    private void UsersGrid_CellMouseLeave(object? sender, EventArgs e)
+    {
+        _usersGrid.Cursor = Cursors.Default;
+    }
+
+    private void RolesGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        _rolesGrid.Cursor = GetActionAt(_rolesGrid, e.RowIndex, e.ColumnIndex, e.Location) is null
+            ? Cursors.Default
+            : Cursors.Hand;
+    }
+
+    private void RolesGrid_CellMouseLeave(object? sender, EventArgs e)
+    {
+        _rolesGrid.Cursor = Cursors.Default;
     }
 
     private async void UsersGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
@@ -1747,6 +1780,9 @@ public sealed class ManageSystemControl : UserControl
             ApplyTabStyle(button, active);
         }
 
+        ApplyUserArchiveTabStyles();
+        ApplyRoleArchiveTabStyles();
+
         _usersGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
         _usersGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
         _rolesGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
@@ -1765,6 +1801,7 @@ public sealed class ManageSystemControl : UserControl
             if (child is Button button && button.ForeColor == Color.White)
             {
                 button.BackColor = ThemeHelper.Primary;
+                button.FlatAppearance.MouseOverBackColor = ThemeHelper.PrimaryHover;
             }
             InvalidateManageSystemControls(child);
         }

@@ -23,6 +23,7 @@ public sealed class ReportExportService
 
     public async Task ExportFinancialPdfAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         FinancialExportData data = await LoadFinancialDataAsync(from, to);
         List<string> lines = CreateHeader("Financial Reports", from, to, generatedBy);
         AddFinancialSummary(lines, data.Summary);
@@ -36,6 +37,7 @@ public sealed class ReportExportService
 
     public async Task ExportFinancialExcelAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         FinancialExportData data = await LoadFinancialDataAsync(from, to);
         WriteXlsx(path,
         [
@@ -52,6 +54,7 @@ public sealed class ReportExportService
 
     public async Task ExportFleetPdfAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         FleetExportData data = await LoadFleetDataAsync(from, to);
         List<string> lines = CreateHeader("Fleet Performance Reports", from, to, generatedBy);
         AddFleetSummary(lines, data.Metrics);
@@ -63,6 +66,7 @@ public sealed class ReportExportService
 
     public async Task ExportFleetExcelAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         FleetExportData data = await LoadFleetDataAsync(from, to);
         WriteXlsx(path,
         [
@@ -78,6 +82,7 @@ public sealed class ReportExportService
 
     public async Task ExportOperationsPdfAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         OperationsExportData data = await LoadOperationsDataAsync(from, to);
         List<string> lines = CreateHeader("Operations Reports", from, to, generatedBy);
         AddOperationsSummary(lines, data.Metrics);
@@ -91,6 +96,7 @@ public sealed class ReportExportService
 
     public async Task ExportOperationsExcelAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         OperationsExportData data = await LoadOperationsDataAsync(from, to);
         WriteXlsx(path,
         [
@@ -106,6 +112,7 @@ public sealed class ReportExportService
 
     public async Task ExportCustomerPdfAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         CustomerExportData data = await LoadCustomerDataAsync(from, to);
         List<string> lines = CreateHeader("Customer Reports", from, to, generatedBy);
         AddCustomerSummary(lines, data.Metrics);
@@ -118,6 +125,7 @@ public sealed class ReportExportService
 
     public async Task ExportCustomerExcelAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         CustomerExportData data = await LoadCustomerDataAsync(from, to);
         WriteXlsx(path,
         [
@@ -133,6 +141,7 @@ public sealed class ReportExportService
 
     public async Task ExportFullPdfAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         ReportSummaryMetrics overview = await _reportService.GetSummaryMetricsAsync(from, to);
         FinancialExportData financial = await LoadFinancialDataAsync(from, to);
         FleetExportData fleet = await LoadFleetDataAsync(from, to);
@@ -153,6 +162,7 @@ public sealed class ReportExportService
 
     public async Task ExportFullExcelAsync(string path, DateTime from, DateTime to, string generatedBy)
     {
+        AccessControlService.EnforcePermission("Reports.Export");
         ReportSummaryMetrics overview = await _reportService.GetSummaryMetricsAsync(from, to);
         FinancialExportData financial = await LoadFinancialDataAsync(from, to);
         FleetExportData fleet = await LoadFleetDataAsync(from, to);
