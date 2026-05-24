@@ -645,6 +645,12 @@ public sealed class TransactionControl : UserControl
 
     private async void AddButton_Click(object? sender, EventArgs e)
     {
+        if (!AccessControlService.HasPermission("Transactions.Create"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         using TransactionDetailsForm form = new(_currentUserId);
         if (form.ShowDialog(this) == DialogResult.OK)
         {
@@ -684,24 +690,59 @@ public sealed class TransactionControl : UserControl
                 await ViewTransactionAsync(transactionId);
                 break;
             case "Payment":
+                if (!AccessControlService.HasPermission("Transactions.AddPayment"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await EditTransactionAsync(transactionId);
                 break;
             case "Extend":
+                if (!AccessControlService.HasPermission("Transactions.Edit"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await ExtendRentalAsync(transactionId);
                 break;
             case "Start Rental":
+                if (!AccessControlService.HasPermission("Transactions.StartRental"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await StartRentalAsync(transactionId);
                 break;
             case "Complete":
+                if (!AccessControlService.HasPermission("Transactions.Complete"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await CompleteTransactionAsync(transactionId);
                 break;
             case "Cancel":
+                if (!AccessControlService.HasPermission("Transactions.Cancel"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await CancelTransactionAsync(transactionId);
                 break;
             case "Archive":
+                if (!AccessControlService.HasPermission("Transactions.ArchiveRestore"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await ArchiveTransactionAsync(transactionId);
                 break;
             case "Restore":
+                if (!AccessControlService.HasPermission("Transactions.ArchiveRestore"))
+                {
+                    MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+                    break;
+                }
                 await RestoreTransactionAsync(transactionId);
                 break;
         }

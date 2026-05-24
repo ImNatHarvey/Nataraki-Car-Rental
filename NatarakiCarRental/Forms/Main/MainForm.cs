@@ -96,32 +96,39 @@ public sealed class MainForm : Form
 
         NavigationItem[] menuItems =
         [
-            new("Overview", IconChar.ChartLine, true),
-            new("Fleet Schedule", IconChar.CalendarDays, true),
-            new("Transactions", IconChar.Receipt, true),
-            new("Customers", IconChar.Users, true),
-            new("Car Garage", IconChar.Car, true),
-            new("Offsite", IconChar.LocationDot, true),
+            new("Overview", IconChar.ChartLine, AccessControlService.HasPermission("Overview.View")),
+            new("Fleet Schedule", IconChar.CalendarDays, AccessControlService.HasPermission("FleetSchedule.View")),
+            new("Transactions", IconChar.Receipt, AccessControlService.HasPermission("Transactions.View")),
+            new("Customers", IconChar.Users, AccessControlService.HasPermission("Customers.View")),
+            new("Car Garage", IconChar.Car, AccessControlService.HasPermission("Cars.View")),
+            new("Offsite", IconChar.LocationDot, AccessControlService.HasPermission("Offsite.View")),
             new("Activity Log", IconChar.ClipboardList, AccessControlService.HasPermission("ActivityLog.View")),
-            new("Reports & Analytics", IconChar.ChartColumn, true),
+            new("Reports & Analytics", IconChar.ChartColumn, AccessControlService.HasPermission("Reports.View")),
             new("Manage System", IconChar.Gear, AccessControlService.HasPermission("ManageSystem.View"))
         ];
 
+        string? firstAvailablePage = null;
+
         foreach (NavigationItem menuItem in menuItems)
         {
-            IconButton button = ControlFactory.CreateSidebarButton(menuItem.Text, menuItem.Icon);
-            
-            if (menuItem.IsImplemented)
-            {
-                button.Click += (_, _) => Navigate(menuItem.Text);
-            }
-            else
-            {
-                button.Enabled = false;
-            }
+            if (!menuItem.IsImplemented) continue;
 
+            firstAvailablePage ??= menuItem.Text;
+
+            IconButton button = ControlFactory.CreateSidebarButton(menuItem.Text, menuItem.Icon);
+            button.Click += (_, _) => Navigate(menuItem.Text);
+            
             _navigationButtons.Add(button);
             menuPanel.Controls.Add(button);
+        }
+
+        if (firstAvailablePage != null)
+        {
+            Navigate(firstAvailablePage);
+        }
+        else
+        {
+            ShowPlaceholder("No Access");
         }
 
         IconButton logoutButton = ControlFactory.CreateSidebarButton("Log Out", IconChar.RightFromBracket, isDanger: true);

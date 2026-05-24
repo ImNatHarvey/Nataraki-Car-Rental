@@ -742,6 +742,12 @@ public sealed class CarGarageControl : UserControl
 
     private async void AddCarButton_Click(object? sender, EventArgs e)
     {
+        if (!AccessControlService.HasPermission("Cars.Create"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         using CarDetailsForm addCarForm = new(CarFormMode.Add, currentUserId: _currentUserId);
 
         if (addCarForm.ShowDialog(this) == DialogResult.OK)
@@ -768,6 +774,12 @@ public sealed class CarGarageControl : UserControl
 
     private async Task EditCarAsync(int carId)
     {
+        if (!AccessControlService.HasPermission("Cars.Edit"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Car? car = await _carService.GetCarByIdAsync(carId);
 
         if (car is null)
@@ -787,6 +799,12 @@ public sealed class CarGarageControl : UserControl
 
     private async Task ArchiveCarAsync(int carId)
     {
+        if (!AccessControlService.HasPermission("Cars.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Car? car = await _carService.GetCarByIdAsync(carId);
 
         if (car is null)

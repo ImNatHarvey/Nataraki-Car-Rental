@@ -1013,9 +1013,23 @@ public sealed class OffsiteControl : UserControl
         button.FlatAppearance.BorderSize = 0; return button;
     }
 
-    private void ShowDetails(int recordId, bool viewOnly) { using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, viewOnly); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; _ = LoadRecordsAsync(); } }
+    private void ShowDetails(int recordId, bool viewOnly) 
+    { 
+        if (!viewOnly && !AccessControlService.HasPermission("Offsite.Edit"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+        using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, viewOnly); 
+        if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; _ = LoadRecordsAsync(); } 
+    }
     private async Task CompleteRecord(int recordId)
     {
+        if (!AccessControlService.HasPermission("Offsite.Complete"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
         using var form = new OffsiteCompletionForm(_currentUserId, recordId);
         if (form.ShowDialog() == DialogResult.OK)
         {
@@ -1023,10 +1037,43 @@ public sealed class OffsiteControl : UserControl
             await LoadRecordsAsync();
         }
     }
-    private async Task CancelRecord(int recordId) { if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); } }
-    private async Task ArchiveRecord(int recordId) { await _offsiteService.ArchiveAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); }
-    private async Task RestoreRecord(int recordId) { await _offsiteService.RestoreAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); }
-    private async Task AddRecordAsync() { using var form = new OffsiteRecordDetailsForm(_currentUserId); if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; await LoadRecordsAsync(); } }
+    private async Task CancelRecord(int recordId) 
+    { 
+        if (!AccessControlService.HasPermission("Offsite.Cancel"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+        if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); } 
+    }
+    private async Task ArchiveRecord(int recordId) 
+    { 
+        if (!AccessControlService.HasPermission("Offsite.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+        await _offsiteService.ArchiveAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); 
+    }
+    private async Task RestoreRecord(int recordId) 
+    { 
+        if (!AccessControlService.HasPermission("Offsite.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+        await _offsiteService.RestoreAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); 
+    }
+    private async Task AddRecordAsync() 
+    { 
+        if (!AccessControlService.HasPermission("Offsite.Create"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+        using var form = new OffsiteRecordDetailsForm(_currentUserId); 
+        if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; await LoadRecordsAsync(); } 
+    }
 
     private async Task InitializeMapAsync()
     {
@@ -1067,6 +1114,12 @@ public sealed class OffsiteControl : UserControl
 
     private async Task StartDemoTrackingAsync()
     {
+        if (!AccessControlService.HasPermission("Offsite.MapTracking"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         if (_isStartingDemo) return;
         _isStartingDemo = true;
         try

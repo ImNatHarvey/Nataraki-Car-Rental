@@ -109,6 +109,7 @@ public sealed class FleetScheduleControl : UserControl
         IconButton addButton = CreatePrimaryIconButton("Add Schedule", IconChar.CalendarPlus, 142, 36);
         addButton.Location = new Point(390, 9);
         addButton.Click += async (_, _) => await OpenAddFormAsync(null, null);
+        addButton.Visible = AccessControlService.HasPermission("FleetSchedule.Create");
 
         FlowLayoutPanel legendPanel = CreateLegendPanel();
         panel.Resize += (_, _) =>
@@ -283,6 +284,11 @@ public sealed class FleetScheduleControl : UserControl
         Models.FleetSchedule? schedule = _timelineCanvas.GetScheduleAt(e.Location);
         if (schedule is not null)
         {
+            if (!AccessControlService.HasPermission("FleetSchedule.Edit") && !AccessControlService.HasPermission("FleetSchedule.View"))
+            {
+                MessageBoxHelper.ShowWarning("You do not have permission to view or edit schedules.");
+                return;
+            }
             await OpenEditFormAsync(schedule);
             return;
         }
@@ -290,6 +296,11 @@ public sealed class FleetScheduleControl : UserControl
         var cellInfo = _timelineCanvas.GetCellAt(e.Location);
         if (cellInfo.Car is not null && cellInfo.Date.HasValue)
         {
+            if (!AccessControlService.HasPermission("FleetSchedule.Create"))
+            {
+                MessageBoxHelper.ShowWarning("You do not have permission to create schedules.");
+                return;
+            }
             await OpenAddFormAsync(cellInfo.Car.CarId, cellInfo.Date.Value);
         }
     }

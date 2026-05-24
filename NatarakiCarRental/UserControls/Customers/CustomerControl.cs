@@ -707,6 +707,12 @@ public sealed class CustomerControl : UserControl
 
     private async void AddCustomerButton_Click(object? sender, EventArgs e)
     {
+        if (!AccessControlService.HasPermission("Customers.Create"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         using CustomerDetailsForm form = new(CustomerFormMode.Add, currentUserId: _currentUserId);
 
         if (form.ShowDialog(this) == DialogResult.OK)
@@ -730,6 +736,12 @@ public sealed class CustomerControl : UserControl
 
     private async Task EditCustomerAsync(int customerId)
     {
+        if (!AccessControlService.HasPermission("Customers.Edit"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
         {
@@ -746,6 +758,12 @@ public sealed class CustomerControl : UserControl
 
     private async Task BlacklistCustomerAsync(int customerId)
     {
+        if (!AccessControlService.HasPermission("Customers.Blacklist"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
         {
@@ -765,6 +783,12 @@ public sealed class CustomerControl : UserControl
 
     private async Task RemoveBlacklistAsync(int customerId)
     {
+        if (!AccessControlService.HasPermission("Customers.Blacklist"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
         {
@@ -786,6 +810,12 @@ public sealed class CustomerControl : UserControl
 
     private async Task ArchiveCustomerAsync(int customerId)
     {
+        if (!AccessControlService.HasPermission("Customers.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
         {
@@ -814,6 +844,12 @@ public sealed class CustomerControl : UserControl
 
     private async Task RestoreCustomerAsync(int customerId)
     {
+        if (!AccessControlService.HasPermission("Customers.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
         {
