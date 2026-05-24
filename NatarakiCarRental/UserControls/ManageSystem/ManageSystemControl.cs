@@ -21,6 +21,7 @@ public sealed class ManageSystemControl : UserControl
     private readonly UserService _userService = new();
     private readonly RoleService _roleService = new();
     private readonly LocalAddressService _addressService = new();
+    private readonly SecurityVerificationService _verificationService = new();
 
     private readonly FlowLayoutPanel _tabPanel = new();
     private readonly Panel _contentPanel = new();
@@ -558,18 +559,18 @@ public sealed class ManageSystemControl : UserControl
 
     private async Task LoadRolesAsync()
     {
-        if (_rolesGrid.Columns.Count == 0) return;
+        if (_rolesGrid.Columns.Count == 0 || !AccessControlService.HasPermission("ManageSystem.Roles")) return;
 
         int loadVersion = Interlocked.Increment(ref _rolesLoadVersion);
 
         try
         {
             await _roleService.NormalizeDuplicateOwnerRolesAsync();
-            IReadOnlyList<Role> roles = await _roleService.GetAllRolesAsync(includeArchived: true);
+            var items = await _roleService.GetRoleListItemsAsync(includeArchived: true);
             if (loadVersion != _rolesLoadVersion) return;
 
             string search = _roleSearchInput.Text.Trim();
-            _filteredRoles = roles
+            var _filteredRoles = items
                 .Where(role => role.IsArchived == _showArchivedRoles)
                 .Where(role => string.IsNullOrWhiteSpace(search)
                     || role.RoleName.Contains(search, StringComparison.OrdinalIgnoreCase))
@@ -579,20 +580,14 @@ public sealed class ManageSystemControl : UserControl
             int totalPages = Math.Max(1, (int)Math.Ceiling(_filteredRoles.Count / (double)pageSize));
             if (_rolesPage > totalPages) _rolesPage = totalPages;
 
-            List<UserListItem> users = (await _userService.SearchUsersAsync(includeArchived: true)).ToList();
-            if (loadVersion != _rolesLoadVersion) return;
-
             _rolesGrid.Rows.Clear();
-            foreach (Role role in _filteredRoles.Skip((_rolesPage - 1) * pageSize).Take(pageSize))
+            foreach (var role in _filteredRoles.Skip((_rolesPage - 1) * pageSize).Take(pageSize))
             {
-                RoleWithPermissions? permissions = await _roleService.GetRoleWithPermissionsAsync(role.RoleId);
-                if (loadVersion != _rolesLoadVersion) return;
-
                 int row = _rolesGrid.Rows.Add(
                     role.RoleName,
                     role.IsArchived ? "Archived" : role.IsActive ? "Active" : "Inactive",
-                    users.Count(user => user.RoleName == role.RoleName && !user.IsArchived).ToString(),
-                    (permissions?.PermissionKeys.Count ?? 0).ToString(),
+                    role.UsersCount.ToString(),
+                    $"{role.ModuleAccessCount} / 9",
                     role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase) ? "Protected" : role.IsSystemRole ? "System" : "Custom",
                     GetRoleActions(role));
                 _rolesGrid.Rows[row].Tag = role;
@@ -638,7 +633,7 @@ public sealed class ManageSystemControl : UserControl
         _rolesGrid.Columns.Add("RoleName", "Role Name");
         _rolesGrid.Columns.Add("Status", "Status");
         _rolesGrid.Columns.Add("UsersCount", "Users Count");
-        _rolesGrid.Columns.Add("PermissionsCount", "Permissions Count");
+        _rolesGrid.Columns.Add("ModuleAccess", "Module Access");
         _rolesGrid.Columns.Add("Type", "Type");
         _rolesGrid.Columns.Add("Actions", "Actions");
         _rolesGrid.CellDoubleClick -= RolesGrid_CellDoubleClick;
@@ -1117,7 +1112,6 @@ public sealed class ManageSystemControl : UserControl
         return action switch
         {
             "Edit" => ThemeHelper.Success,
-            "Permissions" => ThemeHelper.Primary,
             "Activate" or "Restore" => ThemeHelper.Success,
             "Deactivate" => ThemeHelper.Warning,
             "Archive" => ThemeHelper.Danger,
@@ -1199,7 +1193,6 @@ public sealed class ManageSystemControl : UserControl
                 await OpenRoleFormAsync(role.RoleId, isViewOnly: true);
                 break;
             case "Edit":
-            case "Permissions":
                 await OpenRoleFormAsync(role.RoleId);
                 break;
             case "Activate":
@@ -1219,7 +1212,7 @@ public sealed class ManageSystemControl : UserControl
     {
         if (!AccessControlService.HasPermission("ManageSystem.Users"))
         {
-            ShowPermissionDenied();
+            ShowAccessDenied();
             return;
         }
 
@@ -1330,7 +1323,7 @@ public sealed class ManageSystemControl : UserControl
     {
         if (!AccessControlService.HasPermission("ManageSystem.Roles"))
         {
-            ShowPermissionDenied();
+            ShowAccessDenied();
             return;
         }
 
@@ -1436,12 +1429,11 @@ public sealed class ManageSystemControl : UserControl
         return "View | Edit | Archive";
     }
 
-    private static string GetRoleActions(Role role)
+    private static string GetRoleActions(RoleListItem role)
     {
         if (role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase)) return "View";
-        if (role.IsSystemRole) return "View | Permissions";
         if (role.IsArchived) return "View | Restore";
-        return "View | Edit | Permissions | Archive";
+        return "View | Edit | Archive";
     }
 
     private async Task<bool> ConfirmOwnerForSensitiveActionAsync(string actionName)
@@ -1455,16 +1447,20 @@ public sealed class ManageSystemControl : UserControl
 
     private async Task SaveSystemSettingsAsync()
     {
-        if (string.IsNullOrWhiteSpace(_businessNameInput.Text))
+        if (!AccessControlService.HasPermission("ManageSystem.Settings"))
         {
-            MessageBoxHelper.ShowWarning("Business name is required.");
+            ShowAccessDenied();
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(_emailInput.Text)
-            && !Regex.IsMatch(_emailInput.Text.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        if (string.IsNullOrWhiteSpace(_businessNameInput.Text))
         {
-            MessageBoxHelper.ShowWarning("Please enter a valid email address.");
+            MessageBoxHelper.ShowWarning("Business Name is required.");
+            return;
+        }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Update system settings"))
+        {
             return;
         }
 
@@ -2205,7 +2201,7 @@ public sealed class ManageSystemControl : UserControl
         card.Location = new Point(left, 0);
     }
 
-    private static void ShowPermissionDenied()
+    private static void ShowAccessDenied()
     {
         MessageBoxHelper.ShowWarning("You do not have permission to perform this action.", "Permission Denied");
     }

@@ -12,6 +12,7 @@ namespace NatarakiCarRental.UserControls.Customers;
 public sealed class CustomerControl : UserControl
 {
     private readonly CustomerService _customerService;
+    private readonly SecurityVerificationService _verificationService = new();
     private readonly MetricCardControl _totalCustomersCard = new();
     private readonly MetricCardControl _activeCustomersCard = new();
     private readonly MetricCardControl _blacklistedCustomersCard = new();
@@ -770,6 +771,11 @@ public sealed class CustomerControl : UserControl
             return;
         }
 
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Blacklist customer: {customer.FirstName} {customer.LastName}"))
+        {
+            return;
+        }
+
         using CustomerBlacklistReasonForm form = new();
 
         if (form.ShowDialog(this) != DialogResult.OK)
@@ -791,6 +797,11 @@ public sealed class CustomerControl : UserControl
 
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
+        {
+            return;
+        }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Remove blacklist: {customer.FirstName} {customer.LastName}"))
         {
             return;
         }
@@ -818,6 +829,11 @@ public sealed class CustomerControl : UserControl
 
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
+        {
+            return;
+        }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Archive customer: {customer.FirstName} {customer.LastName}"))
         {
             return;
         }
@@ -852,6 +868,11 @@ public sealed class CustomerControl : UserControl
 
         Customer? customer = await GetCustomerOrRefreshAsync(customerId);
         if (customer is null)
+        {
+            return;
+        }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Restore customer: {customer.FirstName} {customer.LastName}"))
         {
             return;
         }

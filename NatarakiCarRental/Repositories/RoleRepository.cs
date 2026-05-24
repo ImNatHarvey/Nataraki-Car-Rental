@@ -18,6 +18,30 @@ public sealed class RoleRepository
         _connectionFactory = connectionFactory;
     }
 
+    public async Task<IReadOnlyList<RoleListItem>> GetListItemsAsync(bool includeArchived = false)
+    {
+        const string sql = """
+            SELECT 
+                r.RoleId,
+                r.RoleName,
+                r.Description,
+                r.IsActive,
+                r.IsArchived,
+                r.IsSystemRole,
+                UsersCount = (SELECT COUNT(1) FROM dbo.Users WHERE RoleId = r.RoleId AND IsArchived = 0),
+                ModuleAccessCount = CASE 
+                    WHEN UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 9
+                    ELSE (SELECT COUNT(DISTINCT ModuleName) FROM dbo.Permissions p JOIN dbo.RolePermissions rp ON rp.PermissionId = p.PermissionId WHERE rp.RoleId = r.RoleId)
+                END
+            FROM dbo.Roles r
+            WHERE r.IsArchived = 0 OR @IncludeArchived = 1
+            ORDER BY r.RoleName;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<RoleListItem>(sql, new { IncludeArchived = includeArchived });
+        return results.ToList();
+    }
+
     public async Task<IReadOnlyList<Role>> GetAllAsync(bool includeArchived = false)
     {
         const string sql = """

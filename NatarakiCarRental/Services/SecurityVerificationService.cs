@@ -1,62 +1,54 @@
+using NatarakiCarRental.Forms.ManageSystem;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
-using NatarakiCarRental.Repositories;
 
 namespace NatarakiCarRental.Services;
 
 public sealed class SecurityVerificationService
 {
-    private readonly UserRepository _userRepository;
+    private readonly UserService _userService;
 
-    public SecurityVerificationService() : this(new UserRepository())
+    public SecurityVerificationService() : this(new UserService())
     {
     }
 
-    public SecurityVerificationService(UserRepository userRepository)
+    public SecurityVerificationService(UserService userService)
     {
-        _userRepository = userRepository;
+        _userService = userService;
     }
 
-    public async Task<bool> VerifyOwnerPasswordAsync(string password)
+    public async Task<bool> RequireOwnerVerificationIfNeededAsync(int currentUserId, string actionName)
     {
-        if (string.IsNullOrEmpty(password))
+        // 1. If current user is Owner, bypass verification
+        User? currentUser = await _userService.GetUserByIdAsync(currentUserId);
+        if (currentUser?.IsOwner == true)
         {
-            return false;
+            return true;
         }
 
-        IReadOnlyList<User> owners = await _userRepository.GetActiveOwnersAsync();
-        if (owners.Count == 0)
+        // 2. Otherwise, require owner password confirmation
+        using OwnerPasswordConfirmationForm form = new(actionName);
+        if (form.ShowDialog() == DialogResult.OK)
         {
-            return false;
-        }
-
-        foreach (User owner in owners)
-        {
-            if (!IsValidBCryptHash(owner.PasswordHash))
-            {
-                continue;
-            }
-
-            try
-            {
-                if (BCrypt.Net.BCrypt.Verify(password, owner.PasswordHash))
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-                // Ignore invalid/corrupt hashes and continue checking other active owner rows.
-            }
+            MessageBoxHelper.ShowSuccess("Owner verification successful.");
+            return true;
         }
 
         return false;
     }
 
-    private static bool IsValidBCryptHash(string? passwordHash)
+    public async Task<bool> VerifyOwnerPasswordAsync(string password)
     {
-        if (string.IsNullOrWhiteSpace(passwordHash)) return false;
-        return passwordHash.StartsWith("$2a$", StringComparison.Ordinal)
-               || passwordHash.StartsWith("$2b$", StringComparison.Ordinal)
-               || passwordHash.StartsWith("$2y$", StringComparison.Ordinal);
+        if (string.IsNullOrWhiteSpace(password)) return false;
+
+        // Fetch owner account (assuming only one is marked IsOwner=1 for demo/simplicity)
+        var users = await _userService.SearchUsersAsync();
+        var owner = users.FirstOrDefault(u => u.IsOwner);
+        if (owner == null) return false;
+
+        User? ownerDetails = await _userService.GetUserByIdAsync(owner.UserId);
+        if (ownerDetails == null) return false;
+
+        return BCrypt.Net.BCrypt.Verify(password, ownerDetails.PasswordHash);
     }
 }

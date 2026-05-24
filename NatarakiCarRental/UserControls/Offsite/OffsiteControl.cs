@@ -23,6 +23,7 @@ public sealed class OffsiteControl : UserControl
     private readonly VehicleTrackingService _trackingService = new();
     private readonly VehicleTrackingSimulator _simulator = new();
     private readonly OffsiteService _offsiteService;
+    private readonly SecurityVerificationService _verificationService = new();
     private readonly int _currentUserId;
     
     // Main Navigation Buttons (Module-style)
@@ -1030,6 +1031,12 @@ public sealed class OffsiteControl : UserControl
             MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
             return;
         }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Complete offsite record"))
+        {
+            return;
+        }
+
         using var form = new OffsiteCompletionForm(_currentUserId, recordId);
         if (form.ShowDialog() == DialogResult.OK)
         {
@@ -1044,6 +1051,12 @@ public sealed class OffsiteControl : UserControl
             MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
             return;
         }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel offsite activity"))
+        {
+            return;
+        }
+
         if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); } 
     }
     private async Task ArchiveRecord(int recordId) 
@@ -1053,6 +1066,12 @@ public sealed class OffsiteControl : UserControl
             MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
             return;
         }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Archive offsite record"))
+        {
+            return;
+        }
+
         await _offsiteService.ArchiveAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); 
     }
     private async Task RestoreRecord(int recordId) 
@@ -1062,6 +1081,12 @@ public sealed class OffsiteControl : UserControl
             MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
             return;
         }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Restore offsite record"))
+        {
+            return;
+        }
+
         await _offsiteService.RestoreAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); 
     }
     private async Task AddRecordAsync() 

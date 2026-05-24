@@ -17,6 +17,7 @@ public sealed class TransactionControl : UserControl
     private const float TransactionStatusPillWidth = 104F;
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
+    private readonly SecurityVerificationService _verificationService = new();
     private readonly MetricCardControl _totalTransactionsCard = new();
     private readonly MetricCardControl _activeRentalsCard = new();
     private readonly MetricCardControl _unpaidTransactionsCard = new();
@@ -621,8 +622,8 @@ public sealed class TransactionControl : UserControl
             "Start Rental" => ThemeHelper.Primary,
             "Complete" => ThemeHelper.Success,
             "Cancel" => ThemeHelper.Danger,
-            "Archive" => ThemeHelper.GrayIcon,
-            "Restore" => ThemeHelper.Warning,
+            "Archive" => ThemeHelper.Danger,
+            "Restore" => ThemeHelper.Success,
             _ => ThemeHelper.Primary
         };
     }
@@ -855,6 +856,14 @@ public sealed class TransactionControl : UserControl
             return;
         }
 
+        if (inspectionForm.AdditionalCharge > 0)
+        {
+            if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Complete transaction with fees: {transaction.TransactionCode}"))
+            {
+                return;
+            }
+        }
+
         try
         {
             await _transactionService.CompleteTransactionAsync(new CompleteTransactionRequest
@@ -922,11 +931,20 @@ public sealed class TransactionControl : UserControl
 
     private async Task CancelTransactionAsync(int transactionId)
     {
+        if (!AccessControlService.HasPermission("Transactions.Cancel"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
-        if (transaction is null)
+        if (transaction is null) return;
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Cancel transaction: {transaction.TransactionCode}"))
         {
             return;
         }
+
         if (!MessageBoxHelper.ShowConfirmDanger($"Cancel transaction {transaction.TransactionCode}?", "Cancel Transaction"))
         {
             return;
@@ -945,11 +963,20 @@ public sealed class TransactionControl : UserControl
 
     private async Task ArchiveTransactionAsync(int transactionId)
     {
+        if (!AccessControlService.HasPermission("Transactions.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
-        if (transaction is null)
+        if (transaction is null) return;
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Archive transaction: {transaction.TransactionCode}"))
         {
             return;
         }
+
         if (!MessageBoxHelper.ShowConfirmDanger($"Archive transaction {transaction.TransactionCode}? This keeps the linked schedule history.", "Archive Transaction"))
         {
             return;
@@ -968,11 +995,20 @@ public sealed class TransactionControl : UserControl
 
     private async Task RestoreTransactionAsync(int transactionId)
     {
+        if (!AccessControlService.HasPermission("Transactions.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
-        if (transaction is null)
+        if (transaction is null) return;
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Restore transaction: {transaction.TransactionCode}"))
         {
             return;
         }
+
         if (!MessageBoxHelper.ShowConfirmWarning($"Restore transaction {transaction.TransactionCode} to the active list?", "Restore Transaction"))
         {
             return;

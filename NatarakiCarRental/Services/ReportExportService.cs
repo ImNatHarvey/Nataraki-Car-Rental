@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 
 namespace NatarakiCarRental.Services;
@@ -833,7 +834,8 @@ public sealed class ReportExportService
 
     private static string CreateStylesXml()
     {
-        return """
+        string themeHex = System.Drawing.ColorTranslator.ToHtml(ThemeHelper.Primary).Replace("#", string.Empty).ToUpperInvariant();
+        return $"""
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
               <fonts count="2">
@@ -843,7 +845,7 @@ public sealed class ReportExportService
               <fills count="3">
                 <fill><patternFill patternType="none"/></fill>
                 <fill><patternFill patternType="gray125"/></fill>
-                <fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/><bgColor indexed="64"/></patternFill></fill>
+                <fill><patternFill patternType="solid"><fgColor rgb="FF{themeHex}"/><bgColor indexed="64"/></patternFill></fill>
               </fills>
               <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
               <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
@@ -853,6 +855,12 @@ public sealed class ReportExportService
               </cellXfs>
             </styleSheet>
             """;
+    }
+
+    private static string GetPdfThemeRgb()
+    {
+        System.Drawing.Color color = ThemeHelper.Primary;
+        return string.Format(CultureInfo.InvariantCulture, "{0:F3} {1:F3} {2:F3}", color.R / 255.0, color.G / 255.0, color.B / 255.0);
     }
 
     private static string CreateWorksheetXml(ExcelSheet sheet)
@@ -974,8 +982,9 @@ public sealed class ReportExportService
 
     private static string CreatePdfPageContent(IReadOnlyList<string> headerLines, IReadOnlyList<string> bodyLines, int pageNumber, int pageCount)
     {
+        string themeRgb = GetPdfThemeRgb();
         StringBuilder builder = new();
-        AppendRectangle(builder, 0, 742, 612, 50, "0.145 0.388 0.922");
+        AppendRectangle(builder, 0, 742, 612, 50, themeRgb);
         AppendText(builder, headerLines.ElementAtOrDefault(0) ?? NatarakiCarRental.Helpers.AppBrandingManager.CurrentSettings.ReportHeaderName, 306, 772, 18, bold: true, centered: true, color: "1 1 1");
         AppendText(builder, headerLines.ElementAtOrDefault(1) ?? string.Empty, 306, 752, 9, bold: false, centered: true, color: "1 1 1");
 
@@ -1000,7 +1009,7 @@ public sealed class ReportExportService
             {
                 displayLine = line.Replace(SectionMarker, string.Empty, StringComparison.Ordinal);
                 y -= 4;
-                AppendRectangle(builder, 50, y - 3, 512, 18, "0.145 0.388 0.922");
+                AppendRectangle(builder, 50, y - 3, 512, 18, themeRgb);
                 AppendText(builder, displayLine, 58, y + 2, 10, bold: true, color: "1 1 1");
                 y -= 24;
                 continue;

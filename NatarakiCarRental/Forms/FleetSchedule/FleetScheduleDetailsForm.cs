@@ -17,7 +17,9 @@ public sealed class FleetScheduleDetailsForm : Form
 {
     private const int InputWidth = 368;
 
+    private readonly int _currentUserId;
     private readonly FleetScheduleService _scheduleService;
+    private readonly SecurityVerificationService _verificationService = new();
     private readonly CarService _carService = new();
     private readonly CustomerService _customerService = new();
     private readonly FleetScheduleFormMode _mode;
@@ -39,11 +41,12 @@ public sealed class FleetScheduleDetailsForm : Form
 
     public FleetScheduleDetailsForm(
         FleetScheduleFormMode mode,
-        int? currentUserId,
+        int currentUserId,
         FleetScheduleModel? schedule = null,
         int? prefilledCarId = null,
         DateTime? prefilledDate = null)
     {
+        _currentUserId = currentUserId;
         _scheduleService = new FleetScheduleService(currentUserId);
         _mode = mode;
         _sourceSchedule = schedule;
@@ -60,7 +63,7 @@ public sealed class FleetScheduleDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(920, 520);
+        ClientSize = new Size(920, 570);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -105,7 +108,7 @@ public sealed class FleetScheduleDetailsForm : Form
         Panel contentPanel = new()
         {
             Location = new Point(32, _mode == FleetScheduleFormMode.Add ? 104 : 88),
-            Size = new Size(856, _mode == FleetScheduleFormMode.Add ? 344 : 360),
+            Size = new Size(856, 400),
             BackColor = ThemeHelper.Surface
         };
 
@@ -117,7 +120,7 @@ public sealed class FleetScheduleDetailsForm : Form
         };
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
 
         contentLayout.Controls.Add(CreateSection("Car / Customer Information", CreateCarCustomerLayout()), 0, 0);
         contentLayout.Controls.Add(CreateSection("Schedule Information", CreateScheduleInfoLayout()), 0, 1);
@@ -125,18 +128,18 @@ public sealed class FleetScheduleDetailsForm : Form
         contentPanel.Controls.Add(contentLayout);
 
         Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(622, 462);
+        cancelButton.Location = new Point(622, 512);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
-        saveButton.Location = new Point(754, 462);
+        saveButton.Location = new Point(754, 512);
         saveButton.Click += SaveButton_Click;
 
         Button? archiveButton = null;
         if (_mode == FleetScheduleFormMode.Edit)
         {
             archiveButton = CreateDangerButton("Archive", 110, 38);
-            archiveButton.Location = new Point(32, 462);
+            archiveButton.Location = new Point(32, 512);
             archiveButton.Click += ArchiveButton_Click;
         }
 
@@ -352,6 +355,11 @@ public sealed class FleetScheduleDetailsForm : Form
     private async void ArchiveButton_Click(object? sender, EventArgs e)
     {
         if (_sourceSchedule is null)
+        {
+            return;
+        }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Archive schedule: {_sourceSchedule.Title}"))
         {
             return;
         }

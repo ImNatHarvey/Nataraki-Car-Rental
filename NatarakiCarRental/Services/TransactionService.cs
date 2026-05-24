@@ -337,7 +337,7 @@ public sealed class TransactionService
 
         schedule.ScheduleType = FleetScheduleConstants.Type.Rental;
         schedule.Status = FleetScheduleConstants.Status.Completed;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
@@ -559,7 +559,7 @@ public sealed class TransactionService
         }
 
         schedule.EndDate = newEndDate.Date;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
@@ -820,7 +820,7 @@ public sealed class TransactionService
 
         schedule.ScheduleType = scheduleType;
         schedule.Status = scheduleStatus;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
@@ -1095,7 +1095,7 @@ public sealed class TransactionService
         }
 
         schedule.Status = scheduleStatus;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId);
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
         await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
     }
 

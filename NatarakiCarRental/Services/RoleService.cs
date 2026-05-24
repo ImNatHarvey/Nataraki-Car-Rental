@@ -22,6 +22,11 @@ public sealed class RoleService
         _activityLogService = activityLogService;
     }
 
+    public Task<IReadOnlyList<RoleListItem>> GetRoleListItemsAsync(bool includeArchived = false)
+    {
+        return _roleRepository.GetListItemsAsync(includeArchived);
+    }
+
     public Task<IReadOnlyList<Role>> GetAllRolesAsync(bool includeArchived = false)
     {
         return _roleRepository.GetAllAsync(includeArchived);

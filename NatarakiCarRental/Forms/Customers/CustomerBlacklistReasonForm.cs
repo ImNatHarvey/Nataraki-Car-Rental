@@ -19,6 +19,8 @@ public sealed class CustomerBlacklistReasonForm : Form
     private readonly TextBox _customReasonTextBox = ControlFactory.CreateTextBox(330);
     private readonly Label _customReasonLabel = ControlFactory.CreateInputLabel("Custom Reason *");
     private readonly Label _validationLabel = new();
+    private Button _confirmButton = null!;
+    private Button _cancelButton = null!;
 
     public CustomerBlacklistReasonForm()
     {
@@ -34,7 +36,7 @@ public sealed class CustomerBlacklistReasonForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(430, 280);
+        ClientSize = new Size(460, 280);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -54,14 +56,14 @@ public sealed class CustomerBlacklistReasonForm : Form
             Text = "Select a reason before flagging this customer.",
             AutoSize = false,
             Location = new Point(30, 56),
-            Size = new Size(350, 24),
+            Size = new Size(400, 24),
             Font = FontHelper.Regular(9.5F),
             ForeColor = ThemeHelper.TextSecondary
         };
 
         _validationLabel.AutoSize = false;
         _validationLabel.Location = new Point(30, 82);
-        _validationLabel.Size = new Size(350, 22);
+        _validationLabel.Size = new Size(400, 22);
         _validationLabel.Font = FontHelper.SemiBold(9F);
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
@@ -72,7 +74,7 @@ public sealed class CustomerBlacklistReasonForm : Form
         _reasonComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         _reasonComboBox.Font = FontHelper.Regular(10F);
         _reasonComboBox.ForeColor = ThemeHelper.TextPrimary;
-        _reasonComboBox.Size = new Size(330, 30);
+        _reasonComboBox.Size = new Size(400, 30);
         _reasonComboBox.Location = new Point(30, 136);
         _reasonComboBox.Items.AddRange(ReasonOptions.Cast<object>().ToArray());
         _reasonComboBox.SelectedIndexChanged += (_, _) => UpdateCustomReasonState();
@@ -81,18 +83,19 @@ public sealed class CustomerBlacklistReasonForm : Form
         _customReasonLabel.Visible = false;
 
         _customReasonTextBox.Location = new Point(30, 198);
+        _customReasonTextBox.Width = 400;
         _customReasonTextBox.Enabled = false;
         _customReasonTextBox.Visible = false;
 
-        Button cancelButton = CreateSecondaryButton("Cancel", 110, 36);
-        cancelButton.Location = new Point(176, 232);
-        cancelButton.DialogResult = DialogResult.Cancel;
+        _confirmButton = ControlFactory.CreatePrimaryButton("Confirm", 110, 36);
+        _confirmButton.BackColor = ThemeHelper.Danger;
+        _confirmButton.FlatAppearance.MouseOverBackColor = ThemeHelper.Danger;
+        _confirmButton.Location = new Point(320, 226);
+        _confirmButton.Click += ConfirmButton_Click;
 
-        Button confirmButton = ControlFactory.CreatePrimaryButton("Confirm", 110, 36);
-        confirmButton.BackColor = ThemeHelper.Danger;
-        confirmButton.FlatAppearance.MouseOverBackColor = ThemeHelper.Danger;
-        confirmButton.Location = new Point(300, 232);
-        confirmButton.Click += ConfirmButton_Click;
+        _cancelButton = CreateSecondaryButton("Cancel", 110, 36);
+        _cancelButton.Location = new Point(198, 226);
+        _cancelButton.DialogResult = DialogResult.Cancel;
 
         Controls.Add(titleLabel);
         Controls.Add(subtitleLabel);
@@ -101,11 +104,11 @@ public sealed class CustomerBlacklistReasonForm : Form
         Controls.Add(_reasonComboBox);
         Controls.Add(_customReasonLabel);
         Controls.Add(_customReasonTextBox);
-        Controls.Add(cancelButton);
-        Controls.Add(confirmButton);
+        Controls.Add(_cancelButton);
+        Controls.Add(_confirmButton);
 
-        AcceptButton = confirmButton;
-        CancelButton = cancelButton;
+        AcceptButton = _confirmButton;
+        CancelButton = _cancelButton;
     }
 
     private void UpdateCustomReasonState()
@@ -115,8 +118,17 @@ public sealed class CustomerBlacklistReasonForm : Form
         _customReasonTextBox.Visible = isOther;
         _customReasonLabel.Visible = isOther;
 
-        if (!isOther)
+        if (isOther)
         {
+            ClientSize = new Size(460, 340);
+            _cancelButton.Top = 286;
+            _confirmButton.Top = 286;
+        }
+        else
+        {
+            ClientSize = new Size(460, 280);
+            _cancelButton.Top = 226;
+            _confirmButton.Top = 226;
             _customReasonTextBox.Clear();
         }
     }

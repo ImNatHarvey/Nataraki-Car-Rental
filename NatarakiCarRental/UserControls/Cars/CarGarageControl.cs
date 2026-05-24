@@ -13,6 +13,7 @@ namespace NatarakiCarRental.UserControls.Cars;
 public sealed class CarGarageControl : UserControl
 {
     private readonly CarService _carService;
+    private readonly SecurityVerificationService _verificationService = new();
     private readonly MetricCardControl _totalCarsCard = new();
     private readonly MetricCardControl _availableCarsCard = new();
     private readonly MetricCardControl _rentedCarsCard = new();
@@ -814,6 +815,11 @@ public sealed class CarGarageControl : UserControl
             return;
         }
 
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Archive car: {car.CarName}"))
+        {
+            return;
+        }
+
         bool confirmed = MessageBoxHelper.ShowConfirmDanger(
             $"Archive {car.CarName} ({car.PlateNumber})? This will hide it from active car lists.",
             "Archive Car");
@@ -836,12 +842,23 @@ public sealed class CarGarageControl : UserControl
 
     private async Task RestoreCarAsync(int carId)
     {
+        if (!AccessControlService.HasPermission("Cars.ArchiveRestore"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            return;
+        }
+
         Car? car = await _carService.GetCarByIdAsync(carId);
 
         if (car is null)
         {
             MessageBoxHelper.ShowWarning("The selected car record no longer exists.");
             await LoadCarsAsync();
+            return;
+        }
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Restore car: {car.CarName}"))
+        {
             return;
         }
 

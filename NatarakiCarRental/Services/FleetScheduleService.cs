@@ -154,6 +154,35 @@ public sealed class FleetScheduleService
         }
     }
 
+    public async Task UpdateScheduleFromTransactionAsync(FleetSchedule schedule)
+    {
+        // This is an internal workflow from Transaction module, bypass standard Edit permission check here 
+        // because Transaction module has its own permission checks (e.g. Transactions.StartRental).
+        
+        await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId, isInternalWorkflow: true);
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction transaction = connection.BeginTransaction();
+
+        try
+        {
+            int affectedRows = await _scheduleRepository.UpdateAsync(schedule, transaction);
+
+            if (affectedRows == 0)
+            {
+                throw new RecordNotFoundException($"Schedule record #{schedule.ScheduleId} was not found or is archived.");
+            }
+
+            // Logging is handled by TransactionService for these events
+            transaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(transaction);
+            throw;
+        }
+    }
+
     private async Task ValidateTransactionLifecycleLockAsync(FleetSchedule schedule)
     {
         FleetSchedule? existingSchedule = await _scheduleRepository.GetByIdAsync(schedule.ScheduleId);
