@@ -1629,7 +1629,7 @@ public static class DatabaseInitializer
     private static void SeedDefaultDemoOwner()
     {
         const string sql = """
-            IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE Username = @Username)
+            IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE IsOwner = 1)
             BEGIN
                 INSERT INTO dbo.Users
                 (
@@ -1702,7 +1702,6 @@ public static class DatabaseInitializer
                         WHERE UPPER(LTRIM(RTRIM(r2.RoleName))) = N'OWNER'
                           AND u2.IsArchived = 0
                         ORDER BY
-                            CASE WHEN u2.Username = N'NatarakiCar' THEN 0 ELSE 1 END,
                             u2.UserId
                     );
                 END;

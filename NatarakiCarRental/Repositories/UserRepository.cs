@@ -93,7 +93,6 @@ public sealed class UserRepository
                     WHERE UPPER(LTRIM(RTRIM(r2.RoleName))) = N'OWNER'
                       AND u2.IsArchived = 0
                     ORDER BY
-                        CASE WHEN u2.Username = N'NatarakiCar' THEN 0 ELSE 1 END,
                         u2.UserId
                 );
             END;

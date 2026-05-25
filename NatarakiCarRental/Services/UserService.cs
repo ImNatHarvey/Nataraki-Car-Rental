@@ -81,18 +81,29 @@ public sealed class UserService
         existing.LastName = request.LastName.Trim();
         existing.Email = request.Email?.Trim();
         existing.PhoneNumber = request.PhoneNumber?.Trim();
+        existing.Username = username;
+
         if (existing.IsOwner)
         {
             existing.IsActive = true;
         }
         else
         {
-            existing.Username = username;
             existing.RoleId = request.RoleId;
             existing.IsActive = request.IsActive;
         }
 
         await _userRepository.UpdateAsync(existing);
+
+        if (AccessControlService.CurrentUser?.UserId == existing.UserId)
+        {
+            // Update current session if the user updated themselves
+            AccessControlService.CurrentUser.Username = existing.Username;
+            AccessControlService.CurrentUser.FirstName = existing.FirstName;
+            AccessControlService.CurrentUser.LastName = existing.LastName;
+            AccessControlService.CurrentUser.Email = existing.Email;
+            AccessControlService.CurrentUser.PhoneNumber = existing.PhoneNumber;
+        }
 
         await _activityLogService.LogAsync(
             "Update",

@@ -326,7 +326,8 @@ public sealed class UserDetailsForm : Form
 
                     if (user.IsOwner)
                     {
-                        _usernameInput.Enabled = false;
+                        // Allow Owner to edit their own username in Edit mode
+                        _usernameInput.Enabled = true;
                         _roleComboBox.Enabled = false;
                         _isActiveCheckBox.Enabled = false;
                         _protectedNote!.Visible = true;

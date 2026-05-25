@@ -3,6 +3,7 @@ using NatarakiCarRental.Forms.ManageSystem;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
+using NatarakiCarRental.UserControls.Common;
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Text.RegularExpressions;
@@ -13,6 +14,7 @@ public sealed class ManageSystemControl : UserControl
 {
     private const int WidePageSize = 13;
     private const int NarrowPageSize = 4;
+    private const int WideManageGridThreshold = 1180;
     private const string NotApplicableProvinceCode = "__NA__";
     private const string NotApplicableProvinceName = "N/A";
 
@@ -94,7 +96,7 @@ public sealed class ManageSystemControl : UserControl
     private readonly Button _rolesPrevButton = CreatePagingButton("Previous");
     private readonly Button _rolesNextButton = CreatePagingButton("Next");
     private readonly Label _rolesEmptyLabel = CreateEmptyLabel("No roles found.");
-    private List<Role> _filteredRoles = [];
+    private List<RoleListItem> _filteredRoles = [];
     private int _rolesPage = 1;
     private int _rolesLoadVersion;
     private bool _showArchivedRoles;
@@ -400,8 +402,9 @@ public sealed class ManageSystemControl : UserControl
         ApplyUserArchiveTabStyles();
 
         Panel toolbar = new() { Dock = DockStyle.Top, Height = 52, BackColor = ThemeHelper.ContentBackground };
-        _userSearchInput.PlaceholderText = "Search users...";
-        _userSearchInput.Location = new Point(0, 8);
+        
+        BorderedPanel searchContainer = CreateSearchInput(_userSearchInput, "Search users...", 260);
+        searchContainer.Location = new Point(0, 8);
         _userSearchInput.TextChanged -= UserFilterChanged;
         _userSearchInput.TextChanged += UserFilterChanged;
 
@@ -414,7 +417,7 @@ public sealed class ManageSystemControl : UserControl
         addButton.Location = new Point(0, 6);
         addButton.Click += async (_, _) => await OpenUserFormAsync(null);
         toolbar.Resize += (_, _) => addButton.Left = Math.Max(0, toolbar.Width - addButton.Width);
-        toolbar.Controls.Add(_userSearchInput);
+        toolbar.Controls.Add(searchContainer);
         toolbar.Controls.Add(_roleFilter);
         toolbar.Controls.Add(addButton);
 
@@ -454,8 +457,9 @@ public sealed class ManageSystemControl : UserControl
         ApplyRoleArchiveTabStyles();
 
         Panel toolbar = new() { Dock = DockStyle.Top, Height = 52, BackColor = ThemeHelper.ContentBackground };
-        _roleSearchInput.PlaceholderText = "Search roles...";
-        _roleSearchInput.Location = new Point(0, 8);
+        
+        BorderedPanel searchContainer = CreateSearchInput(_roleSearchInput, "Search roles...", 260);
+        searchContainer.Location = new Point(0, 8);
         _roleSearchInput.TextChanged -= RoleFilterChanged;
         _roleSearchInput.TextChanged += RoleFilterChanged;
 
@@ -464,7 +468,7 @@ public sealed class ManageSystemControl : UserControl
         addButton.Location = new Point(0, 6);
         addButton.Click += async (_, _) => await OpenRoleFormAsync(null);
         toolbar.Resize += (_, _) => addButton.Left = Math.Max(0, toolbar.Width - addButton.Width);
-        toolbar.Controls.Add(_roleSearchInput);
+        toolbar.Controls.Add(searchContainer);
         toolbar.Controls.Add(addButton);
 
         Panel card = ControlFactory.CreateCardPanel(new Size(0, 0));
@@ -486,6 +490,40 @@ public sealed class ManageSystemControl : UserControl
         panel.Controls.Add(tabRow);
         _ = LoadRolesAsync();
         return panel;
+    }
+
+    private static BorderedPanel CreateSearchInput(TextBox textBox, string placeholder, int width)
+    {
+        BorderedPanel container = new()
+        {
+            Size = new Size(width, 32),
+            BackColor = ThemeHelper.Surface,
+            BorderColor = ThemeHelper.Border,
+            Cursor = Cursors.IBeam
+        };
+
+        IconPictureBox icon = new()
+        {
+            IconChar = IconChar.MagnifyingGlass,
+            IconColor = ThemeHelper.TextSecondary,
+            IconSize = 18,
+            BackColor = ThemeHelper.Surface,
+            Location = new Point(8, 7),
+            Size = new Size(20, 20)
+        };
+
+        textBox.BorderStyle = BorderStyle.None;
+        textBox.PlaceholderText = placeholder;
+        textBox.BackColor = ThemeHelper.Surface;
+        textBox.Font = FontHelper.Regular(10F);
+        textBox.ForeColor = ThemeHelper.TextPrimary;
+        textBox.Location = new Point(34, 6);
+        textBox.Width = width - 42;
+
+        container.Click += (_, _) => textBox.Focus();
+        container.Controls.Add(icon);
+        container.Controls.Add(textBox);
+        return container;
     }
 
     private async Task LoadReferenceDataAsync()
@@ -570,7 +608,7 @@ public sealed class ManageSystemControl : UserControl
             if (loadVersion != _rolesLoadVersion) return;
 
             string search = _roleSearchInput.Text.Trim();
-            var _filteredRoles = items
+            _filteredRoles = items
                 .Where(role => role.IsArchived == _showArchivedRoles)
                 .Where(role => string.IsNullOrWhiteSpace(search)
                     || role.RoleName.Contains(search, StringComparison.OrdinalIgnoreCase))
@@ -620,6 +658,8 @@ public sealed class ManageSystemControl : UserControl
         _usersGrid.CellMouseMove += UsersGrid_CellMouseMove;
         _usersGrid.CellMouseLeave -= UsersGrid_CellMouseLeave;
         _usersGrid.CellMouseLeave += UsersGrid_CellMouseLeave;
+        _usersGrid.Resize -= UsersGrid_Resize;
+        _usersGrid.Resize += UsersGrid_Resize;
         _usersGrid.CellFormatting -= UsersGrid_CellFormatting;
         _usersGrid.CellFormatting += UsersGrid_CellFormatting;
         _usersGrid.CellPainting -= ManageGrid_CellPainting;
@@ -643,6 +683,8 @@ public sealed class ManageSystemControl : UserControl
         _rolesGrid.CellMouseClick += RolesGrid_CellMouseClick;
         _rolesGrid.CellMouseMove -= RolesGrid_CellMouseMove;
         _rolesGrid.CellMouseMove += RolesGrid_CellMouseMove;
+        _rolesGrid.Resize -= RolesGrid_Resize;
+        _rolesGrid.Resize += RolesGrid_Resize;
         _rolesGrid.CellFormatting -= RolesGrid_CellFormatting;
         _rolesGrid.CellFormatting += RolesGrid_CellFormatting;
         _rolesGrid.CellPainting -= ManageGrid_CellPainting;
@@ -684,27 +726,43 @@ public sealed class ManageSystemControl : UserControl
 
     private void ApplyUsersGridColumnLayout()
     {
-        _usersGrid.ScrollBars = ScrollBars.Both;
         _usersGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        SetColumnFill(_usersGrid, "FullName", 18F, 150);
-        SetColumnFill(_usersGrid, "Username", 16F, 130);
-        SetColumnFill(_usersGrid, "Role", 10F, 115);
-        SetColumnFill(_usersGrid, "Status", 10F, 105);
-        SetColumnFill(_usersGrid, "LastLogin", 16F, 150);
-        SetColumnFill(_usersGrid, "CreatedAt", 16F, 120);
-        SetColumnFill(_usersGrid, "Actions", 22F, 270);
+
+        SetColumnFill(_usersGrid, "FullName", 24F, 220);
+        SetColumnFill(_usersGrid, "Username", 18F, 160);
+        SetColumnFill(_usersGrid, "Role", 13F, 130);
+        SetColumnFill(_usersGrid, "Status", 10F, 110);
+        SetColumnFill(_usersGrid, "LastLogin", 18F, 170);
+        SetColumnFill(_usersGrid, "CreatedAt", 17F, 150);
+        
+        SetColumnFixed(_usersGrid, "Actions", 285);
+        if (_usersGrid.Columns["Actions"] is DataGridViewColumn actionsCol)
+        {
+            actionsCol.MinimumWidth = 270;
+            actionsCol.Resizable = DataGridViewTriState.False;
+        }
+
+        _usersGrid.ScrollBars = ScrollBars.Both;
     }
 
     private void ApplyRolesGridColumnLayout()
     {
-        _rolesGrid.ScrollBars = ScrollBars.Both;
         _rolesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        SetColumnFill(_rolesGrid, "RoleName", 20F, 160);
-        SetColumnFill(_rolesGrid, "Status", 10F, 105);
-        SetColumnFill(_rolesGrid, "UsersCount", 10F, 105);
-        SetColumnFill(_rolesGrid, "PermissionsCount", 12F, 135);
-        SetColumnFill(_rolesGrid, "Type", 10F, 105);
-        SetColumnFill(_rolesGrid, "Actions", 20F, 250);
+
+        SetColumnFill(_rolesGrid, "RoleName", 35F, 220);
+        SetColumnFill(_rolesGrid, "Status", 14F, 120);
+        SetColumnFill(_rolesGrid, "UsersCount", 14F, 110);
+        SetColumnFill(_rolesGrid, "ModuleAccess", 14F, 120);
+        SetColumnFill(_rolesGrid, "Type", 14F, 120);
+        
+        SetColumnFixed(_rolesGrid, "Actions", 285);
+        if (_rolesGrid.Columns["Actions"] is DataGridViewColumn actionsCol)
+        {
+            actionsCol.MinimumWidth = 270;
+            actionsCol.Resizable = DataGridViewTriState.False;
+        }
+
+        _rolesGrid.ScrollBars = ScrollBars.Both;
     }
 
     private static void SetColumnFill(DataGridView grid, string columnName, float fillWeight, int minimumWidth)
@@ -716,6 +774,27 @@ public sealed class ManageSystemControl : UserControl
             column.FillWeight = fillWeight;
             column.MinimumWidth = minimumWidth;
         }
+    }
+
+    private static void SetColumnFixed(DataGridView grid, string columnName, int width)
+    {
+        DataGridViewColumn? column = grid.Columns[columnName];
+        if (column is not null)
+        {
+            column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            column.Width = width;
+            column.MinimumWidth = width;
+        }
+    }
+
+    private void UsersGrid_Resize(object? sender, EventArgs e)
+    {
+        ApplyUsersGridColumnLayout();
+    }
+
+    private void RolesGrid_Resize(object? sender, EventArgs e)
+    {
+        ApplyRolesGridColumnLayout();
     }
 
     private static Panel CreatePager(Button previous, Button next, Label label)
@@ -942,7 +1021,7 @@ public sealed class ManageSystemControl : UserControl
 
     private async void RolesGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
-        if (e.RowIndex < 0 || _rolesGrid.Rows[e.RowIndex].Tag is not Role role) return;
+        if (e.RowIndex < 0 || _rolesGrid.Rows[e.RowIndex].Tag is not RoleListItem role) return;
         await OpenRoleFormAsync(role.RoleId);
     }
 
@@ -954,7 +1033,7 @@ public sealed class ManageSystemControl : UserControl
     private async void RolesGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || _rolesGrid.Columns[e.ColumnIndex].Name != "Actions") return;
-        if (_rolesGrid.Rows[e.RowIndex].Tag is not Role role) return;
+        if (_rolesGrid.Rows[e.RowIndex].Tag is not RoleListItem role) return;
         string? action = GetActionAt(_rolesGrid, e.RowIndex, e.ColumnIndex, e.Location);
         if (string.IsNullOrWhiteSpace(action)) return;
         await PerformRoleActionAsync(role, action);
@@ -983,7 +1062,7 @@ public sealed class ManageSystemControl : UserControl
         {
             ApplyBadgeStyle(e.CellStyle, e.Value?.ToString());
         }
-        else if (columnName is "Type" or "PermissionsCount" or "Actions")
+        else if (columnName is "Type" or "ModuleAccess" or "Actions")
         {
             e.CellStyle.Font = FontHelper.SemiBold(8.8F);
             e.CellStyle.ForeColor = columnName == "Actions" ? ThemeHelper.Primary : ThemeHelper.TextPrimary;
@@ -1039,20 +1118,63 @@ public sealed class ManageSystemControl : UserControl
         e.Handled = true;
     }
 
-    private static void DrawActionPills(Graphics graphics, Rectangle cellBounds, string actionsText)
+    private List<(string Action, Rectangle Bounds)> GetUserActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
     {
-        string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        using Graphics g = CreateGraphics();
+        return CalculateActionButtonBounds(g, cellBounds, actions);
+    }
+
+    private List<(string Action, Rectangle Bounds)> GetRoleActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
+    {
+        using Graphics g = CreateGraphics();
+        return CalculateActionButtonBounds(g, cellBounds, actions);
+    }
+
+    private static List<(string Action, Rectangle Bounds)> CalculateActionButtonBounds(Graphics g, Rectangle cellBounds, IReadOnlyList<string> actions)
+    {
+        List<(string Action, Rectangle Bounds)> results = [];
+        if (actions.Count == 0) return results;
+
         using Font font = FontHelper.SemiBold(8.4F);
-        int x = cellBounds.Left + 8;
+        int x = cellBounds.Left + 12;
         int y = cellBounds.Top + (cellBounds.Height - 24) / 2;
+        const int gap = 8;
 
         foreach (string action in actions)
         {
-            int width = Math.Max(54, (int)Math.Ceiling(graphics.MeasureString(action, font).Width) + 20);
-            if (x + width > cellBounds.Right - 6) break;
-            Rectangle rect = new(x, y, width, 24);
-            DrawRoundedPill(graphics, rect, action, font, GetActionPillBackColor(action), Color.White);
-            x += width + 6;
+            // Apply precise pill dimensions for consistency with other modules
+            int width = action switch
+            {
+                "View" or "Edit" => 72,
+                "Archive" or "Restore" => 92,
+                _ => Math.Max(54, (int)Math.Ceiling(g.MeasureString(action, font).Width) + 20)
+            };
+
+            results.Add((action, new Rectangle(x, y, width, 24)));
+            x += width + gap;
+        }
+
+        return results;
+    }
+
+    private static void DrawActionPills(Graphics graphics, Rectangle cellBounds, string actionsText)
+    {
+        string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var boundsList = CalculateActionButtonBounds(graphics, cellBounds, actions);
+        using Font font = FontHelper.SemiBold(8.4F);
+        using Pen linePen = new(ThemeHelper.TableGridLine);
+
+        for (int i = 0; i < boundsList.Count; i++)
+        {
+            var item = boundsList[i];
+            DrawRoundedPill(graphics, item.Bounds, item.Action, font, GetActionPillBackColor(item.Action), Color.White);
+
+            if (i < boundsList.Count - 1)
+            {
+                var nextItem = boundsList[i + 1];
+                float lineX = (item.Bounds.Right + nextItem.Bounds.Left) / 2F;
+                graphics.DrawLine(linePen, lineX, cellBounds.Top, lineX, cellBounds.Bottom);
+            }
         }
     }
 
@@ -1146,17 +1268,17 @@ public sealed class ManageSystemControl : UserControl
         if (string.IsNullOrWhiteSpace(actionsText)) return null;
 
         string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        using Graphics graphics = grid.CreateGraphics();
-        using Font font = FontHelper.SemiBold(8.4F);
-        int x = 8;
-        int y = (grid.Rows[rowIndex].Height - 24) / 2;
+        Rectangle cellBounds = grid.GetCellDisplayRectangle(columnIndex, rowIndex, false);
+        
+        // Convert cell-relative location to grid-relative to match CalculateActionButtonBounds behavior
+        Point gridLocation = new Point(cellBounds.Left + cellLocation.X, cellBounds.Top + cellLocation.Y);
 
-        foreach (string action in actions)
+        using Graphics graphics = grid.CreateGraphics();
+        var boundsList = CalculateActionButtonBounds(graphics, cellBounds, actions);
+
+        foreach (var item in boundsList)
         {
-            int width = Math.Max(54, (int)Math.Ceiling(graphics.MeasureString(action, font).Width) + 20);
-            Rectangle rect = new(x, y, width, 24);
-            if (rect.Contains(cellLocation)) return action;
-            x += width + 6;
+            if (item.Bounds.Contains(gridLocation)) return item.Action;
         }
 
         return null;
@@ -1185,7 +1307,7 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
-    private async Task PerformRoleActionAsync(Role role, string action)
+    private async Task PerformRoleActionAsync(RoleListItem role, string action)
     {
         switch (action)
         {
@@ -1341,7 +1463,7 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
-    private async Task ArchiveRoleAsync(Role role)
+    private async Task ArchiveRoleAsync(RoleListItem role)
     {
         try
         {
@@ -1366,7 +1488,7 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
-    private async Task RestoreRoleAsync(Role role)
+    private async Task RestoreRoleAsync(RoleListItem role)
     {
         try
         {
@@ -1390,7 +1512,7 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
-    private async Task ToggleRoleActiveAsync(Role role)
+    private async Task ToggleRoleActiveAsync(RoleListItem role)
     {
         try
         {

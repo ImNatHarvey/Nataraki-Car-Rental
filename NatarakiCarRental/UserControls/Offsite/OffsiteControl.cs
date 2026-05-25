@@ -16,7 +16,7 @@ namespace NatarakiCarRental.UserControls.Offsite;
 public sealed class OffsiteControl : UserControl
 {
     private const float ActionPillHeight = 26F;
-    private const int NarrowRecordsGridWidth = 1380;
+    private const int NarrowRecordsGridWidth = 1200;
     private static readonly TimeSpan NormalRefreshInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan DemoInterval = TimeSpan.FromSeconds(5);
 
@@ -241,6 +241,7 @@ public sealed class OffsiteControl : UserControl
     private async void OffsiteControl_Resize(object? sender, EventArgs e)
     {
         if (_isMapTabActive || _recordsGrid.Columns.Count == 0) return;
+        UpdateRecordsGridColumnLayout();
         int newPageSize = GetRecordsPageSize();
         if (newPageSize == _pageSize) return;
         _pageSize = newPageSize;
@@ -595,7 +596,7 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.AllowUserToDeleteRows = false;
         _recordsGrid.AllowUserToResizeRows = false;
         _recordsGrid.AllowUserToResizeColumns = false;
-        _recordsGrid.ScrollBars = ScrollBars.Both;
+        _recordsGrid.ScrollBars = ScrollBars.Vertical;
         _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _recordsGrid.BackgroundColor = ThemeHelper.Surface;
         _recordsGrid.BorderStyle = BorderStyle.FixedSingle;
@@ -646,7 +647,6 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.Columns.Add("ContactNumber", "Contact Number");
         _recordsGrid.Columns.Add("AmountPaid", "Amount Paid");
         _recordsGrid.Columns.Add("Actions", "Actions");
-
         UpdateRecordsGridColumnLayout();
     }
 
@@ -656,50 +656,60 @@ public sealed class OffsiteControl : UserControl
         {
             col.FillWeight = fillWeight;
             col.MinimumWidth = minWidth;
+            col.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
         }
-    }
-
-    private void UpdateRecordsGridColumnLayout()
-    {
-        if (_recordsGrid.Columns.Count == 0) return;
-
-        int gridWidth = _recordsGrid.ClientSize.Width;
-        if (gridWidth > 0 && gridWidth < NarrowRecordsGridWidth)
-        {
-            _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-            _recordsGrid.ScrollBars = ScrollBars.Both;
-            SetColumnWidth("Car", 150);
-            SetColumnWidth("Type", 100);
-            SetColumnWidth("Status", 110);
-            SetColumnWidth("Dates", 130);
-            SetColumnWidth("Location", 160);
-            SetColumnWidth("ContactPerson", 150);
-            SetColumnWidth("ContactNumber", 135);
-            SetColumnWidth("AmountPaid", 120);
-            SetColumnWidth("Actions", 330);
-            return;
-        }
-
-        _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _recordsGrid.ScrollBars = ScrollBars.Vertical;
-        SetColumnSizing("Car", 145, 120);
-        SetColumnSizing("Type", 90, 80);
-        SetColumnSizing("Status", 100, 90);
-        SetColumnSizing("Dates", 120, 110);
-        SetColumnSizing("Location", 160, 120);
-        SetColumnSizing("ContactPerson", 130, 110);
-        SetColumnSizing("ContactNumber", 120, 105);
-        SetColumnSizing("AmountPaid", 105, 95);
-        SetColumnSizing("Actions", 310, 280);
     }
 
     private void SetColumnWidth(string name, int width)
     {
         if (_recordsGrid.Columns[name] is DataGridViewColumn col)
         {
+            col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             col.Width = width;
-            col.MinimumWidth = Math.Min(width, col.MinimumWidth > 0 ? col.MinimumWidth : width);
+            col.MinimumWidth = width;
         }
+    }
+
+    private void UpdateRecordsGridColumnLayout()
+    {
+        if (_recordsGrid.Columns.Count == 0)
+        {
+            return;
+        }
+
+        int gridWidth = _recordsGrid.ClientSize.Width;
+        if (gridWidth > 0 && gridWidth < NarrowRecordsGridWidth)
+        {
+            _recordsGrid.ScrollBars = ScrollBars.Both;
+            _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            SetColumnWidth("Car", 150);
+            SetColumnWidth("Type", 100);
+            SetColumnWidth("Status", 110);
+            SetColumnWidth("Dates", 135);
+            SetColumnWidth("Location", 170);
+            SetColumnWidth("ContactPerson", 150);
+            SetColumnWidth("ContactNumber", 135);
+            SetColumnWidth("AmountPaid", 120);
+            SetColumnWidth("Actions", 320);
+            return;
+        }
+
+        _recordsGrid.ScrollBars = ScrollBars.Vertical;
+        _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        SetColumnSizing("Car", 18F, 150);
+        SetColumnSizing("Type", 12F, 85);
+        SetColumnSizing("Status", 12F, 85);
+        SetColumnSizing("Dates", 15F, 100);
+        SetColumnSizing("Location", 25F, 120);
+        SetColumnSizing("ContactPerson", 20F, 100);
+        SetColumnSizing("ContactNumber", 15F, 100);
+        SetColumnSizing("AmountPaid", 12F, 85);
+        SetColumnWidth("Actions", 350);
+    }
+
+    private void RecordsGrid_Resize(object? sender, EventArgs e)
+    {
+        UpdateRecordsGridColumnLayout();
     }
 
     private void RecordsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
@@ -722,17 +732,15 @@ public sealed class OffsiteControl : UserControl
         if (isAction)
         {
             var actions = GetRowActions(item);
-            float currentX = e.CellBounds.X + 6;
-            float height = ActionPillHeight;
-            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
+            var layout = GetOffsiteActionButtonBounds(e.CellBounds, actions);
 
-            foreach (string action in actions)
+            using Pen linePen = new(ThemeHelper.TableGridLine);
+
+            for (int i = 0; i < layout.Count; i++)
             {
-                float width = GetActionPillWidth(e.Graphics, font, action);
-                RectangleF rect = new(currentX, y, width, height);
-
-                Color backColor = GetActionColor(action);
-                using GraphicsPath path = GetRoundedRect(rect, height / 2);
+                var entry = layout[i];
+                Color backColor = GetActionColor(entry.Action);
+                using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
                 using SolidBrush brush = new(backColor);
                 using SolidBrush foreBrush = new(Color.White);
                 e.Graphics.FillPath(brush, path);
@@ -744,9 +752,13 @@ public sealed class OffsiteControl : UserControl
                     FormatFlags = StringFormatFlags.NoWrap,
                     Trimming = StringTrimming.EllipsisCharacter
                 };
-                e.Graphics.DrawString(action, font, foreBrush, rect, format);
+                e.Graphics.DrawString(entry.Action, font, foreBrush, entry.Bounds, format);
 
-                currentX += width + 6;
+                if (i < layout.Count - 1)
+                {
+                    float lineX = entry.Bounds.Right + 3F;
+                    e.Graphics.DrawLine(linePen, lineX, e.CellBounds.Top, lineX, e.CellBounds.Bottom);
+                }
             }
         }
         else
@@ -824,11 +836,6 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.Cursor = Cursors.Default;
     }
 
-    private void RecordsGrid_Resize(object? sender, EventArgs e)
-    {
-        UpdateRecordsGridColumnLayout();
-    }
-
     private List<string> GetRowActions(OffsiteRecordListItem item)
     {
         if (_showArchivedRecords)
@@ -852,19 +859,36 @@ public sealed class OffsiteControl : UserControl
             return null;
 
         var actions = GetRowActions(item);
-        using Graphics g = _recordsGrid.CreateGraphics();
-        Font font = FontHelper.SemiBold(8.5F);
-        float currentX = 6F;
+        Rectangle cellBounds = _recordsGrid.GetCellDisplayRectangle(colIndex, rowIndex, false);
+        var layout = GetOffsiteActionButtonBounds(cellBounds, actions);
+
+        foreach (var entry in layout)
+        {
+            RectangleF cellRelativeBounds = new(entry.Bounds.X - cellBounds.X, entry.Bounds.Y - cellBounds.Y, entry.Bounds.Width, entry.Bounds.Height);
+            if (cellRelativeBounds.Contains(x, y)) return entry.Action;
+        }
+        return null;
+    }
+
+    private List<(string Action, RectangleF Bounds)> GetOffsiteActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
+    {
+        List<(string Action, RectangleF Bounds)> result = [];
+        if (actions.Count == 0) return result;
+
+        float totalGap = (actions.Count - 1) * 6F;
+        float availableWidth = cellBounds.Width - 12; // 6px padding each side
+        float buttonWidth = (availableWidth - totalGap) / actions.Count;
         float height = ActionPillHeight;
-        float yOffset = (_recordsGrid.Rows[rowIndex].Height - height) / 2F;
+        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
+        float currentX = cellBounds.X + 6;
 
         foreach (string action in actions)
         {
-            float width = GetActionPillWidth(g, font, action);
-            if (new RectangleF(currentX, yOffset, width, height).Contains(x, y)) return action;
-            currentX += width + 6F;
+            result.Add((action, new RectangleF(currentX, y, buttonWidth, height)));
+            currentX += buttonWidth + 6;
         }
-        return null;
+
+        return result;
     }
 
     private static float GetActionPillWidth(Graphics graphics, Font font, string action)
@@ -972,7 +996,7 @@ public sealed class OffsiteControl : UserControl
                 string contactNumber = string.IsNullOrWhiteSpace(item.ContactNumber) ? "-" : item.ContactNumber.Trim();
 
                 int rowIndex = _recordsGrid.Rows.Add(
-                    $"{item.CarName}\n{item.PlateNumber}",
+                    $"{item.CarName} ({item.PlateNumber})",
                     item.OffsiteType,
                     item.Status,
                     dates,
@@ -986,9 +1010,9 @@ public sealed class OffsiteControl : UserControl
                 _recordsGrid.Rows[rowIndex].Tag = item;
             }
             _emptyStateLabel.Visible = !items.Any();
+            UpdateRecordsGridColumnLayout();
             UpdatePagination(totalPages);
             UpdateMetrics();
-            UpdateRecordsGridColumnLayout();
         }
         catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load records: {ex.Message}"); }
     }
