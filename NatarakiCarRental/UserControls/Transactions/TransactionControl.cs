@@ -379,7 +379,7 @@ public sealed class TransactionControl : UserControl
             SetFixedColumnWidth("Balance", 112);
             SetFixedColumnWidth("Payment", 110);
             SetFixedColumnWidth("Status", 110);
-            SetFixedColumnWidth("Actions", 300);
+            SetFixedColumnWidth("Actions", 480);
             return;
         }
 

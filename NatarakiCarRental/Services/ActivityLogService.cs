@@ -40,6 +40,11 @@ public sealed class ActivityLogService
         return _activityLogRepository.GetActionTypesAsync();
     }
 
+    public Task<IReadOnlyList<string>> GetActionTypesByEntityAsync(string entityName)
+    {
+        return _activityLogRepository.GetActionTypesByEntityAsync(entityName);
+    }
+
     public Task<IReadOnlyList<string>> GetEntityNamesAsync()
     {
         return _activityLogRepository.GetEntityNamesAsync();

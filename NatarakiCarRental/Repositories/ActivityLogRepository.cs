@@ -151,6 +151,21 @@ public sealed class ActivityLogRepository
         return values.ToList();
     }
 
+    public async Task<IReadOnlyList<string>> GetActionTypesByEntityAsync(string entityName)
+    {
+        const string sql = """
+            SELECT DISTINCT ActionType
+            FROM dbo.ActivityLogs
+            WHERE EntityName = @EntityName
+              AND LEN(LTRIM(RTRIM(ActionType))) > 0
+            ORDER BY ActionType;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        IEnumerable<string> values = await connection.QueryAsync<string>(sql, new { EntityName = entityName });
+        return values.ToList();
+    }
+
     public async Task<IReadOnlyList<string>> GetEntityNamesAsync()
     {
         const string sql = """

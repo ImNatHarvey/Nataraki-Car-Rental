@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FontAwesome.Sharp;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
@@ -9,6 +10,11 @@ namespace NatarakiCarRental.UserControls.ActivityLogs;
 
 public sealed class ActivityLogControl : UserControl
 {
+    private sealed record LookupOption(string Value, string Display)
+    {
+        public override string ToString() => Display;
+    }
+
     private const int MaxQueryRows = 500;
     private readonly ActivityLogService _activityLogService = new();
     private readonly MetricCardControl _totalLogsCard = new();
@@ -240,11 +246,12 @@ public sealed class ActivityLogControl : UserControl
         searchContainer.Controls.Add(_searchTextBox);
         searchContainer.Click += (_, _) => _searchTextBox.Focus();
 
-        ConfigureFilterComboBox(_actionTypeComboBox, new Point(searchWidth + 12, 8));
-        _actionTypeComboBox.Width = comboWidth;
-
-        ConfigureFilterComboBox(_entityTypeComboBox, new Point(searchWidth + comboWidth + 24, 8));
+        // Swap order: Module first, then Action
+        ConfigureFilterComboBox(_entityTypeComboBox, new Point(searchWidth + 12, 8));
         _entityTypeComboBox.Width = comboWidth;
+
+        ConfigureFilterComboBox(_actionTypeComboBox, new Point(searchWidth + comboWidth + 24, 8));
+        _actionTypeComboBox.Width = comboWidth;
 
         int nextX = searchWidth + (comboWidth * 2) + 36;
 
@@ -258,6 +265,14 @@ public sealed class ActivityLogControl : UserControl
         _dateToPicker.Width = dateWidth;
         _dateToPicker.Value = DateTime.Today;
 
+        _entityTypeComboBox.SelectedIndexChanged += async (_, _) =>
+        {
+            if (!_isInitializingFilters)
+            {
+                await HandleModuleFilterChangedAsync();
+            }
+        };
+
         _actionTypeComboBox.SelectedIndexChanged += async (_, _) =>
         {
             if (!_isInitializingFilters)
@@ -266,14 +281,7 @@ public sealed class ActivityLogControl : UserControl
                 await LoadLogsAsync();
             }
         };
-        _entityTypeComboBox.SelectedIndexChanged += async (_, _) =>
-        {
-            if (!_isInitializingFilters)
-            {
-                _currentPage = 1;
-                await LoadLogsAsync();
-            }
-        };
+
         _dateFromPicker.ValueChanged += async (_, _) =>
         {
             _currentPage = 1;
@@ -291,13 +299,48 @@ public sealed class ActivityLogControl : UserControl
         };
 
         panel.Controls.Add(searchContainer);
-        panel.Controls.Add(_actionTypeComboBox);
         panel.Controls.Add(_entityTypeComboBox);
+        panel.Controls.Add(_actionTypeComboBox);
         panel.Controls.Add(fromLabel);
         panel.Controls.Add(_dateFromPicker);
         panel.Controls.Add(toLabel);
         panel.Controls.Add(_dateToPicker);
         return panel;
+    }
+
+    private async Task HandleModuleFilterChangedAsync()
+    {
+        try
+        {
+            _isInitializingFilters = true;
+            _currentPage = 1;
+
+            string? selectedModule = GetSelectedFilter(_entityTypeComboBox);
+            IReadOnlyList<string> actions;
+
+            if (selectedModule == null)
+            {
+                actions = await _activityLogService.GetActionTypesAsync();
+            }
+            else
+            {
+                actions = await _activityLogService.GetActionTypesByEntityAsync(selectedModule);
+            }
+
+            var actionOptions = actions.Select(a => new LookupOption(a, a));
+            SetFilterItems(_actionTypeComboBox, "All Actions", actionOptions);
+            _actionTypeComboBox.SelectedIndex = 0;
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowWarning($"Unable to update actions filter.\\n\\n{exception.Message}", "Activity Log");
+        }
+        finally
+        {
+            _isInitializingFilters = false;
+        }
+
+        await LoadLogsAsync();
     }
 
     private static void ConfigureFilterComboBox(ComboBox comboBox, Point location)
@@ -392,8 +435,12 @@ public sealed class ActivityLogControl : UserControl
             _isInitializingFilters = true;
             IReadOnlyList<string> actionTypes = await _activityLogService.GetActionTypesAsync();
             IReadOnlyList<string> entityNames = await _activityLogService.GetEntityNamesAsync();
-            SetFilterItems(_actionTypeComboBox, "All Actions", actionTypes);
-            SetFilterItems(_entityTypeComboBox, "All Modules", entityNames);
+
+            var moduleOptions = entityNames.Select(name => new LookupOption(name, FormatModuleName(name)));
+            var actionOptions = actionTypes.Select(name => new LookupOption(name, name));
+
+            SetFilterItems(_entityTypeComboBox, "All Modules", moduleOptions);
+            SetFilterItems(_actionTypeComboBox, "All Actions", actionOptions);
         }
         catch (Exception exception)
         {
@@ -405,6 +452,13 @@ public sealed class ActivityLogControl : UserControl
         {
             _isInitializingFilters = false;
         }
+    }
+
+    private static string FormatModuleName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return name;
+        // Insert spaces before capital letters (PascalCase -> Spaced Case)
+        return Regex.Replace(name, "([a-z])([A-Z])", "$1 $2");
     }
 
     private async Task LoadLogsAsync()
@@ -623,11 +677,11 @@ public sealed class ActivityLogControl : UserControl
         return path;
     }
 
-    private static void SetFilterItems(ComboBox comboBox, string placeholder, IEnumerable<string> values)
+    private static void SetFilterItems(ComboBox comboBox, string placeholder, IEnumerable<LookupOption> values)
     {
         comboBox.BeginUpdate();
         comboBox.Items.Clear();
-        comboBox.Items.Add(placeholder);
+        comboBox.Items.Add(new LookupOption(string.Empty, placeholder));
         comboBox.Items.AddRange(values.Cast<object>().ToArray());
         comboBox.SelectedIndex = 0;
         comboBox.EndUpdate();
@@ -635,6 +689,11 @@ public sealed class ActivityLogControl : UserControl
 
     private static string? GetSelectedFilter(ComboBox comboBox)
     {
-        return comboBox.SelectedIndex <= 0 ? null : comboBox.SelectedItem?.ToString();
+        if (comboBox.SelectedIndex <= 0) return null;
+        if (comboBox.SelectedItem is LookupOption option)
+        {
+            return string.IsNullOrWhiteSpace(option.Value) ? null : option.Value;
+        }
+        return comboBox.SelectedItem?.ToString();
     }
 }
