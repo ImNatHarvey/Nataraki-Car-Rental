@@ -372,7 +372,25 @@ public sealed class OffsiteService
 
     public async Task ArchiveAsync(int recordId)
     {
-        // ... (rest of method unchanged)
+        AccessControlService.EnforcePermission("Offsite.ArchiveRestore");
+        OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
+        if (existing == null || existing.IsArchived) return;
+
+        if (existing.Status == "Ongoing")
+            throw new ValidationException([new ValidationFailure("Status", "Cannot archive an ongoing offsite record. Complete or cancel it first.")]);
+
+        // Check for future linked schedule to prevent orphaning
+        if (existing.FleetScheduleId.HasValue)
+        {
+            FleetSchedule? schedule = await _fleetScheduleService.GetByIdAsync(existing.FleetScheduleId.Value);
+            if (schedule != null && !schedule.IsArchived && schedule.StartDate.Date >= DateTime.Today)
+            {
+                throw new ValidationException([new ValidationFailure("Schedule", "Cannot archive an offsite record with an upcoming or current schedule. Cancel the schedule first.")]);
+            }
+        }
+
+        await _offsiteRepository.ArchiveAsync(recordId);
+        await _activityLogService.LogAsync("Archive Offsite Record", "OffsiteRecord", recordId, $"Archived offsite record #{recordId}.");
     }
 
     private static void RollbackQuietly(SqlTransaction transaction)

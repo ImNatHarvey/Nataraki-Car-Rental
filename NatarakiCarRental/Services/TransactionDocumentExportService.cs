@@ -77,23 +77,23 @@ public sealed class TransactionDocumentExportService
         Transaction transaction = data.Transaction;
         page.Section("Transaction Information");
         page.KeyValue("Transaction No", transaction.TransactionCode);
-        page.KeyValue("Customer", ValueOrDash(transaction.CustomerName));
-        page.KeyValue("Vehicle", ValueOrDash(transaction.CarName));
-        page.KeyValue("Plate No", ValueOrDash(transaction.PlateNumber));
+        page.KeyValue("Customer", FormattingHelper.ValueOrDash(transaction.CustomerName));
+        page.KeyValue("Vehicle", FormattingHelper.ValueOrDash(transaction.CarName));
+        page.KeyValue("Plate No", FormattingHelper.ValueOrDash(transaction.PlateNumber));
         page.KeyValue("Rental Period", $"{transaction.StartDate:yyyy-MM-dd} to {transaction.EndDate:yyyy-MM-dd}");
-        page.KeyValue("Transaction Status", ValueOrDash(transaction.TransactionStatus));
-        page.KeyValue("Payment Status", ValueOrDash(transaction.PaymentStatus));
-        page.KeyValue("Mode of Payment", ValueOrDash(transaction.ModeOfPayment));
+        page.KeyValue("Transaction Status", FormattingHelper.ValueOrDash(transaction.TransactionStatus));
+        page.KeyValue("Payment Status", FormattingHelper.ValueOrDash(transaction.PaymentStatus));
+        page.KeyValue("Mode of Payment", FormattingHelper.ValueOrDash(transaction.ModeOfPayment));
         page.KeyValue("Created Date", transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
-        page.KeyValue("Processed By", ValueOrDash(data.GeneratedBy));
+        page.KeyValue("Processed By", FormattingHelper.ValueOrDash(data.GeneratedBy));
         page.Move(10);
 
         page.Section("Financial Summary");
-        page.KeyValue("Rental Fee", FormatPeso(transaction.DailyRate * transaction.TotalDays));
-        page.KeyValue("Additional Charges", FormatPeso(transaction.AdditionalCharge));
-        page.KeyValue("Total Amount", FormatPeso(transaction.TotalAmount));
-        page.KeyValue("Amount Paid", FormatPeso(transaction.AmountPaid));
-        page.KeyValue("Balance", FormatPeso(transaction.BalanceAmount));
+        page.KeyValue("Rental Fee", FormattingHelper.FormatPeso(transaction.DailyRate * transaction.TotalDays));
+        page.KeyValue("Additional Charges", FormattingHelper.FormatPeso(transaction.AdditionalCharge));
+        page.KeyValue("Total Amount", FormattingHelper.FormatPeso(transaction.TotalAmount));
+        page.KeyValue("Amount Paid", FormattingHelper.FormatPeso(transaction.AmountPaid));
+        page.KeyValue("Balance", FormattingHelper.FormatPeso(transaction.BalanceAmount));
         page.Move(10);
 
         page.Section("Payment History");
@@ -109,9 +109,9 @@ public sealed class TransactionDocumentExportService
                 page.TableRow(
                     [
                         payment.PaymentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                        ValueOrDash(payment.PaymentCategory),
-                        ValueOrDash(payment.ModeOfPayment),
-                        FormatPeso(payment.Amount)
+                        FormattingHelper.ValueOrDash(payment.PaymentCategory),
+                        FormattingHelper.ValueOrDash(payment.ModeOfPayment),
+                        FormattingHelper.FormatPeso(payment.Amount)
                     ],
                     [108, 170, 130, 104]);
             }
@@ -167,20 +167,20 @@ public sealed class TransactionDocumentExportService
         // Conditional Layout: Stacked for 57mm, Justified for 80mm
         bool isStacked = format == TransactionDocumentFormat.Thermal57;
 
-        y = ThermalItem(page, layout, "Customer", ValueOrDash(transaction.CustomerName), y, isStacked);
+        y = ThermalItem(page, layout, "Customer", FormattingHelper.ValueOrDash(transaction.CustomerName), y, isStacked);
         y = ThermalItem(page, layout, "Date", paymentDate.ToString("MMM d, yyyy"), y, isStacked);
         y = ThermalItem(page, layout, "Transaction ID", $"#{transaction.TransactionCode}", y, isStacked);
-        y = ThermalItem(page, layout, "Vehicle", ValueOrDash(transaction.CarName), y, isStacked);
-        y = ThermalItem(page, layout, "Plate No", ValueOrDash(transaction.PlateNumber), y, isStacked);
+        y = ThermalItem(page, layout, "Vehicle", FormattingHelper.ValueOrDash(transaction.CarName), y, isStacked);
+        y = ThermalItem(page, layout, "Plate No", FormattingHelper.ValueOrDash(transaction.PlateNumber), y, isStacked);
         
         // Dash separator
         page.Center(new string('-', layout.MaxChars), y, layout.BodyFont, courier: true);
         y -= layout.LineHeight;
 
         // Financial Values
-        y = ThermalItem(page, layout, "TOTAL AMOUNT", FormatPeso(transaction.TotalAmount), y, isStacked, bold: true);
-        y = ThermalItem(page, layout, kind == TransactionDocumentKind.Receipt ? "AMOUNT PAID" : "PAID", FormatPeso(transaction.AmountPaid), y, isStacked, bold: true);
-        y = ThermalItem(page, layout, "BALANCE", FormatPeso(transaction.BalanceAmount), y, isStacked, bold: true);
+        y = ThermalItem(page, layout, "TOTAL AMOUNT", FormattingHelper.FormatPeso(transaction.TotalAmount), y, isStacked, bold: true);
+        y = ThermalItem(page, layout, kind == TransactionDocumentKind.Receipt ? "AMOUNT PAID" : "PAID", FormattingHelper.FormatPeso(transaction.AmountPaid), y, isStacked, bold: true);
+        y = ThermalItem(page, layout, "BALANCE", FormattingHelper.FormatPeso(transaction.BalanceAmount), y, isStacked, bold: true);
 
         // Payment History Section
         if (data.Payments.Count > 0)
@@ -194,7 +194,7 @@ public sealed class TransactionDocumentExportService
             foreach (var payment in data.Payments.OrderByDescending(p => p.PaymentDate))
             {
                 string dateMode = $"{payment.PaymentDate:MMM dd} - {payment.ModeOfPayment}";
-                y = ThermalItem(page, layout, dateMode, FormatPeso(payment.Amount), y, isStacked);
+                y = ThermalItem(page, layout, dateMode, FormattingHelper.FormatPeso(payment.Amount), y, isStacked);
             }
         }
         
@@ -206,7 +206,7 @@ public sealed class TransactionDocumentExportService
 
     private static double ThermalItem(PdfPage page, ThermalLayout layout, string label, string value, double y, bool stacked, bool bold = false)
     {
-        string safeValue = SanitizePdfText(value);
+        string safeValue = FormattingHelper.SanitizePdfText(value);
         if (stacked)
         {
             // Stacked layout: Label on top, Value below
@@ -482,21 +482,29 @@ public sealed class TransactionDocumentExportService
         yield return remaining;
     }
 
-    private static string Separator(int length) => new('-', length);
-
-    private static string FormatPeso(decimal amount) => $"PHP {amount:N2}";
-
-    private static string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
-
-    private static string EscapePdfText(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
-
-    private static string SanitizePdfText(string value)
+    private static IEnumerable<string> WrapPdfLine(string line)
     {
-        string sanitized = value
-            .Replace("₱", "PHP ", StringComparison.Ordinal)
-            .Replace("â‚±", "PHP ", StringComparison.Ordinal)
-            .Replace("Ã¢â€šÂ±", "PHP ", StringComparison.Ordinal);
-        return new string(sanitized.Select(character => character <= 127 ? character : '?').ToArray());
+        const int maxLength = 92;
+        if (line.Length <= maxLength)
+        {
+            yield return line;
+            yield break;
+        }
+
+        string remaining = line;
+        while (remaining.Length > maxLength)
+        {
+            int split = remaining.LastIndexOf(' ', maxLength);
+            if (split <= 0)
+            {
+                split = maxLength;
+            }
+
+            yield return remaining[..split];
+            remaining = remaining[split..].TrimStart();
+        }
+
+        yield return remaining;
     }
 
     private enum TransactionDocumentKind
@@ -545,7 +553,7 @@ public sealed class TransactionDocumentExportService
 
         public void Text(string text, double x, double y, int size, bool bold = false, bool centered = false, bool rightAligned = false, string color = "0 0 0", bool courier = false)
         {
-            string safe = EscapePdfText(SanitizePdfText(text));
+            string safe = FormattingHelper.EscapePdfText(FormattingHelper.SanitizePdfText(text));
             double width = EstimateTextWidth(text, size, courier);
             if (centered)
             {
@@ -600,7 +608,7 @@ public sealed class TransactionDocumentExportService
         private const double Right = 562;
         private readonly string _themeRgb;
 
-        public A4Page(LogoData? logo) : base(612, 792) // Letter size
+        public A4Page(LogoData? logo) : base(612, 792)
         {
             Color primary = ThemeHelper.Primary;
             _themeRgb = $"{primary.R / 255d:0.###} {primary.G / 255d:0.###} {primary.B / 255d:0.###}";

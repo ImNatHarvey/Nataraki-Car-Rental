@@ -908,7 +908,16 @@ public sealed class ManageSystemControl : UserControl
         Visible = false
     };
 
-    private int GetPageSize() => Width >= 1200 ? WidePageSize : NarrowPageSize;
+    private int GetPageSize()
+    {
+        // Dynamically calculate page size based on available grid height
+        // Both grids use RowTemplate.Height = 38 and ColumnHeadersHeight = 38
+        DataGridView activeGrid = _activeTabKey == "Roles" ? _rolesGrid : _usersGrid;
+        int availableHeight = activeGrid.Height - activeGrid.ColumnHeadersHeight;
+        
+        // Return at least 1, but otherwise fill the space
+        return Math.Max(1, availableHeight / 38);
+    }
 
     private static void UpdatePager(Button previous, Button next, Label label, int page, int totalPages, int count, string noun)
     {

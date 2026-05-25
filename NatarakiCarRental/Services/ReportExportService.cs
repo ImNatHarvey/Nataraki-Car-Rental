@@ -243,11 +243,11 @@ public sealed class ReportExportService
     {
         return CreateSummarySheet("Overview Summary", from, to, generatedBy,
         [
-            ("Total Revenue", FormatPeso(metrics.TotalRevenue)),
-            ("Rental Revenue", FormatPeso(metrics.RentalRevenue)),
-            ("Extension Fees", FormatPeso(metrics.ExtensionFees)),
-            ("Damage Fees", FormatPeso(metrics.DamageFees)),
-            ("Late Return Fees", FormatPeso(metrics.LateReturnFees)),
+            ("Total Revenue", FormattingHelper.FormatPeso(metrics.TotalRevenue)),
+            ("Rental Revenue", FormattingHelper.FormatPeso(metrics.RentalRevenue)),
+            ("Extension Fees", FormattingHelper.FormatPeso(metrics.ExtensionFees)),
+            ("Damage Fees", FormattingHelper.FormatPeso(metrics.DamageFees)),
+            ("Late Return Fees", FormattingHelper.FormatPeso(metrics.LateReturnFees)),
             ("Paid Transactions", metrics.PaidTransactions.ToString(CultureInfo.InvariantCulture)),
             ("Partial Transactions", metrics.PartialTransactions.ToString(CultureInfo.InvariantCulture)),
             ("Unpaid Transactions", metrics.UnpaidTransactions.ToString(CultureInfo.InvariantCulture)),
@@ -262,12 +262,12 @@ public sealed class ReportExportService
     {
         return CreateSummarySheet("Financial Summary", from, to, generatedBy,
         [
-            ("Total Revenue", FormatPeso(metrics.TotalRevenue)),
-            ("Rental Revenue", FormatPeso(metrics.RentalRevenue)),
-            ("Extension Fees", FormatPeso(metrics.ExtensionFees)),
-            ("Damage Fees", FormatPeso(metrics.DamageFees)),
-            ("Late Fees", FormatPeso(metrics.LateReturnFees)),
-            ("Outstanding Balance", FormatPeso(metrics.OutstandingBalance)),
+            ("Total Revenue", FormattingHelper.FormatPeso(metrics.TotalRevenue)),
+            ("Rental Revenue", FormattingHelper.FormatPeso(metrics.RentalRevenue)),
+            ("Extension Fees", FormattingHelper.FormatPeso(metrics.ExtensionFees)),
+            ("Damage Fees", FormattingHelper.FormatPeso(metrics.DamageFees)),
+            ("Late Fees", FormattingHelper.FormatPeso(metrics.LateReturnFees)),
+            ("Outstanding Balance", FormattingHelper.FormatPeso(metrics.OutstandingBalance)),
             ("Paid Transactions", metrics.PaidTransactions.ToString(CultureInfo.InvariantCulture)),
             ("Partial Transactions", metrics.PartialTransactions.ToString(CultureInfo.InvariantCulture)),
             ("Unpaid Transactions", metrics.UnpaidTransactions.ToString(CultureInfo.InvariantCulture))
@@ -278,13 +278,13 @@ public sealed class ReportExportService
     {
         return CreateSummarySheet("Fleet Summary", from, to, generatedBy,
         [
-            ("Total Fleet Revenue", FormatPeso(metrics.TotalFleetRevenue)),
-            ("Average Revenue Per Car", FormatPeso(metrics.AverageRevenuePerCar)),
+            ("Total Fleet Revenue", FormattingHelper.FormatPeso(metrics.TotalFleetRevenue)),
+            ("Average Revenue Per Car", FormattingHelper.FormatPeso(metrics.AverageRevenuePerCar)),
             ("Top Earning Car", metrics.TopEarningCar ?? "-"),
-            ("Top Earning Car Revenue", FormatPeso(metrics.TopEarningCarRevenue)),
+            ("Top Earning Car Revenue", FormattingHelper.FormatPeso(metrics.TopEarningCarRevenue)),
             ("Most Rented Car", metrics.MostRentedCar ?? "-"),
             ("Most Rented Car Count", metrics.MostRentedCarCount.ToString(CultureInfo.InvariantCulture)),
-            ("Average Utilization Rate", FormatPercent(metrics.AverageUtilizationRate)),
+            ("Average Utilization Rate", FormattingHelper.FormatPercent(metrics.AverageUtilizationRate)),
             ("Active Rentals", metrics.ActiveRentals.ToString(CultureInfo.InvariantCulture)),
             ("Completed Rentals", metrics.CompletedRentals.ToString(CultureInfo.InvariantCulture)),
             ("Cars Under Maintenance", metrics.CarsUnderMaintenance.ToString(CultureInfo.InvariantCulture))
@@ -313,13 +313,13 @@ public sealed class ReportExportService
             ("Total Active Customers", metrics.TotalActiveCustomers.ToString(CultureInfo.InvariantCulture)),
             ("New Customers", metrics.NewCustomers.ToString(CultureInfo.InvariantCulture)),
             ("Top Customer by Revenue", metrics.TopCustomerByRevenue ?? "-"),
-            ("Top Customer Revenue", FormatPeso(metrics.TopCustomerRevenue)),
+            ("Top Customer Revenue", FormattingHelper.FormatPeso(metrics.TopCustomerRevenue)),
             ("Top Customer by Rentals", metrics.TopCustomerByRentals ?? "-"),
             ("Top Customer Rental Count", metrics.TopCustomerRentalCount.ToString(CultureInfo.InvariantCulture)),
             ("Blacklisted Customers", metrics.BlacklistedCustomers.ToString(CultureInfo.InvariantCulture)),
             ("Customers with Late Returns", metrics.CustomersWithLateReturns.ToString(CultureInfo.InvariantCulture)),
             ("Customers with Damage Fees", metrics.CustomersWithDamageFees.ToString(CultureInfo.InvariantCulture)),
-            ("Average Revenue per Customer", FormatPeso(metrics.AverageRevenuePerCustomer))
+            ("Average Revenue per Customer", FormattingHelper.FormatPeso(metrics.AverageRevenuePerCustomer))
         ]);
     }
 
@@ -339,7 +339,7 @@ public sealed class ReportExportService
 
         rows.AddRange(
         [
-            ["Date Range", $"{FormatDate(from)} - {FormatDate(to)}"],
+            ["Date Range", $"{FormattingHelper.FormatDate(from)} - {FormattingHelper.FormatDate(to)}"],
             ["Generated", DateTime.Now.ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture)],
             ["Generated By", generatedBy],
             [string.Empty, string.Empty],
@@ -352,83 +352,83 @@ public sealed class ReportExportService
 
     private static ExcelSheet CreatePaymentMethodsSheet(IReadOnlyList<PaymentMethodBreakdownItem> items) =>
         new("Payment Methods", ["Method", "Count", "Amount", "Percent"],
-            items.Select(item => (IReadOnlyList<object?>)[item.ModeOfPayment, item.PaymentCount, FormatPeso(item.TotalAmount), FormatPercent(item.Percentage)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.ModeOfPayment, item.PaymentCount, FormattingHelper.FormatPeso(item.TotalAmount), FormattingHelper.FormatPercent(item.Percentage)]).ToList());
 
     private static ExcelSheet CreatePaymentCategoriesSheet(IReadOnlyList<RevenueByCategoryItem> items) =>
         new("Payment Categories", ["Category", "Count", "Amount", "Percent"],
-            items.Select(item => (IReadOnlyList<object?>)[item.PaymentCategory, item.PaymentCount, FormatPeso(item.TotalAmount), FormatPercent(item.Percentage)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.PaymentCategory, item.PaymentCount, FormattingHelper.FormatPeso(item.TotalAmount), FormattingHelper.FormatPercent(item.Percentage)]).ToList());
 
     private static ExcelSheet CreateOutstandingTransactionsSheet(IReadOnlyList<TransactionListItem> items) =>
         new("Outstanding Transactions", ["Code", "Customer", "Car / Plate", "Total", "Paid", "Balance", "Payment", "Status"],
-            items.Select(item => (IReadOnlyList<object?>)[item.TransactionCode, item.CustomerName, CarPlate(item.CarName, item.PlateNumber), FormatPeso(item.TotalAmount), FormatPeso(item.AmountPaid), FormatPeso(item.BalanceAmount), item.PaymentStatus, item.TransactionStatus]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.TransactionCode, item.CustomerName, FormattingHelper.CarPlate(item.CarName, item.PlateNumber), FormattingHelper.FormatPeso(item.TotalAmount), FormattingHelper.FormatPeso(item.AmountPaid), FormattingHelper.FormatPeso(item.BalanceAmount), item.PaymentStatus, item.TransactionStatus]).ToList());
 
     private static ExcelSheet CreateRevenueByCarSheet(IReadOnlyList<TopCarItem> items) =>
         new("Revenue by Car", ["Car / Plate", "Rental Count", "Total Revenue", "Average / Rental"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarName, item.PlateNumber), item.RentalCount, FormatPeso(item.Revenue), FormatPeso(item.AverageRevenue)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.RentalCount, FormattingHelper.FormatPeso(item.Revenue), FormattingHelper.FormatPeso(item.AverageRevenue)]).ToList());
 
     private static ExcelSheet CreateRevenueByCustomerSheet(IReadOnlyList<RevenueByCustomerItem> items) =>
         new("Revenue by Customer", ["Customer", "Transaction Count", "Total Paid", "Outstanding Balance"],
-            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.TransactionCount, FormatPeso(item.TotalPaid), FormatPeso(item.OutstandingBalance)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.TransactionCount, FormattingHelper.FormatPeso(item.TotalPaid), FormattingHelper.FormatPeso(item.OutstandingBalance)]).ToList());
 
     private static ExcelSheet CreateFleetUtilizationSheet(IReadOnlyList<FleetUtilizationItem> items) =>
         new("Fleet Utilization", ["Car / Plate", "Rented Days", "Available Days", "Utilization Rate", "Rental Count", "Status"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarName, item.PlateNumber), item.RentedDays, item.AvailableDays, FormatPercent(item.UtilizationRate), item.RentalCount, item.Status]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.RentedDays, item.AvailableDays, FormattingHelper.FormatPercent(item.UtilizationRate), item.RentalCount, item.Status]).ToList());
 
     private static ExcelSheet CreateFleetRevenueSheet(IReadOnlyList<FleetRevenuePerCarItem> items) =>
         new("Revenue Per Unit", ["Car / Plate", "Rental Revenue", "Extension Fees", "Damage Fees", "Late Fees", "Total Revenue", "Average / Rental"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarName, item.PlateNumber), FormatPeso(item.RentalRevenue), FormatPeso(item.ExtensionFees), FormatPeso(item.DamageFees), FormatPeso(item.LateFees), FormatPeso(item.TotalRevenue), FormatPeso(item.AverageRevenuePerRental)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarName, item.PlateNumber), FormattingHelper.FormatPeso(item.RentalRevenue), FormattingHelper.FormatPeso(item.ExtensionFees), FormattingHelper.FormatPeso(item.DamageFees), FormattingHelper.FormatPeso(item.LateFees), FormattingHelper.FormatPeso(item.TotalRevenue), FormattingHelper.FormatPeso(item.AverageRevenuePerRental)]).ToList());
 
     private static ExcelSheet CreateTopCarsSheet(string name, IReadOnlyList<TopCarItem> items) =>
         new(name, ["Car / Plate", "Rental Count", "Revenue", "Average Revenue"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarName, item.PlateNumber), item.RentalCount, FormatPeso(item.Revenue), FormatPeso(item.AverageRevenue)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.RentalCount, FormattingHelper.FormatPeso(item.Revenue), FormattingHelper.FormatPeso(item.AverageRevenue)]).ToList());
 
     private static ExcelSheet CreateFleetMaintenanceSheet(string name, IReadOnlyList<FleetMaintenanceItem> items) =>
         new(name, ["Car / Plate", "Schedule", "Start Date", "End Date", "Status"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarName, item.PlateNumber), item.Title, FormatDate(item.StartDate), FormatDate(item.EndDate), item.Status]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.Title, FormattingHelper.FormatDate(item.StartDate), FormattingHelper.FormatDate(item.EndDate), item.Status]).ToList());
 
     private static ExcelSheet CreateUpcomingReturnsSheet(IReadOnlyList<OperationsReturnItem> items) =>
         new("Upcoming Returns", ["Expected Return", "Transaction Code", "Customer", "Contact", "Car / Plate", "Payment Status"],
-            items.Select(item => (IReadOnlyList<object?>)[FormatDate(item.ExpectedReturn), item.TransactionCode, item.CustomerName, item.Contact, CarPlate(item.CarName, item.PlateNumber), item.PaymentStatus]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.FormatDate(item.ExpectedReturn), item.TransactionCode, item.CustomerName, item.Contact, FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.PaymentStatus]).ToList());
 
     private static ExcelSheet CreateLateReturnsSheet(IReadOnlyList<OperationsReturnItem> items) =>
         new("Late Returns", ["Expected Return", "Days Late", "Estimated Late Fee", "Transaction Code", "Customer", "Contact", "Car / Plate"],
-            items.Select(item => (IReadOnlyList<object?>)[FormatDate(item.ExpectedReturn), item.DaysLate, FormatPeso(item.EstimatedLateFee), item.TransactionCode, item.CustomerName, item.Contact, CarPlate(item.CarName, item.PlateNumber)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.FormatDate(item.ExpectedReturn), item.DaysLate, FormattingHelper.FormatPeso(item.EstimatedLateFee), item.TransactionCode, item.CustomerName, item.Contact, FormattingHelper.CarPlate(item.CarName, item.PlateNumber)]).ToList());
 
     private static ExcelSheet CreateActiveRentalsSheet(IReadOnlyList<OperationsActiveRentalItem> items) =>
         new("Active Rentals", ["Transaction Code", "Customer", "Contact", "Car / Plate", "Start Date", "End Date", "Payment Status"],
-            items.Select(item => (IReadOnlyList<object?>)[item.TransactionCode, item.CustomerName, item.Contact, CarPlate(item.CarName, item.PlateNumber), FormatDate(item.StartDate), FormatDate(item.EndDate), item.PaymentStatus]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.TransactionCode, item.CustomerName, item.Contact, FormattingHelper.CarPlate(item.CarName, item.PlateNumber), FormattingHelper.FormatDate(item.StartDate), FormattingHelper.FormatDate(item.EndDate), item.PaymentStatus]).ToList());
 
     private static ExcelSheet CreateUpcomingReservationsSheet(IReadOnlyList<OperationsReservationItem> items) =>
         new("Upcoming Reservations", ["Schedule Date", "Customer", "Contact", "Car / Plate", "Status", "Payment Status"],
-            items.Select(item => (IReadOnlyList<object?>)[FormatDate(item.ScheduleDate), item.CustomerName, item.Contact, CarPlate(item.CarName, item.PlateNumber), item.Status, item.PaymentStatus]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.FormatDate(item.ScheduleDate), item.CustomerName, item.Contact, FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.Status, item.PaymentStatus]).ToList());
 
     private static ExcelSheet CreateOperationsMaintenanceSheet(IReadOnlyList<OperationsMaintenanceItem> items) =>
         new("Maintenance Visibility", ["Date Range", "Car / Plate", "Status", "Source"],
-            items.Select(item => (IReadOnlyList<object?>)[$"{FormatDate(item.StartDate)} - {FormatDate(item.EndDate)}", CarPlate(item.CarName, item.PlateNumber), item.Status, item.Source]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[$"{FormattingHelper.FormatDate(item.StartDate)} - {FormattingHelper.FormatDate(item.EndDate)}", FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.Status, item.Source]).ToList());
 
     private static ExcelSheet CreateAvailableCarsSheet(IReadOnlyList<OperationsAvailableCarItem> items) =>
         new("Available Cars", ["Car / Plate", "Status", "Rate Per Day", "Seating Capacity"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarName, item.PlateNumber), item.Status, FormatPeso(item.RatePerDay), item.SeatingCapacity?.ToString(CultureInfo.InvariantCulture) ?? "-"]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.Status, FormattingHelper.FormatPeso(item.RatePerDay), item.SeatingCapacity?.ToString(CultureInfo.InvariantCulture) ?? "-"]).ToList());
 
     private static ExcelSheet CreateCustomerRevenueSheet(IReadOnlyList<CustomerRevenueReportItem> items) =>
         new("Top Customers", ["Customer", "Contact", "Transaction Count", "Total Paid", "Outstanding Balance"],
-            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCount, FormatPeso(item.TotalPaid), FormatPeso(item.OutstandingBalance)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCount, FormattingHelper.FormatPeso(item.TotalPaid), FormattingHelper.FormatPeso(item.OutstandingBalance)]).ToList());
 
     private static ExcelSheet CreateCustomerRentalCountSheet(IReadOnlyList<CustomerRentalCountReportItem> items) =>
         new("Rental Count", ["Customer", "Contact", "Rental Count", "Completed Rentals", "Active Rentals", "Last Rental Date"],
-            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.RentalCount, item.CompletedRentals, item.ActiveRentals, item.LastRentalDate.HasValue ? FormatDate(item.LastRentalDate.Value) : "-"]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.RentalCount, item.CompletedRentals, item.ActiveRentals, item.LastRentalDate.HasValue ? FormattingHelper.FormatDate(item.LastRentalDate.Value) : "-"]).ToList());
 
     private static ExcelSheet CreateCustomerOutstandingSheet(IReadOnlyList<CustomerOutstandingBalanceReportItem> items) =>
         new("Outstanding Balances", ["Customer", "Contact", "Transaction Code", "Total Amount", "Amount Paid", "Balance", "Payment Status"],
-            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCode, FormatPeso(item.TotalAmount), FormatPeso(item.AmountPaid), FormatPeso(item.Balance), item.PaymentStatus]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCode, FormattingHelper.FormatPeso(item.TotalAmount), FormattingHelper.FormatPeso(item.AmountPaid), FormattingHelper.FormatPeso(item.Balance), item.PaymentStatus]).ToList());
 
     private static ExcelSheet CreateCustomerLateReturnsSheet(IReadOnlyList<CustomerLateReturnReportItem> items) =>
         new("Late Return Customers", ["Customer", "Contact", "Transaction Code", "Car / Plate", "Days Late", "Estimated Late Fee"],
-            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCode, CarPlate(item.CarName, item.PlateNumber), item.DaysLate, FormatPeso(item.EstimatedLateFee)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCode, FormattingHelper.CarPlate(item.CarName, item.PlateNumber), item.DaysLate, FormattingHelper.FormatPeso(item.EstimatedLateFee)]).ToList());
 
     private static ExcelSheet CreateCustomerDamageFeesSheet(IReadOnlyList<CustomerDamageFeeReportItem> items) =>
         new("Damage Fee Customers", ["Customer", "Contact", "Transaction Code", "Car / Plate", "Damage Fee", "Payment Date"],
-            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCode, CarPlate(item.CarName, item.PlateNumber), FormatPeso(item.DamageFee), FormatDate(item.PaymentDate)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[item.CustomerName, item.Contact, item.TransactionCode, FormattingHelper.CarPlate(item.CarName, item.PlateNumber), FormattingHelper.FormatPeso(item.DamageFee), FormattingHelper.FormatDate(item.PaymentDate)]).ToList());
 
     private static ExcelSheet CreateBlacklistedCustomersSheet(IReadOnlyList<BlacklistedCustomerReportItem> items) =>
         new("Blacklisted Customers", ["Customer", "Contact", "Blacklist Reason", "Status", "Last Transaction"],
@@ -437,17 +437,17 @@ public sealed class ReportExportService
     private static void AddProfitabilitySummary(List<string> lines, OperatingProfitabilitySummary metrics)
     {
         AddSection(lines, "Operating Profitability");
-        lines.Add($"Total Revenue: {FormatPdfPeso(metrics.TotalRevenue)}");
-        lines.Add($"Total Offsite Cost: {FormatPdfPeso(metrics.TotalOffsiteCost)}");
-        lines.Add($"Net After Offsite: {FormatPdfPeso(metrics.NetAfterOffsiteCost)}");
-        lines.Add($"Cost-to-Revenue Ratio: {FormatPercent(metrics.CostToRevenueRatio)}");
-        lines.Add($"Maintenance Cost: {FormatPdfPeso(metrics.MaintenanceCost)}");
-        lines.Add($"Repair Cost: {FormatPdfPeso(metrics.RepairCost)}");
-        lines.Add($"Cleaning Cost: {FormatPdfPeso(metrics.CleaningCost)}");
+        lines.Add($"Total Revenue: {FormattingHelper.FormatPeso(metrics.TotalRevenue)}");
+        lines.Add($"Total Offsite Cost: {FormattingHelper.FormatPeso(metrics.TotalOffsiteCost)}");
+        lines.Add($"Net After Offsite: {FormattingHelper.FormatPeso(metrics.NetAfterOffsiteCost)}");
+        lines.Add($"Cost-to-Revenue Ratio: {FormattingHelper.FormatPercent(metrics.CostToRevenueRatio)}");
+        lines.Add($"Maintenance Cost: {FormattingHelper.FormatPeso(metrics.MaintenanceCost)}");
+        lines.Add($"Repair Cost: {FormattingHelper.FormatPeso(metrics.RepairCost)}");
+        lines.Add($"Cleaning Cost: {FormattingHelper.FormatPeso(metrics.CleaningCost)}");
 
         if (metrics.TotalRevenue > 0)
         {
-            lines.Add($"Insight: Offsite costs consumed {metrics.CostToRevenueRatio:N1}% of revenue. Net after offsite costs is {FormatPdfPeso(metrics.NetAfterOffsiteCost)}.");
+            lines.Add($"Insight: Offsite costs consumed {metrics.CostToRevenueRatio:N1}% of revenue. Net after offsite costs is {FormattingHelper.FormatPeso(metrics.NetAfterOffsiteCost)}.");
         }
     }
 
@@ -457,7 +457,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (var item in items.Take(limit))
         {
-            lines.Add($"{CarPlate(item.CarDisplayName, item.PlateNumber)} - Cost: {FormatPdfPeso(item.TotalOffsiteCost)} - Revenue: {FormatPdfPeso(item.RevenueGenerated)} - Net: {FormatPdfPeso(item.NetAfterCost)}");
+            lines.Add($"{FormattingHelper.CarPlate(item.CarDisplayName, item.PlateNumber)} - Cost: {FormattingHelper.FormatPeso(item.TotalOffsiteCost)} - Revenue: {FormattingHelper.FormatPeso(item.RevenueGenerated)} - Net: {FormattingHelper.FormatPeso(item.NetAfterCost)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -465,49 +465,49 @@ public sealed class ReportExportService
     private static ExcelSheet CreateProfitabilitySummarySheet(OperatingProfitabilitySummary metrics, DateTime from, DateTime to, string generatedBy) =>
         CreateSummarySheet("Operating Profitability", from, to, generatedBy,
         [
-            ("Total Revenue", FormatPeso(metrics.TotalRevenue)),
-            ("Total Offsite Cost", FormatPeso(metrics.TotalOffsiteCost)),
-            ("Net After Offsite", FormatPeso(metrics.NetAfterOffsiteCost)),
-            ("Cost-to-Revenue Ratio", FormatPercent(metrics.CostToRevenueRatio)),
-            ("Maintenance Cost", FormatPeso(metrics.MaintenanceCost)),
-            ("Repair Cost", FormatPeso(metrics.RepairCost)),
-            ("Cleaning Cost", FormatPeso(metrics.CleaningCost))
+            ("Total Revenue", FormattingHelper.FormatPeso(metrics.TotalRevenue)),
+            ("Total Offsite Cost", FormattingHelper.FormatPeso(metrics.TotalOffsiteCost)),
+            ("Net After Offsite", FormattingHelper.FormatPeso(metrics.NetAfterOffsiteCost)),
+            ("Cost-to-Revenue Ratio", FormattingHelper.FormatPercent(metrics.CostToRevenueRatio)),
+            ("Maintenance Cost", FormattingHelper.FormatPeso(metrics.MaintenanceCost)),
+            ("Repair Cost", FormattingHelper.FormatPeso(metrics.RepairCost)),
+            ("Cleaning Cost", FormattingHelper.FormatPeso(metrics.CleaningCost))
         ]);
 
     private static ExcelSheet CreateVehicleProfitabilitySheet(IReadOnlyList<VehicleCostProfitabilityItem> items) =>
         new("Vehicle Profitability", ["Car / Plate", "Maintenance Count", "Repair Count", "Cleaning Count", "Total Offsite Cost", "Revenue Generated", "Net Profit"],
-            items.Select(item => (IReadOnlyList<object?>)[CarPlate(item.CarDisplayName, item.PlateNumber), item.MaintenanceCount, item.RepairCount, item.CleaningCount, FormatPeso(item.TotalOffsiteCost), FormatPeso(item.RevenueGenerated), FormatPeso(item.NetAfterCost)]).ToList());
+            items.Select(item => (IReadOnlyList<object?>)[FormattingHelper.CarPlate(item.CarDisplayName, item.PlateNumber), item.MaintenanceCount, item.RepairCount, item.CleaningCount, FormattingHelper.FormatPeso(item.TotalOffsiteCost), FormattingHelper.FormatPeso(item.RevenueGenerated), FormattingHelper.FormatPeso(item.NetAfterCost)]).ToList());
 
     private static void AddOverviewSummary(List<string> lines, ReportSummaryMetrics metrics)
     {
         AddSection(lines, "Overview");
-        lines.Add($"Total Revenue: {FormatPdfPeso(metrics.TotalRevenue)}");
+        lines.Add($"Total Revenue: {FormattingHelper.FormatPeso(metrics.TotalRevenue)}");
         lines.Add($"Active Rentals: {metrics.ActiveRentals}");
         lines.Add($"Completed Rentals: {metrics.CompletedRentals}");
-        lines.Add($"Top Earning Car: {metrics.TopEarningCar ?? "-"} ({FormatPdfPeso(metrics.TopEarningCarRevenue)})");
+        lines.Add($"Top Earning Car: {metrics.TopEarningCar ?? "-"} ({FormattingHelper.FormatPeso(metrics.TopEarningCarRevenue)})");
         lines.Add($"Most Rented Car: {metrics.MostRentedCar ?? "-"} ({metrics.MostRentedCarCount} rental(s))");
     }
 
     private static void AddFinancialSummary(List<string> lines, ReportSummaryMetrics metrics)
     {
         AddSection(lines, "Financial Summary");
-        lines.Add($"Total Revenue: {FormatPdfPeso(metrics.TotalRevenue)}");
-        lines.Add($"Rental Revenue: {FormatPdfPeso(metrics.RentalRevenue)}");
-        lines.Add($"Extension Fees: {FormatPdfPeso(metrics.ExtensionFees)}");
-        lines.Add($"Damage Fees: {FormatPdfPeso(metrics.DamageFees)}");
-        lines.Add($"Late Fees: {FormatPdfPeso(metrics.LateReturnFees)}");
-        lines.Add($"Outstanding Balance: {FormatPdfPeso(metrics.OutstandingBalance)}");
+        lines.Add($"Total Revenue: {FormattingHelper.FormatPeso(metrics.TotalRevenue)}");
+        lines.Add($"Rental Revenue: {FormattingHelper.FormatPeso(metrics.RentalRevenue)}");
+        lines.Add($"Extension Fees: {FormattingHelper.FormatPeso(metrics.ExtensionFees)}");
+        lines.Add($"Damage Fees: {FormattingHelper.FormatPeso(metrics.DamageFees)}");
+        lines.Add($"Late Fees: {FormattingHelper.FormatPeso(metrics.LateReturnFees)}");
+        lines.Add($"Outstanding Balance: {FormattingHelper.FormatPeso(metrics.OutstandingBalance)}");
         lines.Add($"Paid / Partial / Unpaid: {metrics.PaidTransactions} / {metrics.PartialTransactions} / {metrics.UnpaidTransactions}");
     }
 
     private static void AddFleetSummary(List<string> lines, FleetPerformanceMetrics metrics)
     {
         AddSection(lines, "Fleet Summary");
-        lines.Add($"Total Fleet Revenue: {FormatPdfPeso(metrics.TotalFleetRevenue)}");
-        lines.Add($"Average Revenue Per Car: {FormatPdfPeso(metrics.AverageRevenuePerCar)}");
-        lines.Add($"Top Earning Car: {metrics.TopEarningCar ?? "-"} ({FormatPdfPeso(metrics.TopEarningCarRevenue)})");
+        lines.Add($"Total Fleet Revenue: {FormattingHelper.FormatPeso(metrics.TotalFleetRevenue)}");
+        lines.Add($"Average Revenue Per Car: {FormattingHelper.FormatPeso(metrics.AverageRevenuePerCar)}");
+        lines.Add($"Top Earning Car: {metrics.TopEarningCar ?? "-"} ({FormattingHelper.FormatPeso(metrics.TopEarningCarRevenue)})");
         lines.Add($"Most Rented Car: {metrics.MostRentedCar ?? "-"} ({metrics.MostRentedCarCount} rental(s))");
-        lines.Add($"Average Utilization Rate: {FormatPercent(metrics.AverageUtilizationRate)}");
+        lines.Add($"Average Utilization Rate: {FormattingHelper.FormatPercent(metrics.AverageUtilizationRate)}");
         lines.Add($"Cars Under Maintenance: {metrics.CarsUnderMaintenance}");
     }
 
@@ -529,12 +529,12 @@ public sealed class ReportExportService
         AddSection(lines, "Customer Summary");
         lines.Add($"Total Active Customers: {metrics.TotalActiveCustomers}");
         lines.Add($"New Customers: {metrics.NewCustomers}");
-        lines.Add($"Top Customer by Revenue: {metrics.TopCustomerByRevenue ?? "-"} ({FormatPdfPeso(metrics.TopCustomerRevenue)})");
+        lines.Add($"Top Customer by Revenue: {metrics.TopCustomerByRevenue ?? "-"} ({FormattingHelper.FormatPeso(metrics.TopCustomerRevenue)})");
         lines.Add($"Top Customer by Rentals: {metrics.TopCustomerByRentals ?? "-"} ({metrics.TopCustomerRentalCount} rental(s))");
         lines.Add($"Blacklisted Customers: {metrics.BlacklistedCustomers}");
         lines.Add($"Late Return Customers: {metrics.CustomersWithLateReturns}");
         lines.Add($"Damage Fee Customers: {metrics.CustomersWithDamageFees}");
-        lines.Add($"Average Revenue per Customer: {FormatPdfPeso(metrics.AverageRevenuePerCustomer)}");
+        lines.Add($"Average Revenue per Customer: {FormattingHelper.FormatPeso(metrics.AverageRevenuePerCustomer)}");
     }
 
     private static void AddPaymentMethods(List<string> lines, IReadOnlyList<PaymentMethodBreakdownItem> items, int limit)
@@ -543,7 +543,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (PaymentMethodBreakdownItem item in items.Take(limit))
         {
-            lines.Add($"{item.ModeOfPayment}: {item.PaymentCount} payment(s), {FormatPdfPeso(item.TotalAmount)}, {FormatPercent(item.Percentage)}");
+            lines.Add($"{item.ModeOfPayment}: {item.PaymentCount} payment(s), {FormattingHelper.FormatPeso(item.TotalAmount)}, {FormattingHelper.FormatPercent(item.Percentage)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -554,7 +554,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (RevenueByCategoryItem item in items.Take(limit))
         {
-            lines.Add($"{item.PaymentCategory}: {item.PaymentCount} payment(s), {FormatPdfPeso(item.TotalAmount)}, {FormatPercent(item.Percentage)}");
+            lines.Add($"{item.PaymentCategory}: {item.PaymentCount} payment(s), {FormattingHelper.FormatPeso(item.TotalAmount)}, {FormattingHelper.FormatPercent(item.Percentage)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -565,7 +565,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (TransactionListItem item in items.Take(limit))
         {
-            lines.Add($"{item.TransactionCode} - {item.CustomerName} - Balance {FormatPdfPeso(item.BalanceAmount)} - {item.PaymentStatus}");
+            lines.Add($"{item.TransactionCode} - {item.CustomerName} - Balance {FormattingHelper.FormatPeso(item.BalanceAmount)} - {item.PaymentStatus}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -576,7 +576,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (TopCarItem item in items.Take(limit))
         {
-            lines.Add($"{CarPlate(item.CarName, item.PlateNumber)} - {item.RentalCount} rental(s) - {FormatPdfPeso(item.Revenue)}");
+            lines.Add($"{FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {item.RentalCount} rental(s) - {FormattingHelper.FormatPeso(item.Revenue)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -587,7 +587,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (FleetUtilizationItem item in items.Take(limit))
         {
-            lines.Add($"{CarPlate(item.CarName, item.PlateNumber)} - {item.RentedDays} rented day(s) - {FormatPercent(item.UtilizationRate)} - {item.Status}");
+            lines.Add($"{FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {item.RentedDays} rented day(s) - {FormattingHelper.FormatPercent(item.UtilizationRate)} - {item.Status}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -598,7 +598,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (FleetMaintenanceItem item in items.Take(limit))
         {
-            lines.Add($"{CarPlate(item.CarName, item.PlateNumber)} - {FormatDate(item.StartDate)} to {FormatDate(item.EndDate)} - {item.Status}");
+            lines.Add($"{FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {FormattingHelper.FormatDate(item.StartDate)} to {FormattingHelper.FormatDate(item.EndDate)} - {item.Status}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -609,7 +609,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (OperationsReturnItem item in items.Take(limit))
         {
-            lines.Add($"{FormatDate(item.ExpectedReturn)} - {item.TransactionCode} - {item.CustomerName} - {CarPlate(item.CarName, item.PlateNumber)} - {item.PaymentStatus}");
+            lines.Add($"{FormattingHelper.FormatDate(item.ExpectedReturn)} - {item.TransactionCode} - {item.CustomerName} - {FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {item.PaymentStatus}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -620,7 +620,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (OperationsReturnItem item in items.Take(limit))
         {
-            lines.Add($"{item.DaysLate} day(s) late - {item.TransactionCode} - {item.CustomerName} - Est. {FormatPdfPeso(item.EstimatedLateFee)}");
+            lines.Add($"{item.DaysLate} day(s) late - {item.TransactionCode} - {item.CustomerName} - Est. {FormattingHelper.FormatPeso(item.EstimatedLateFee)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -631,7 +631,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (OperationsActiveRentalItem item in items.Take(limit))
         {
-            lines.Add($"{item.TransactionCode} - {item.CustomerName} - {CarPlate(item.CarName, item.PlateNumber)} - {FormatDate(item.StartDate)} to {FormatDate(item.EndDate)}");
+            lines.Add($"{item.TransactionCode} - {item.CustomerName} - {FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {FormattingHelper.FormatDate(item.StartDate)} to {FormattingHelper.FormatDate(item.EndDate)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -642,7 +642,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (OperationsReservationItem item in items.Take(limit))
         {
-            lines.Add($"{FormatDate(item.ScheduleDate)} - {item.CustomerName} - {CarPlate(item.CarName, item.PlateNumber)} - {item.Status} - {item.PaymentStatus}");
+            lines.Add($"{FormattingHelper.FormatDate(item.ScheduleDate)} - {item.CustomerName} - {FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {item.Status} - {item.PaymentStatus}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -653,7 +653,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (OperationsAvailableCarItem item in items.Take(limit))
         {
-            lines.Add($"{CarPlate(item.CarName, item.PlateNumber)} - {item.Status} - {FormatPdfPeso(item.RatePerDay)} / day - {item.SeatingCapacity?.ToString(CultureInfo.InvariantCulture) ?? "-"} seats");
+            lines.Add($"{FormattingHelper.CarPlate(item.CarName, item.PlateNumber)} - {item.Status} - {FormattingHelper.FormatPeso(item.RatePerDay)} / day - {item.SeatingCapacity?.ToString(CultureInfo.InvariantCulture) ?? "-"} seats");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -664,7 +664,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (CustomerRevenueReportItem item in items.Take(limit))
         {
-            lines.Add($"{item.CustomerName} - {item.TransactionCount} transaction(s) - Paid {FormatPdfPeso(item.TotalPaid)} - Balance {FormatPdfPeso(item.OutstandingBalance)}");
+            lines.Add($"{item.CustomerName} - {item.TransactionCount} transaction(s) - Paid {FormattingHelper.FormatPeso(item.TotalPaid)} - Balance {FormattingHelper.FormatPeso(item.OutstandingBalance)}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -686,7 +686,7 @@ public sealed class ReportExportService
         AddEmptyState(lines, items);
         foreach (CustomerOutstandingBalanceReportItem item in items.Take(limit))
         {
-            lines.Add($"{item.CustomerName} - {item.TransactionCode} - Balance {FormatPdfPeso(item.Balance)} - {item.PaymentStatus}");
+            lines.Add($"{item.CustomerName} - {item.TransactionCode} - Balance {FormattingHelper.FormatPeso(item.Balance)} - {item.PaymentStatus}");
         }
         AddExcelNote(lines, items.Count, limit);
     }
@@ -710,7 +710,7 @@ public sealed class ReportExportService
             settings.BusinessName,
             CreateBusinessContactLine(settings),
             reportTitle,
-            $"Date Range: {FormatDate(from)} - {FormatDate(to)}",
+            $"Date Range: {FormattingHelper.FormatDate(from)} - {FormattingHelper.FormatDate(to)}",
             $"Generated: {DateTime.Now:MMM d, yyyy h:mm tt}",
             $"Generated By: {generatedBy}",
             string.Empty
@@ -1103,7 +1103,7 @@ public sealed class ReportExportService
 
     private static double EstimatePdfTextWidth(string text, int size) => text.Length * size * 0.48;
 
-    private static string ToPdfLiteralString(string text) => EscapePdfText(SanitizePdfText(text));
+    private static string ToPdfLiteralString(string text) => FormattingHelper.EscapePdfText(FormattingHelper.SanitizePdfText(text));
 
     private static void WritePdfObject(StreamWriter writer, List<long> offsets, int objectNumber, string value)
     {
@@ -1169,36 +1169,6 @@ public sealed class ReportExportService
             .Replace("\"", "&quot;", StringComparison.Ordinal)
             .Replace("'", "&apos;", StringComparison.Ordinal);
     }
-
-    private static string EscapePdfText(string value)
-    {
-        return value
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("(", "\\(", StringComparison.Ordinal)
-            .Replace(")", "\\)", StringComparison.Ordinal);
-    }
-
-    private static string SanitizePdfText(string value)
-    {
-        return value
-            .Replace("₱", "PHP ", StringComparison.Ordinal)
-            .Replace("â‚±", "PHP ", StringComparison.Ordinal)
-            .Replace("–", "-", StringComparison.Ordinal)
-            .Replace("—", "-", StringComparison.Ordinal)
-            .Replace("’", "'", StringComparison.Ordinal)
-            .Replace("“", "\"", StringComparison.Ordinal)
-            .Replace("”", "\"", StringComparison.Ordinal);
-    }
-
-    private static string CarPlate(string carName, string plateNumber) => $"{carName} ({plateNumber})";
-
-    private static string FormatPeso(decimal amount) => $"₱{amount:N2}";
-
-    private static string FormatPdfPeso(decimal amount) => $"PHP {amount:N2}";
-
-    private static string FormatPercent(decimal value) => $"{value:N1}%";
-
-    private static string FormatDate(DateTime date) => $"{date:MMM d, yyyy}";
 
     private sealed record ExcelSheet(string Name, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<object?>> Rows, bool FirstRowIsHeader = true);
 
