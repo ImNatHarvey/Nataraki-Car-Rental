@@ -261,7 +261,7 @@ public sealed class CarService
         car.CarName = car.CarName?.Trim() ?? string.Empty;
         car.Brand = car.Brand?.Trim() ?? string.Empty;
         car.Model = car.Model?.Trim() ?? string.Empty;
-        car.PlateNumber = car.PlateNumber?.Trim().ToUpperInvariant() ?? string.Empty;
+        car.PlateNumber = PlateNumberHelper.FormatPhilippinePlateInput(car.PlateNumber);
         car.Color = NullIfWhiteSpace(car.Color);
         car.Transmission = NullIfWhiteSpace(car.Transmission);
         car.FuelType = NullIfWhiteSpace(car.FuelType);

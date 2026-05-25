@@ -21,8 +21,8 @@ public sealed class CarValidator : AbstractValidator<Car>
             .WithMessage("Plate number is required.");
 
         RuleFor(car => car.PlateNumber)
-            .Must(value => string.IsNullOrWhiteSpace(value) || value == value.ToUpperInvariant())
-            .WithMessage("Plate number must be uppercase.");
+            .Must(PlateNumberHelper.IsValidPhilippinePlate)
+            .WithMessage("Plate number must follow the format ABC 123 or ABC 1234.");
 
         RuleFor(car => car.RatePerDay)
             .GreaterThan(0)

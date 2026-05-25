@@ -54,6 +54,11 @@ public sealed class CarDetailsForm : Form
 
     private string? _selectedImageSourcePath;
     private string? _selectedOrCrSourcePath;
+    private bool _isFormattingPlate;
+    private bool _isAutoSettingCodingDay;
+    private bool _codingDayManuallyChanged;
+    private bool _isLoadingCar;
+    private string? _lastPlateForCodingSuggestion;
 
     public CarDetailsForm(CarFormMode mode, Car? car = null, int? currentUserId = null)
     {
@@ -70,10 +75,12 @@ public sealed class CarDetailsForm : Form
         else
         {
             // Preselect defaults for Add mode
+            _isLoadingCar = true;
             _statusComboBox.SelectedItem = "Available";
             _transmissionComboBox.SelectedIndex = 0; // Default to Automatic
             _fuelTypeComboBox.SelectedIndex = 0; // Default to Gasoline
             _codingDayComboBox.SelectedItem = "None / Not Applicable"; // Default to None
+            _isLoadingCar = false;
         }
 
         if (_mode == CarFormMode.View)
@@ -340,6 +347,9 @@ public sealed class CarDetailsForm : Form
     private void ConfigureInputs()
     {
         _plateNumberTextBox.CharacterCasing = CharacterCasing.Upper;
+        _plateNumberTextBox.MaxLength = 8;
+        _plateNumberTextBox.TextChanged += PlateNumberTextBox_TextChanged;
+        _codingDayComboBox.SelectedIndexChanged += CodingDayComboBox_SelectedIndexChanged;
         _yearTextBox.MaxLength = 4;
         _yearTextBox.KeyPress += AllowDigitsOnly;
         _seatingCapacityTextBox.KeyPress += AllowDigitsOnly;
@@ -393,11 +403,109 @@ public sealed class CarDetailsForm : Form
             "OR/CR document");
     }
 
+    private void PlateNumberTextBox_TextChanged(object? sender, EventArgs e)
+    {
+        if (_isFormattingPlate || IsViewMode)
+        {
+            return;
+        }
+
+        _isFormattingPlate = true;
+        try
+        {
+            string originalText = _plateNumberTextBox.Text;
+            int originalSelectionStart = _plateNumberTextBox.SelectionStart;
+            string formattedText = PlateNumberHelper.FormatPhilippinePlateInput(originalText);
+
+            if (!string.Equals(originalText, formattedText, StringComparison.Ordinal))
+            {
+                int charactersBeforeCursor = CountPlateCharacters(originalText[..Math.Min(originalSelectionStart, originalText.Length)]);
+                _plateNumberTextBox.Text = formattedText;
+                _plateNumberTextBox.SelectionStart = GetSelectionStartAfterPlateCharacters(formattedText, charactersBeforeCursor);
+            }
+
+            UpdateCodingDaySuggestion(formattedText);
+        }
+        finally
+        {
+            _isFormattingPlate = false;
+        }
+    }
+
+    private void CodingDayComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (!_isAutoSettingCodingDay && !_isLoadingCar && !IsViewMode)
+        {
+            _codingDayManuallyChanged = true;
+        }
+    }
+
+    private void UpdateCodingDaySuggestion(string plateNumber)
+    {
+        if (!string.Equals(_lastPlateForCodingSuggestion, plateNumber, StringComparison.Ordinal))
+        {
+            _lastPlateForCodingSuggestion = plateNumber;
+            _codingDayManuallyChanged = false;
+        }
+
+        if (_codingDayManuallyChanged || !PlateNumberHelper.IsValidPhilippinePlate(plateNumber))
+        {
+            return;
+        }
+
+        string? suggestedCodingDay = PlateNumberHelper.GetCodingDayFromPlate(plateNumber);
+        if (string.IsNullOrWhiteSpace(suggestedCodingDay) || !_codingDayComboBox.Items.Contains(suggestedCodingDay))
+        {
+            return;
+        }
+
+        _isAutoSettingCodingDay = true;
+        try
+        {
+            _codingDayComboBox.SelectedItem = suggestedCodingDay;
+        }
+        finally
+        {
+            _isAutoSettingCodingDay = false;
+        }
+    }
+
+    private static int CountPlateCharacters(string text)
+    {
+        return text.Count(char.IsLetterOrDigit);
+    }
+
+    private static int GetSelectionStartAfterPlateCharacters(string text, int characterCount)
+    {
+        if (characterCount <= 0)
+        {
+            return 0;
+        }
+
+        int seen = 0;
+        for (int index = 0; index < text.Length; index++)
+        {
+            if (!char.IsLetterOrDigit(text[index]))
+            {
+                continue;
+            }
+
+            seen++;
+            if (seen == characterCount)
+            {
+                return index + 1;
+            }
+        }
+
+        return text.Length;
+    }
+
     private void LoadCar(Car car)
     {
+        _isLoadingCar = true;
         _carNameTextBox.Text = car.CarName;
         _modelTextBox.Text = car.Model;
-        _plateNumberTextBox.Text = car.PlateNumber;
+        _plateNumberTextBox.Text = PlateNumberHelper.FormatPhilippinePlateInput(car.PlateNumber);
         _ratePerDayTextBox.Text = car.RatePerDay.ToString("0.##");
         bool hasLegacyStatus = !StatusOptions.Contains(car.Status);
         if (hasLegacyStatus && !_statusComboBox.Items.Contains(car.Status))
@@ -425,6 +533,9 @@ public sealed class CarDetailsForm : Form
         _orCrPathLabel.Text = string.IsNullOrWhiteSpace(car.OrCrPath) ? "No file attached" : Path.GetFileName(car.OrCrPath);
         _imageOpenButton.Enabled = !string.IsNullOrWhiteSpace(car.ImagePath);
         _orCrOpenButton.Enabled = !string.IsNullOrWhiteSpace(car.OrCrPath);
+        _lastPlateForCodingSuggestion = _plateNumberTextBox.Text;
+        _codingDayManuallyChanged = false;
+        _isLoadingCar = false;
     }
 
     private void ApplyViewMode()
@@ -513,7 +624,7 @@ public sealed class CarDetailsForm : Form
             CarName = _carNameTextBox.Text,
             Brand = _brandTextBox.Text,
             Model = _modelTextBox.Text,
-            PlateNumber = _plateNumberTextBox.Text.Trim().ToUpperInvariant(),
+            PlateNumber = PlateNumberHelper.FormatPhilippinePlateInput(_plateNumberTextBox.Text),
             Year = TryParseInt(_yearTextBox.Text),
             Color = NullIfWhiteSpace(_colorTextBox.Text),
             Transmission = NullIfWhiteSpace(_transmissionComboBox.SelectedItem?.ToString()),
