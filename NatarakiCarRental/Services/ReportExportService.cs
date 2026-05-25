@@ -707,7 +707,7 @@ public sealed class ReportExportService
         SystemSettingsModel settings = NatarakiCarRental.Helpers.AppBrandingManager.CurrentSettings;
         return
         [
-            settings.ReportHeaderName,
+            settings.BusinessName,
             CreateBusinessContactLine(settings),
             reportTitle,
             $"Date Range: {FormatDate(from)} - {FormatDate(to)}",
@@ -720,7 +720,7 @@ public sealed class ReportExportService
     private static string CreateBusinessContactLine(SystemSettingsModel settings)
     {
         string address = !string.IsNullOrWhiteSpace(settings.BusinessAddress)
-            ? settings.BusinessAddress
+            ? settings.BusinessAddress.Trim()
             : string.Join(", ", new[]
             {
                 settings.BusinessStreetAddress,
@@ -728,7 +728,7 @@ public sealed class ReportExportService
                 settings.BusinessCityName,
                 settings.BusinessProvinceName,
                 settings.BusinessRegionName
-            }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            }.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part.Trim()));
 
         string[] parts =
         [
@@ -984,17 +984,26 @@ public sealed class ReportExportService
     {
         string themeRgb = GetPdfThemeRgb();
         StringBuilder builder = new();
-        AppendRectangle(builder, 0, 742, 612, 50, themeRgb);
-        AppendText(builder, headerLines.ElementAtOrDefault(0) ?? NatarakiCarRental.Helpers.AppBrandingManager.CurrentSettings.ReportHeaderName, 306, 772, 18, bold: true, centered: true, color: "1 1 1");
-        AppendText(builder, headerLines.ElementAtOrDefault(1) ?? string.Empty, 306, 752, 9, bold: false, centered: true, color: "1 1 1");
+        
+        // Draw a full-width theme-colored bar at the top (Stripped of all logo logic)
+        AppendRectangle(builder, 0, 712, 612, 80, themeRgb);
 
-        AppendText(builder, headerLines.ElementAtOrDefault(2) ?? "Report", 50, 720, 11, bold: true, color: "0.12 0.16 0.22");
-        AppendText(builder, headerLines.ElementAtOrDefault(3) ?? string.Empty, 50, 704, 9, bold: false);
-        AppendText(builder, headerLines.ElementAtOrDefault(4) ?? string.Empty, 50, 690, 9, bold: false);
-        AppendText(builder, headerLines.ElementAtOrDefault(5) ?? string.Empty, 50, 676, 9, bold: false);
-        AppendLine(builder, 50, 662, 562, 662, "0.80 0.84 0.90");
+        // Header Text over the theme bar
+        double headerY = 758;
+        string businessName = headerLines.ElementAtOrDefault(0) ?? NatarakiCarRental.Helpers.AppBrandingManager.CurrentSettings.BusinessName;
+        AppendText(builder, businessName, 306, headerY, 18, bold: true, centered: true, color: "1 1 1");
+        
+        string contactLine = headerLines.ElementAtOrDefault(1) ?? string.Empty;
+        AppendText(builder, contactLine, 306, headerY - 20, 9, bold: false, centered: true, color: "0.95 0.95 0.95");
 
-        double y = 640;
+        // Report Title and Details below the bar
+        AppendText(builder, headerLines.ElementAtOrDefault(2) ?? "Report", 50, 685, 11, bold: true, color: "0.12 0.16 0.22");
+        AppendText(builder, headerLines.ElementAtOrDefault(3) ?? string.Empty, 50, 670, 9, bold: false);
+        AppendText(builder, headerLines.ElementAtOrDefault(4) ?? string.Empty, 50, 656, 9, bold: false);
+        AppendText(builder, headerLines.ElementAtOrDefault(5) ?? string.Empty, 50, 642, 9, bold: false);
+        AppendLine(builder, 50, 630, 562, 630, "0.80 0.84 0.90");
+
+        double y = 610;
         foreach (string line in bodyLines)
         {
             if (string.IsNullOrWhiteSpace(line))

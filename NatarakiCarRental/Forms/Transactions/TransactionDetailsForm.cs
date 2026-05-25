@@ -22,6 +22,7 @@ public sealed class TransactionDetailsForm : Form
     private readonly Transaction? _transaction;
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
+    private readonly TransactionDocumentExportService _documentExportService = new();
     private readonly FleetScheduleService _scheduleService;
     private readonly CarService _carService = new();
     private readonly CustomerService _customerService = new();
@@ -53,6 +54,7 @@ public sealed class TransactionDetailsForm : Form
     };
     private readonly TableLayoutPanel _viewLayout = new();
     private readonly DataGridView _paymentsGrid = new();
+    private readonly ComboBox _documentFormatComboBox = CreateComboBox(150);
     private readonly Panel _addPaymentPanel = new();
     private readonly NumericUpDown _newPaymentAmountInput = CreateMoneyInput();
     private readonly ComboBox _newPaymentModeComboBox = CreateComboBox();
@@ -363,11 +365,33 @@ public sealed class TransactionDetailsForm : Form
         CreateViewDetailsLayout();
         CreatePaymentsGrid(new Point(32, 376), new Size(996, 222));
 
+        ConfigureDocumentFormatComboBox();
+
+        Button invoiceButton = ControlFactory.CreatePrimaryButton("Invoice", 110, 38);
+        invoiceButton.Location = new Point(32, 622);
+        invoiceButton.Click += async (_, _) => await ExportTransactionDocumentAsync(invoiceButton, isReceipt: false);
+
+        Button receiptButton = ControlFactory.CreatePrimaryButton("Receipt", 110, 38);
+        receiptButton.Location = new Point(154, 622);
+        receiptButton.Click += async (_, _) => await ExportTransactionDocumentAsync(receiptButton, isReceipt: true);
+
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
         closeButton.Location = new Point(918, 622);
         closeButton.DialogResult = DialogResult.Cancel;
+        _documentFormatComboBox.Location = new Point(276, 626);
+
+        Controls.Add(invoiceButton);
+        Controls.Add(receiptButton);
+        Controls.Add(_documentFormatComboBox);
         Controls.Add(closeButton);
         CancelButton = closeButton;
+    }
+
+    private void ConfigureDocumentFormatComboBox()
+    {
+        _documentFormatComboBox.Items.Clear();
+        _documentFormatComboBox.Items.AddRange(["Standard A4", "Thermal 80mm", "Thermal 57mm"]);
+        _documentFormatComboBox.SelectedIndex = 0;
     }
 
     private void CreateViewDetailsLayout()
@@ -837,6 +861,91 @@ public sealed class TransactionDetailsForm : Form
     private void AddViewCell(int row, int column, string label, string value)
     {
         _viewLayout.Controls.Add(CreateReadOnlyValue(label, value), column, row);
+    }
+
+    private async Task ExportTransactionDocumentAsync(Button sourceButton, bool isReceipt)
+    {
+        if (_transaction is null)
+        {
+            MessageBoxHelper.ShowWarning("Transaction record was not found.", "Transactions");
+            return;
+        }
+
+        if (!AccessControlService.HasPermission("Transactions.View"))
+        {
+            MessageBoxHelper.ShowWarning("You do not have permission to export this transaction document.", "Transactions");
+            return;
+        }
+
+        string documentName = isReceipt ? "Receipt" : "Invoice";
+        using SaveFileDialog dialog = new()
+        {
+            Filter = "PDF files (*.pdf)|*.pdf",
+            FileName = BuildTransactionDocumentFileName(documentName, _transaction.TransactionCode),
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            sourceButton.Enabled = false;
+            Cursor = Cursors.WaitCursor;
+
+            string generatedBy = AccessControlService.CurrentUser?.FullName ?? "System";
+            TransactionDocumentFormat format = GetSelectedDocumentFormat();
+            if (isReceipt)
+            {
+                await _documentExportService.ExportReceiptAsync(_transaction.TransactionId, dialog.FileName, format, generatedBy);
+            }
+            else
+            {
+                await _documentExportService.ExportInvoiceAsync(_transaction.TransactionId, dialog.FileName, format, generatedBy);
+            }
+
+            MessageBoxHelper.ShowSuccess($"{documentName} exported successfully.", "Transactions");
+            if (MessageBoxHelper.ShowConfirmWarning("Do you want to open the exported file?", "Transactions"))
+            {
+                Process.Start(new ProcessStartInfo { FileName = dialog.FileName, UseShellExecute = true });
+            }
+        }
+        catch (IOException)
+        {
+            MessageBoxHelper.ShowWarning("Unable to export. Please close the file if it is already open and try again.", "Transactions");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            MessageBoxHelper.ShowWarning("Unable to export. Please choose a writable location and try again.", "Transactions");
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Unable to export {documentName.ToLowerInvariant()}.\n\n{exception.Message}", "Transactions");
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+            sourceButton.Enabled = true;
+        }
+    }
+
+    private TransactionDocumentFormat GetSelectedDocumentFormat()
+    {
+        return _documentFormatComboBox.SelectedItem?.ToString() switch
+        {
+            "Thermal 80mm" => TransactionDocumentFormat.Thermal80,
+            "Thermal 57mm" => TransactionDocumentFormat.Thermal57,
+            _ => TransactionDocumentFormat.StandardA4
+        };
+    }
+
+    private static string BuildTransactionDocumentFileName(string prefix, string transactionCode)
+    {
+        string safeCode = new(transactionCode.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character).ToArray());
+        return $"{prefix}_{safeCode}.pdf";
     }
 
     private void ShowValidationErrors(IReadOnlyList<ValidationFailure> errors, string fallbackMessage)
