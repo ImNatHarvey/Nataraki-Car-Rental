@@ -29,6 +29,7 @@ public sealed class ActivityLogControl : UserControl
     private readonly DataGridView _logsGrid = new();
     private readonly Label _emptyStateLabel = new();
     private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
+    private readonly System.Windows.Forms.Timer _resizeTimer = new() { Interval = 300 };
     private bool _isInitializingFilters;
 
     private int _currentPage = 1;
@@ -41,7 +42,26 @@ public sealed class ActivityLogControl : UserControl
     public ActivityLogControl()
     {
         InitializeControl();
+        _resizeTimer.Tick += ResizeTimer_Tick;
         Load += ActivityLogControl_Load;
+        Disposed += (s, e) => 
+        {
+            _searchTimer.Dispose();
+            _resizeTimer.Dispose();
+        };
+    }
+
+    private async void ResizeTimer_Tick(object? sender, EventArgs e)
+    {
+        _resizeTimer.Stop();
+        UpdateColumnLayout();
+        
+        if (Math.Abs(Height - _lastHeight) > 50)
+        {
+            _lastHeight = Height;
+            _currentPage = 1;
+            await LoadLogsAsync();
+        }
     }
 
     private static DateTimePicker CreateDatePicker()
@@ -333,7 +353,7 @@ public sealed class ActivityLogControl : UserControl
         }
         catch (Exception exception)
         {
-            MessageBoxHelper.ShowWarning($"Unable to update actions filter.\\n\\n{exception.Message}", "Activity Log");
+            MessageBoxHelper.ShowWarning($"Unable to update actions filter.\n\n{exception.Message}", "Activity Log");
         }
         finally
         {
@@ -399,8 +419,6 @@ public sealed class ActivityLogControl : UserControl
 
     private async void ActivityLogControl_Load(object? sender, EventArgs e)
     {
-        Load -= ActivityLogControl_Load;
-
         if (!AccessControlService.HasPermission("ActivityLog.View"))
         {
             ShowPermissionDenied();
@@ -408,15 +426,10 @@ public sealed class ActivityLogControl : UserControl
         }
 
         _lastHeight = Height;
-        Resize += async (_, _) =>
+        Resize += (s, ev) => 
         {
-            UpdateColumnLayout();
-            if (Math.Abs(Height - _lastHeight) > 50)
-            {
-                _lastHeight = Height;
-                _currentPage = 1;
-                await LoadLogsAsync();
-            }
+            _resizeTimer.Stop();
+            _resizeTimer.Start();
         };
 
         await InitializeFiltersAsync();

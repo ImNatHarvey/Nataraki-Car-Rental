@@ -100,6 +100,8 @@ public sealed class ManageSystemControl : UserControl
     private int _rolesPage = 1;
     private int _rolesLoadVersion;
     private bool _showArchivedRoles;
+    
+    private readonly System.Windows.Forms.Timer _resizeTimer = new() { Interval = 300 };
 
     public ManageSystemControl(int currentUserId)
     {
@@ -109,8 +111,22 @@ public sealed class ManageSystemControl : UserControl
         Padding = new Padding(32);
 
         InitializeLayout();
+        _resizeTimer.Tick += ResizeTimer_Tick;
+        Load += ManageSystemControl_Load;
+        Disposed += (s, e) => _resizeTimer.Dispose();
+    }
+
+    private async void ResizeTimer_Tick(object? sender, EventArgs e)
+    {
+        _resizeTimer.Stop();
+        if (_activeTabKey == "Users") await LoadUsersAsync();
+        if (_activeTabKey == "Roles") await LoadRolesAsync();
+    }
+
+    private async void ManageSystemControl_Load(object? sender, EventArgs e)
+    {
         LoadSettings();
-        _ = LoadReferenceDataAsync();
+        await LoadReferenceDataAsync();
     }
 
     private void InitializeLayout()
@@ -142,10 +158,10 @@ public sealed class ManageSystemControl : UserControl
 
         BuildAvailableTabs();
         RenderTabs();
-        Resize += async (_, _) =>
+        Resize += (s, ev) =>
         {
-            if (_activeTabKey == "Users") await LoadUsersAsync();
-            if (_activeTabKey == "Roles") await LoadRolesAsync();
+            _resizeTimer.Stop();
+            _resizeTimer.Start();
         };
     }
 
@@ -197,7 +213,7 @@ public sealed class ManageSystemControl : UserControl
             return;
         }
 
-        _activeTabKey = string.IsNullOrWhiteSpace(_activeTabKey) ? _availableTabs[0].Key : _activeTabKey;
+        _activeTabKey = string.IsNullOrWhiteSpace(_activeTabKey) ? _availableTabs[0].Key : _availableTabs[0].Key;
         foreach (var tab in _availableTabs)
         {
             IconButton button = new()
@@ -2018,7 +2034,7 @@ public sealed class ManageSystemControl : UserControl
         MoveLabeledControl(card, "Region", _businessRegionComboBox, leftX, 186, columnWidth);
         MoveLabeledControl(card, "Province", _businessProvinceComboBox, rightX, 186, columnWidth);
         MoveLabeledControl(card, "City / Municipality", _businessCityComboBox, thirdX, 186, columnWidth);
-        MoveLabeledControl(card, "Barangay", _businessBarangayComboBox, leftX, 254, columnWidth);
+        MoveLabeledCombo(card, "Barangay", _businessBarangayComboBox, new Point(leftX, 254), columnWidth);
         MoveLabeledControl(card, "Street / House / Block", _businessStreetInput, rightX, 254, columnWidth);
     }
 
@@ -2039,6 +2055,19 @@ public sealed class ManageSystemControl : UserControl
 
         input.Location = new Point(x, y + 24);
         input.Size = new Size(width, input.Height);
+    }
+
+    private static void MoveLabeledCombo(Control parent, string labelText, ComboBox input, Point labelLocation, int width)
+    {
+        Label? label = parent.Controls.OfType<Label>().FirstOrDefault(item => item.Text == labelText);
+        if (label is not null)
+        {
+            label.Location = labelLocation;
+            label.Width = width;
+        }
+
+        input.Location = new Point(labelLocation.X, labelLocation.Y + 24);
+        input.Size = new Size(width, 30);
     }
 
     private static void AlignFooterButtons(Panel footer, Button resetButton, Button saveButton)

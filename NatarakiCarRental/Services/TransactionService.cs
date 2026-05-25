@@ -181,7 +181,9 @@ public sealed class TransactionService
                         CreatedByUserId = _currentUserId
                     },
                     dbTransaction);
-                await RecalculatePaymentSummaryAsync(transactionId, dbTransaction);
+                
+                // Optimized: Passing transaction object to avoid re-fetch
+                await RecalculatePaymentSummaryInternalAsync(transactionId, transaction, dbTransaction);
             }
 
             await _activityLogService.LogAsync(
@@ -289,7 +291,9 @@ public sealed class TransactionService
                         CreatedByUserId = _currentUserId
                     },
                     dbTransaction);
-                await RecalculatePaymentSummaryAsync(transactionId, dbTransaction);
+                
+                // Optimized: Passing transaction object to avoid re-fetch
+                await RecalculatePaymentSummaryInternalAsync(transactionId, transaction, dbTransaction);
             }
 
             await _activityLogService.LogAsync(
@@ -584,7 +588,8 @@ public sealed class TransactionService
             decimal finalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transactionId, dbTransaction);
             string finalPaymentStatus = GetPaymentStatus(finalPaid, finalTotal);
 
-            // Update Transaction with new end date and commercial summary
+            // Optimized: Update Transaction with new end date and commercial summary
+            // (Values already recalculated above, no need for separate summary fetch)
             const string sqlUpdateTransaction = """
                 UPDATE dbo.Transactions
                 SET EndDate = @EndDate,
@@ -724,7 +729,9 @@ public sealed class TransactionService
             };
 
             await _transactionPaymentRepository.AddAsync(payment, dbTransaction);
-            await RecalculatePaymentSummaryAsync(request.TransactionId, dbTransaction);
+            
+            // Optimized: Passing transaction object to avoid re-fetch in recalculation
+            await RecalculatePaymentSummaryInternalAsync(request.TransactionId, transaction, dbTransaction);
             await SyncReservationTransactionPaymentStatusAsync(transaction, dbTransaction);
 
             await _activityLogService.LogAsync(
@@ -758,6 +765,11 @@ public sealed class TransactionService
             return;
         }
 
+        await RecalculatePaymentSummaryInternalAsync(transactionId, transaction, dbTransaction);
+    }
+
+    private async Task RecalculatePaymentSummaryInternalAsync(int transactionId, Transaction transaction, IDbTransaction? dbTransaction = null)
+    {
         decimal totalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transactionId, dbTransaction);
         string paymentStatus = GetPaymentStatus(totalPaid, transaction.TotalAmount);
 
