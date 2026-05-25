@@ -1135,7 +1135,7 @@ public sealed class ManageSystemControl : UserControl
         List<(string Action, Rectangle Bounds)> results = [];
         if (actions.Count == 0) return results;
 
-        using Font font = FontHelper.SemiBold(8.4F);
+        Font font = FontHelper.SemiBold(8.4F);
         int x = cellBounds.Left + 12;
         int y = cellBounds.Top + (cellBounds.Height - 24) / 2;
         const int gap = 8;
@@ -1161,7 +1161,7 @@ public sealed class ManageSystemControl : UserControl
     {
         string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         var boundsList = CalculateActionButtonBounds(graphics, cellBounds, actions);
-        using Font font = FontHelper.SemiBold(8.4F);
+        Font font = FontHelper.SemiBold(8.4F);
         using Pen linePen = new(ThemeHelper.TableGridLine);
 
         for (int i = 0; i < boundsList.Count; i++)
@@ -1180,7 +1180,7 @@ public sealed class ManageSystemControl : UserControl
 
     private static void DrawSinglePill(Graphics graphics, Rectangle cellBounds, string text, Color backColor, Color foreColor, int minWidth)
     {
-        using Font font = FontHelper.SemiBold(8.6F);
+        Font font = FontHelper.SemiBold(8.6F);
         int width = Math.Min(cellBounds.Width - 12, Math.Max(minWidth, (int)Math.Ceiling(graphics.MeasureString(text, font).Width) + 22));
         Rectangle rect = new(cellBounds.Left + 8, cellBounds.Top + (cellBounds.Height - 24) / 2, width, 24);
         DrawRoundedPill(graphics, rect, text, font, backColor, foreColor);
@@ -1211,7 +1211,7 @@ public sealed class ManageSystemControl : UserControl
             {
                 "Active" => ThemeHelper.Success,
                 "Inactive" => ThemeHelper.Warning,
-                "Archived" => ThemeHelper.GrayIcon,
+                "Archived" => ThemeHelper.Danger,
                 _ => ThemeHelper.GrayIcon
             };
         }
@@ -1801,7 +1801,12 @@ public sealed class ManageSystemControl : UserControl
 
     private void RefreshLogoPreview()
     {
+        foreach (Control control in _iconPreview.Controls)
+        {
+            control.Dispose();
+        }
         _iconPreview.Controls.Clear();
+
         if (string.Equals(_currentLogoMode, "File", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(_currentIconPath)
             && File.Exists(_currentIconPath))
@@ -1858,16 +1863,21 @@ public sealed class ManageSystemControl : UserControl
     private void RefreshPosterPreview()
     {
         _posterPreview.ImageLocation = null;
+        Image? oldImage = _posterPreview.Image;
+
         if (_useCustomPosterToggle.Checked
             && !string.IsNullOrWhiteSpace(_currentPosterPath)
             && File.Exists(_currentPosterPath))
         {
             _posterPreview.Image = null;
             _posterPreview.ImageLocation = _currentPosterPath;
-            return;
+        }
+        else
+        {
+            _posterPreview.Image = CreatePreviewPlaceholder("Default Login", "Branding", _posterPreview.Size);
         }
 
-        _posterPreview.Image = CreatePreviewPlaceholder("Default Login", "Branding", _posterPreview.Size);
+        oldImage?.Dispose();
     }
 
     private static Bitmap CreatePreviewPlaceholder(string title, string subtitle, Size size)
@@ -1878,8 +1888,8 @@ public sealed class ManageSystemControl : UserControl
         graphics.Clear(ThemeHelper.Background);
         using Pen borderPen = new(ThemeHelper.Border);
         graphics.DrawRectangle(borderPen, 0, 0, bitmap.Width - 1, bitmap.Height - 1);
-        using Font titleFont = FontHelper.SemiBold(size.Width > 120 ? 10F : 8.5F);
-        using Font subtitleFont = FontHelper.Regular(size.Width > 120 ? 8.5F : 7.5F);
+        Font titleFont = FontHelper.SemiBold(size.Width > 120 ? 10F : 8.5F);
+        Font subtitleFont = FontHelper.Regular(size.Width > 120 ? 8.5F : 7.5F);
         using SolidBrush titleBrush = new(ThemeHelper.TextPrimary);
         using SolidBrush subtitleBrush = new(ThemeHelper.TextSecondary);
         using StringFormat format = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
