@@ -13,8 +13,8 @@ namespace NatarakiCarRental.UserControls.Transactions;
 public sealed class TransactionControl : UserControl
 {
     private const float StatusPillHeight = 26F;
-    private const float PaymentStatusPillWidth = 76F;
-    private const float TransactionStatusPillWidth = 104F;
+    private const float PaymentStatusPillWidth = 92F;
+    private const float TransactionStatusPillWidth = 118F;
     private const int WideTransactionsGridThreshold = 1200;
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
@@ -385,16 +385,16 @@ public sealed class TransactionControl : UserControl
 
         _transactionsGrid.ScrollBars = ScrollBars.Vertical;
         _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        SetColumnSizing("TransactionCode", 15F, 105);
-        SetColumnSizing("Customer", 25F, 140);
-        SetColumnSizing("CarPlate", 25F, 150);
-        SetColumnSizing("Dates", 15F, 110);
-        SetColumnSizing("TotalAmount", 12F, 90);
-        SetColumnSizing("AmountPaid", 10F, 85);
-        SetColumnSizing("Balance", 10F, 85);
-        SetColumnSizing("Payment", 12F, 90);
-        SetColumnSizing("Status", 10F, 85);
-        SetFixedColumnWidth("Actions", 330);
+        SetColumnSizing("TransactionCode", 12F, 95);
+        SetColumnSizing("Customer", 24F, 130);
+        SetColumnSizing("CarPlate", 12F, 112);
+        SetColumnSizing("Dates", 9F, 100);
+        SetColumnSizing("TotalAmount", 7F, 74);
+        SetColumnSizing("AmountPaid", 7F, 74);
+        SetColumnSizing("Balance", 7F, 74);
+        SetColumnSizing("Payment", 9F, 100);
+        SetColumnSizing("Status", 10F, 118);
+        SetFixedColumnWidth("Actions", 470);
     }
 
     private int _lastHeight;
@@ -807,7 +807,16 @@ public sealed class TransactionControl : UserControl
 
     private static float GetActionPillWidth(Graphics graphics, Font font, string action)
     {
-        return graphics.MeasureString(action, font).Width + 22F;
+        float measuredWidth = graphics.MeasureString(action, font).Width + 22F;
+        float minimumWidth = action switch
+        {
+            "Start Rental" => 126F,
+            "Payment" or "Extend" or "Complete" or "Restore" => 92F,
+            "View" or "Edit" or "Archive" or "Cancel" => 74F,
+            _ => 74F
+        };
+
+        return Math.Max(measuredWidth, minimumWidth);
     }
 
     private async Task ViewTransactionAsync(int transactionId)

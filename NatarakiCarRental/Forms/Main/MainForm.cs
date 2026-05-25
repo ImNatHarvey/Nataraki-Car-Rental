@@ -153,19 +153,20 @@ public sealed class MainForm : Form
 
     private void RenderBrandIcon()
     {
+        foreach (Control control in _brandIconHost.Controls)
+        {
+            control.Dispose();
+        }
+
         _brandIconHost.Controls.Clear();
-        SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
-        string iconPath = settings.SystemIconPath;
-        if (string.Equals(settings.SystemLogoMode, "File", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(iconPath)
-            && File.Exists(iconPath)
-            && !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        Image? logoImage = BrandingHelper.LoadCurrentLogoImage();
+        if (logoImage is not null)
         {
             _brandIconHost.Controls.Add(new PictureBox
             {
                 Dock = DockStyle.Fill,
                 SizeMode = PictureBoxSizeMode.Zoom,
-                ImageLocation = iconPath,
+                Image = logoImage,
                 BackColor = ThemeHelper.Surface
             });
             return;
@@ -174,7 +175,7 @@ public sealed class MainForm : Form
         _brandIconHost.Controls.Add(new IconPictureBox
         {
             Dock = DockStyle.Fill,
-            IconChar = ResolveBuiltInLogoIcon(settings.SystemLogoIconKey),
+            IconChar = BrandingHelper.ResolveCurrentBuiltInLogoIcon(),
             IconColor = ThemeHelper.Primary,
             IconSize = 30,
             BackColor = ThemeHelper.Surface
@@ -183,36 +184,13 @@ public sealed class MainForm : Form
 
     private void ApplyWindowIcon()
     {
-        string iconPath = AppBrandingManager.CurrentSettings.SystemIconPath;
-        if (string.IsNullOrWhiteSpace(iconPath)
-            || !File.Exists(iconPath)
-            || !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        System.Drawing.Icon? icon = BrandingHelper.LoadCurrentWindowIcon();
+        if (icon is null)
         {
             return;
         }
 
-        try
-        {
-            Icon = new System.Drawing.Icon(iconPath);
-        }
-        catch
-        {
-            // Ignore invalid icon files and keep the default window icon.
-        }
-    }
-
-    private static IconChar ResolveBuiltInLogoIcon(string? key)
-    {
-        return key switch
-        {
-            "CarSide" => IconChar.CarSide,
-            "Taxi" => IconChar.Taxi,
-            "Truck" => IconChar.Truck,
-            "Road" => IconChar.Road,
-            "Warehouse" => IconChar.Warehouse,
-            "Key" => IconChar.Key,
-            _ => IconChar.Car
-        };
+        Icon = icon;
     }
 
     private void Navigate(string pageName)
@@ -390,7 +368,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private void LogoutButton_Click(object? sender, EventArgs e)
+    private async void LogoutButton_Click(object? sender, EventArgs e)
     {
         if (!MessageBoxHelper.Confirm("Are you sure you want to log out?"))
         {
@@ -398,6 +376,7 @@ public sealed class MainForm : Form
         }
 
         AccessControlService.Logout();
+        await AppBrandingManager.LoadSettingsAsync();
         LoggedOut?.Invoke(this, EventArgs.Empty);
         Close();
     }

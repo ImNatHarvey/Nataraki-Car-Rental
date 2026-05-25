@@ -35,6 +35,14 @@ public sealed class FleetScheduleDetailsForm : Form
     private readonly DateTimePicker _startDatePicker = CreateDatePicker();
     private readonly DateTimePicker _endDatePicker = CreateDatePicker();
     private readonly Label _validationLabel = new();
+    private readonly Label _codingDayLabel = new();
+    private readonly Label _codingDayWarningLabel = new();
+    private Label? _titleLabel;
+    private Label? _transactionManagedNoteLabel;
+    private Button? _cancelButton;
+    private Button? _saveButton;
+    private Button? _archiveButton;
+    private bool _isViewOnly;
 
     private IReadOnlyList<Car> _cars = [];
     private IReadOnlyList<Customer> _customers = [];
@@ -63,7 +71,7 @@ public sealed class FleetScheduleDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(920, 600);
+        ClientSize = new Size(920, 650);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -71,7 +79,7 @@ public sealed class FleetScheduleDetailsForm : Form
         _errorProvider.ContainerControl = this;
         _errorProvider.BlinkStyle = ErrorBlinkStyle.NeverBlink;
 
-        Label titleLabel = new()
+        _titleLabel = new Label
         {
             Text = Text,
             AutoSize = false,
@@ -108,7 +116,7 @@ public sealed class FleetScheduleDetailsForm : Form
         Panel contentPanel = new()
         {
             Location = new Point(32, _mode == FleetScheduleFormMode.Add ? 104 : 88),
-            Size = new Size(856, 420),
+            Size = new Size(856, 470),
             BackColor = ThemeHelper.Surface
         };
 
@@ -118,7 +126,7 @@ public sealed class FleetScheduleDetailsForm : Form
             ColumnCount = 1,
             RowCount = 3
         };
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 170F));
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
         contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180F));
 
@@ -127,35 +135,34 @@ public sealed class FleetScheduleDetailsForm : Form
         contentLayout.Controls.Add(CreateSection("Date Range", CreateDateRangeLayout()), 0, 2);
         contentPanel.Controls.Add(contentLayout);
 
-        Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(622, 540);
-        cancelButton.DialogResult = DialogResult.Cancel;
+        _cancelButton = CreateSecondaryButton("Cancel", 110, 38);
+        _cancelButton.Location = new Point(622, 590);
+        _cancelButton.DialogResult = DialogResult.Cancel;
 
-        Button saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
-        saveButton.Location = new Point(754, 540);
-        saveButton.Click += SaveButton_Click;
+        _saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
+        _saveButton.Location = new Point(754, 590);
+        _saveButton.Click += SaveButton_Click;
 
-        Button? archiveButton = null;
         if (_mode == FleetScheduleFormMode.Edit)
         {
-            archiveButton = CreateDangerButton("Archive", 110, 38);
-            archiveButton.Location = new Point(32, 540);
-            archiveButton.Click += ArchiveButton_Click;
+            _archiveButton = CreateDangerButton("Archive", 110, 38);
+            _archiveButton.Location = new Point(32, 590);
+            _archiveButton.Click += ArchiveButton_Click;
         }
 
-        Controls.Add(titleLabel);
+        Controls.Add(_titleLabel);
         Controls.Add(_validationLabel);
         Controls.Add(contentPanel);
-        Controls.Add(cancelButton);
-        Controls.Add(saveButton);
-        if (archiveButton is not null)
+        Controls.Add(_cancelButton);
+        Controls.Add(_saveButton);
+        if (_archiveButton is not null)
         {
-            Controls.Add(archiveButton);
+            Controls.Add(_archiveButton);
         }
         
         // Add blank area click handler to remove focus from inputs
         Click += (_, _) => ActiveControl = null;
-        CancelButton = cancelButton;
+        CancelButton = _cancelButton;
     }
 
     private async void FleetScheduleDetailsForm_Load(object? sender, EventArgs e)
@@ -233,6 +240,9 @@ public sealed class FleetScheduleDetailsForm : Form
         }
 
         _scheduleTypeComboBox.SelectedIndexChanged += (_, _) => UpdateStatusText();
+        _carComboBox.SelectedIndexChanged += (_, _) => UpdateCodingDayIndicator();
+        _startDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
+        _endDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
     }
 
     private async Task CheckTransactionLinkAndLoadAsync()
@@ -254,39 +264,39 @@ public sealed class FleetScheduleDetailsForm : Form
 
     private void SetToViewMode()
     {
-        // Actually we need to add View mode to enum if not there, or just disable all controls
+        _isViewOnly = true;
+        Text = "View Schedule";
+        if (_titleLabel is not null)
+        {
+            _titleLabel.Text = Text;
+        }
+
         _carComboBox.Enabled = false;
         _customerComboBox.Enabled = false;
         _scheduleTypeComboBox.Enabled = false;
         _startDatePicker.Enabled = false;
         _endDatePicker.Enabled = false;
 
-        Label linkLabel = new Label
+        _transactionManagedNoteLabel = new Label
         {
-            Text = "Rental lifecycle is managed via the Transaction module.",
+            Text = "This schedule is managed through the Transactions module.",
             AutoSize = true,
             Location = new Point(32, 58),
             Font = FontHelper.Regular(8.5F),
             ForeColor = ThemeHelper.TextSecondary
         };
-        Controls.Add(linkLabel);
+        Controls.Add(_transactionManagedNoteLabel);
         _validationLabel.Location = new Point(34, 76);
 
         if (_sourceSchedule is not null)
         {
             LoadSchedule(_sourceSchedule);
-            // Hide save button
-            foreach (Control ctrl in Controls)
+            if (_saveButton is not null) _saveButton.Visible = false;
+            if (_archiveButton is not null) _archiveButton.Visible = false;
+            if (_cancelButton is not null)
             {
-                if (ctrl is Button btn && (btn.Text == "Save Schedule" || btn.Text == "Archive"))
-                {
-                    btn.Visible = false;
-                }
-                if (ctrl is Button cancelBtn && (cancelBtn.Text == "Cancel" || cancelBtn.Text == "Close"))
-                {
-                    cancelBtn.Text = "Close";
-                    cancelBtn.Location = new Point(778, 462);
-                }
+                _cancelButton.Text = "Close";
+                _cancelButton.Location = new Point(778, 590);
             }
         }
     }
@@ -299,6 +309,7 @@ public sealed class FleetScheduleDetailsForm : Form
         DateTime date = _prefilledDate?.Date ?? DateTime.Today;
         _startDatePicker.Value = date;
         _endDatePicker.Value = date;
+        UpdateCodingDayIndicator();
     }
 
     private void LoadSchedule(FleetScheduleModel schedule)
@@ -309,6 +320,7 @@ public sealed class FleetScheduleDetailsForm : Form
         SetStatusText(schedule.Status);
         _startDatePicker.Value = schedule.StartDate;
         _endDatePicker.Value = schedule.EndDate;
+        UpdateCodingDayIndicator();
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)
@@ -322,6 +334,12 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             saveButton.Enabled = false;
             ClearValidationState();
+            if (_isViewOnly)
+            {
+                Close();
+                return;
+            }
+
             FleetScheduleModel schedule = BuildSchedule();
 
             if (_mode == FleetScheduleFormMode.Edit)
@@ -445,9 +463,34 @@ public sealed class FleetScheduleDetailsForm : Form
     private TableLayoutPanel CreateCarCustomerLayout()
     {
         TableLayoutPanel layout = CreateGrid(2, 1);
-        layout.Controls.Add(CreateInputPanel("Car *", _carComboBox), 0, 0);
+        layout.Padding = new Padding(0, 0, 0, 12);
+        layout.RowStyles.Clear();
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 128F));
+        layout.Controls.Add(CreateCarInputPanel(), 0, 0);
         layout.Controls.Add(CreateInputPanel("Customer", _customerComboBox), 1, 0);
         return layout;
+    }
+
+    private Panel CreateCarInputPanel()
+    {
+        Panel panel = CreateInputPanel("Car *", _carComboBox);
+
+        _codingDayLabel.AutoSize = false;
+        _codingDayLabel.Location = new Point(0, 60);
+        _codingDayLabel.Size = new Size(InputWidth, 24);
+        _codingDayLabel.Font = FontHelper.Regular(8.5F);
+        _codingDayLabel.ForeColor = ThemeHelper.TextSecondary;
+
+        _codingDayWarningLabel.AutoSize = false;
+        _codingDayWarningLabel.Location = new Point(0, 86);
+        _codingDayWarningLabel.Size = new Size(InputWidth, 34);
+        _codingDayWarningLabel.Font = FontHelper.Regular(8.5F);
+        _codingDayWarningLabel.ForeColor = ThemeHelper.Warning;
+        _codingDayWarningLabel.Visible = false;
+
+        panel.Controls.Add(_codingDayLabel);
+        panel.Controls.Add(_codingDayWarningLabel);
+        return panel;
     }
 
     private TableLayoutPanel CreateScheduleInfoLayout()
@@ -639,6 +682,50 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         _statusLabel.Text = status;
         _statusLabel.ForeColor = ThemeHelper.TextPrimary;
+    }
+
+    private void UpdateCodingDayIndicator()
+    {
+        Car? selectedCar = GetSelectedCar();
+        if (selectedCar is null)
+        {
+            _codingDayLabel.Text = "Coding Day: -";
+            _codingDayWarningLabel.Visible = false;
+            return;
+        }
+
+        string codingDay = string.IsNullOrWhiteSpace(selectedCar.CodingDay)
+            ? CarConstants.CodingDay.NotApplicable
+            : selectedCar.CodingDay;
+
+        _codingDayLabel.Text = $"Coding Day: {FormatCodingDayDisplay(codingDay)}";
+        bool hasConflict = CodingDayValidationHelper.DateRangeContainsCodingDay(
+            _startDatePicker.Value,
+            _endDatePicker.Value,
+            selectedCar.CodingDay);
+        _codingDayWarningLabel.Text = "Selected dates include this vehicle's coding restriction day.";
+        _codingDayWarningLabel.Visible = hasConflict;
+    }
+
+    private Car? GetSelectedCar()
+    {
+        int? carId = GetSelectedLookupId(_carComboBox);
+        return carId.HasValue
+            ? _cars.FirstOrDefault(car => car.CarId == carId.Value)
+            : null;
+    }
+
+    private static string FormatCodingDayDisplay(string codingDay)
+    {
+        return codingDay switch
+        {
+            CarConstants.CodingDay.Monday => "Monday (1 & 2)",
+            CarConstants.CodingDay.Tuesday => "Tuesday (3 & 4)",
+            CarConstants.CodingDay.Wednesday => "Wednesday (5 & 6)",
+            CarConstants.CodingDay.Thursday => "Thursday (7 & 8)",
+            CarConstants.CodingDay.Friday => "Friday (9 & 0)",
+            _ => CarConstants.CodingDay.NotApplicable
+        };
     }
 
     private string GetSelectedStatusValue()

@@ -14,6 +14,8 @@ public sealed class LoginForm : Form
     private readonly TextBox _passwordTextBox = ControlFactory.CreatePasswordTextBox();
     private readonly BorderedPanel _passwordFieldPanel = new();
     private readonly IconButton _passwordPreviewButton = new();
+    private readonly Panel _brandingPanel = new();
+    private bool _isReturningFromLogout;
 
     public LoginForm()
     {
@@ -38,63 +40,9 @@ public sealed class LoginForm : Form
         rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-        Panel brandingPanel = new()
-        {
-            Dock = DockStyle.Fill,
-            BackColor = ThemeHelper.ContentBackground
-        };
-
-        if (AppBrandingManager.CurrentSettings.UseCustomLoginPoster && 
-            !string.IsNullOrWhiteSpace(AppBrandingManager.CurrentSettings.LoginPosterPath) &&
-            File.Exists(AppBrandingManager.CurrentSettings.LoginPosterPath))
-        {
-            PictureBox posterBox = new()
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                ImageLocation = AppBrandingManager.CurrentSettings.LoginPosterPath,
-                BackColor = ThemeHelper.ContentBackground
-            };
-            brandingPanel.Controls.Add(posterBox);
-        }
-        else
-        {
-            Control brandIcon = CreateBrandIcon(new Point(56, 140), new Size(52, 52), ThemeHelper.ContentBackground);
-
-            Label titleLabel = new()
-            {
-                AutoSize = false,
-                Text = AppBrandingManager.CurrentSettings.BusinessName,
-                Font = FontHelper.Title(20F),
-                ForeColor = ThemeHelper.Primary,
-                Location = new Point(56, 204),
-                Size = new Size(330, 34),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            Label descriptionLabel = new()
-            {
-                AutoSize = false,
-                Text = AppBrandingManager.CurrentSettings.LoginDescription,
-                Font = FontHelper.Regular(10.5F),
-                ForeColor = ThemeHelper.TextSecondary,
-                Location = new Point(58, 248),
-                Size = new Size(300, 50),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            Panel accentLine = new()
-            {
-                BackColor = ThemeHelper.Primary,
-                Location = new Point(58, 318),
-                Size = new Size(72, 3)
-            };
-
-            brandingPanel.Controls.Add(brandIcon);
-            brandingPanel.Controls.Add(titleLabel);
-            brandingPanel.Controls.Add(descriptionLabel);
-            brandingPanel.Controls.Add(accentLine);
-        }
+        _brandingPanel.Dock = DockStyle.Fill;
+        _brandingPanel.BackColor = ThemeHelper.ContentBackground;
+        RefreshBrandingPanel();
 
         Panel formPanel = new()
         {
@@ -146,35 +94,99 @@ public sealed class LoginForm : Form
         formPanel.Controls.Add(_passwordFieldPanel);
         formPanel.Controls.Add(loginButton);
 
-        rootLayout.Controls.Add(brandingPanel, 0, 0);
+        rootLayout.Controls.Add(_brandingPanel, 0, 0);
         rootLayout.Controls.Add(formPanel, 1, 0);
 
         Controls.Add(rootLayout);
         AcceptButton = loginButton;
     }
 
+    private void RefreshBrandingPanel()
+    {
+        DisposeBrandingPanelControls();
+        Text = AppBrandingManager.CurrentSettings.BusinessName;
+        ApplyWindowIcon(this);
+
+        if (AppBrandingManager.CurrentSettings.UseCustomLoginPoster &&
+            !string.IsNullOrWhiteSpace(AppBrandingManager.CurrentSettings.LoginPosterPath) &&
+            File.Exists(AppBrandingManager.CurrentSettings.LoginPosterPath))
+        {
+            PictureBox posterBox = new()
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                ImageLocation = AppBrandingManager.CurrentSettings.LoginPosterPath,
+                BackColor = ThemeHelper.ContentBackground
+            };
+            _brandingPanel.Controls.Add(posterBox);
+            return;
+        }
+
+        Control brandIcon = CreateBrandIcon(new Point(56, 140), new Size(52, 52), ThemeHelper.ContentBackground);
+
+        Label titleLabel = new()
+        {
+            AutoSize = false,
+            Text = AppBrandingManager.CurrentSettings.BusinessName,
+            Font = FontHelper.Title(20F),
+            ForeColor = ThemeHelper.Primary,
+            Location = new Point(56, 204),
+            Size = new Size(330, 34),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        Label descriptionLabel = new()
+        {
+            AutoSize = false,
+            Text = AppBrandingManager.CurrentSettings.LoginDescription,
+            Font = FontHelper.Regular(10.5F),
+            ForeColor = ThemeHelper.TextSecondary,
+            Location = new Point(58, 248),
+            Size = new Size(300, 50),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        Panel accentLine = new()
+        {
+            BackColor = ThemeHelper.Primary,
+            Location = new Point(58, 318),
+            Size = new Size(72, 3)
+        };
+
+        _brandingPanel.Controls.Add(brandIcon);
+        _brandingPanel.Controls.Add(titleLabel);
+        _brandingPanel.Controls.Add(descriptionLabel);
+        _brandingPanel.Controls.Add(accentLine);
+    }
+
+    private void DisposeBrandingPanelControls()
+    {
+        foreach (Control control in _brandingPanel.Controls)
+        {
+            control.Dispose();
+        }
+
+        _brandingPanel.Controls.Clear();
+    }
+
     private static Control CreateBrandIcon(Point location, Size size, Color backColor)
     {
-        SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
-        string iconPath = settings.SystemIconPath;
-        if (string.Equals(settings.SystemLogoMode, "File", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(iconPath)
-            && File.Exists(iconPath)
-            && !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        Image? logoImage = BrandingHelper.LoadCurrentLogoImage();
+        if (logoImage is not null)
         {
             return new PictureBox
             {
                 Location = location,
                 Size = size,
                 SizeMode = PictureBoxSizeMode.Zoom,
-                ImageLocation = iconPath,
+                Image = logoImage,
                 BackColor = backColor
             };
         }
 
         return new IconPictureBox
         {
-            IconChar = ResolveBuiltInLogoIcon(settings.SystemLogoIconKey),
+            IconChar = BrandingHelper.ResolveCurrentBuiltInLogoIcon(),
             IconColor = ThemeHelper.Primary,
             IconSize = 46,
             BackColor = backColor,
@@ -183,38 +195,15 @@ public sealed class LoginForm : Form
         };
     }
 
-    private static IconChar ResolveBuiltInLogoIcon(string? key)
-    {
-        return key switch
-        {
-            "CarSide" => IconChar.CarSide,
-            "Taxi" => IconChar.Taxi,
-            "Truck" => IconChar.Truck,
-            "Road" => IconChar.Road,
-            "Warehouse" => IconChar.Warehouse,
-            "Key" => IconChar.Key,
-            _ => IconChar.Car
-        };
-    }
-
     private static void ApplyWindowIcon(Form form)
     {
-        string iconPath = AppBrandingManager.CurrentSettings.SystemIconPath;
-        if (string.IsNullOrWhiteSpace(iconPath)
-            || !File.Exists(iconPath)
-            || !string.Equals(Path.GetExtension(iconPath), ".ico", StringComparison.OrdinalIgnoreCase))
+        System.Drawing.Icon? icon = BrandingHelper.LoadCurrentWindowIcon();
+        if (icon is null)
         {
             return;
         }
 
-        try
-        {
-            form.Icon = new System.Drawing.Icon(iconPath);
-        }
-        catch
-        {
-            // Ignore invalid icon files and keep the default window icon.
-        }
+        form.Icon = icon;
     }
 
     private async void LoginButton_Click(object? sender, EventArgs e)
@@ -291,12 +280,20 @@ public sealed class LoginForm : Form
         MainForm mainForm = new(user);
         mainForm.LoggedOut += (_, _) =>
         {
+            RefreshBrandingPanel();
+            _isReturningFromLogout = true;
             _passwordTextBox.Clear();
             Show();
             _passwordTextBox.Focus();
         };
         mainForm.FormClosed += (_, _) =>
         {
+            if (_isReturningFromLogout)
+            {
+                _isReturningFromLogout = false;
+                return;
+            }
+
             if (!Visible)
             {
                 Close();

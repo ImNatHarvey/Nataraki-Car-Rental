@@ -42,15 +42,7 @@ public sealed class AppMessageDialog : Form
             BackColor = accentColor
         };
 
-        IconPictureBox iconBox = new()
-        {
-            IconChar = icon,
-            IconColor = accentColor,
-            IconSize = 34,
-            BackColor = ThemeHelper.Surface,
-            Location = new Point(28, 30),
-            Size = new Size(40, 40)
-        };
+        Control logoControl = CreateBrandingLogoControl(accentColor);
 
         Label titleLabel = new()
         {
@@ -100,7 +92,7 @@ public sealed class AppMessageDialog : Form
         }
 
         Controls.Add(accentPanel);
-        Controls.Add(iconBox);
+        Controls.Add(logoControl);
         Controls.Add(titleLabel);
         Controls.Add(messageLabel);
         Controls.Add(primaryButton);
@@ -112,5 +104,33 @@ public sealed class AppMessageDialog : Form
         }
 
         AcceptButton = primaryButton;
+    }
+
+    private static Control CreateBrandingLogoControl(Color accentColor)
+    {
+        Image? logoImage = BrandingHelper.LoadCurrentLogoImage();
+        if (logoImage is not null)
+        {
+            return new PictureBox
+            {
+                Image = logoImage,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = ThemeHelper.Surface,
+                Location = new Point(28, 30),
+                Size = new Size(40, 40)
+            };
+        }
+
+        return new IconPictureBox
+        {
+            IconChar = BrandingHelper.ResolveCurrentBuiltInLogoIcon(),
+            IconColor = string.Equals(AppBrandingManager.CurrentSettings.SystemLogoMode, "BuiltIn", StringComparison.OrdinalIgnoreCase)
+                ? ThemeHelper.Primary
+                : accentColor,
+            IconSize = 34,
+            BackColor = ThemeHelper.Surface,
+            Location = new Point(28, 30),
+            Size = new Size(40, 40)
+        };
     }
 }
