@@ -851,7 +851,7 @@ public sealed class ReportRepository
                 FROM dbo.Customers AS customers
                 INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
                 INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
-                WHERE customers.PhoneNumber <> N'00000000000'
+                WHERE customers.IsWalkIn = 0
                   AND transactions.IsArchived = 0
                   AND payments.IsArchived = 0
                   AND payments.PaymentDate >= @From
@@ -866,7 +866,7 @@ public sealed class ReportRepository
                     RentalCount = COUNT(1)
                 FROM dbo.Customers AS customers
                 INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
-                WHERE customers.PhoneNumber <> N'00000000000'
+                WHERE customers.IsWalkIn = 0
                   AND transactions.IsArchived = 0
                   AND transactions.StartDate <= CONVERT(date, @To)
                   AND transactions.EndDate >= CONVERT(date, @From)
@@ -878,13 +878,13 @@ public sealed class ReportRepository
                     FROM dbo.Customers
                     WHERE IsArchived = 0
                       AND IsBlacklisted = 0
-                      AND PhoneNumber <> N'00000000000'
+                      AND IsWalkIn = 0
                 ),
                 NewCustomers = (
                     SELECT COUNT(1)
                     FROM dbo.Customers
                     WHERE IsArchived = 0
-                      AND PhoneNumber <> N'00000000000'
+                      AND IsWalkIn = 0
                       AND CreatedAt >= @From
                       AND CreatedAt <= @To
                 ),
@@ -897,7 +897,7 @@ public sealed class ReportRepository
                     FROM dbo.Customers
                     WHERE IsArchived = 0
                       AND IsBlacklisted = 1
-                      AND PhoneNumber <> N'00000000000'
+                      AND IsWalkIn = 0
                 ),
                 CustomersWithLateReturns = (
                     SELECT COUNT(DISTINCT CustomerId)
@@ -949,7 +949,7 @@ public sealed class ReportRepository
             FROM dbo.Customers AS customers
             INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
             INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
-            WHERE customers.PhoneNumber <> N'00000000000'
+            WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
               AND payments.IsArchived = 0
               AND payments.PaymentDate >= @From
@@ -975,7 +975,7 @@ public sealed class ReportRepository
                 LastRentalDate = MAX(transactions.StartDate)
             FROM dbo.Customers AS customers
             INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
-            WHERE customers.PhoneNumber <> N'00000000000'
+            WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
               AND transactions.StartDate <= CONVERT(date, @To)
               AND transactions.EndDate >= CONVERT(date, @From)
@@ -1001,7 +1001,7 @@ public sealed class ReportRepository
                 transactions.PaymentStatus
             FROM dbo.Transactions AS transactions
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
-            WHERE customers.PhoneNumber <> N'00000000000'
+            WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
               AND transactions.PaymentStatus IN (N'Unpaid', N'Partial')
               AND transactions.CreatedAt >= @From
@@ -1028,7 +1028,7 @@ public sealed class ReportRepository
             FROM dbo.Transactions AS transactions
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
-            WHERE customers.PhoneNumber <> N'00000000000'
+            WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
               AND transactions.TransactionStatus = N'Active'
               AND transactions.EndDate < CONVERT(date, @Today)
@@ -1055,7 +1055,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Transactions AS transactions ON transactions.TransactionId = payments.TransactionId
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
-            WHERE customers.PhoneNumber <> N'00000000000'
+            WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
               AND payments.IsArchived = 0
               AND payments.PaymentCategory = N'Damage Fee'
@@ -1087,7 +1087,7 @@ public sealed class ReportRepository
             FROM dbo.Customers AS customers
             WHERE customers.IsArchived = 0
               AND customers.IsBlacklisted = 1
-              AND customers.PhoneNumber <> N'00000000000'
+              AND customers.IsWalkIn = 0
             ORDER BY customers.LastName, customers.FirstName;
             """;
 

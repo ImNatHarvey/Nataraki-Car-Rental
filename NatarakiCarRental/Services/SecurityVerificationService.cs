@@ -39,16 +39,20 @@ public sealed class SecurityVerificationService
 
     public async Task<bool> VerifyOwnerPasswordAsync(string password)
     {
-        if (string.IsNullOrWhiteSpace(password)) return false;
+        if (string.IsNullOrEmpty(password)) return false;
 
-        // Fetch owner account (assuming only one is marked IsOwner=1 for demo/simplicity)
-        var users = await _userService.SearchUsersAsync();
-        var owner = users.FirstOrDefault(u => u.IsOwner);
-        if (owner == null) return false;
+        // Owner verification must read the active Owner row fresh each time.
+        // Login and verification both validate BCrypt hashes from dbo.Users.PasswordHash.
+        User? ownerDetails = await _userService.GetActiveOwnerAsync();
+        if (ownerDetails == null || string.IsNullOrWhiteSpace(ownerDetails.PasswordHash)) return false;
 
-        User? ownerDetails = await _userService.GetUserByIdAsync(owner.UserId);
-        if (ownerDetails == null) return false;
-
-        return BCrypt.Net.BCrypt.Verify(password, ownerDetails.PasswordHash);
+        try
+        {
+            return BCrypt.Net.BCrypt.Verify(password, ownerDetails.PasswordHash);
+        }
+        catch (BCrypt.Net.SaltParseException)
+        {
+            return false;
+        }
     }
 }

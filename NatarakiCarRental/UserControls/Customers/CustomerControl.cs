@@ -363,8 +363,7 @@ public sealed class CustomerControl : UserControl
         else if (_filter == CustomerListFilter.Blacklisted)
         {
             AddActionColumn("EditAction", "", "Edit");
-            AddActionColumn("RemoveBlacklistAction", "", "Remove");
-            AddActionColumn("ArchiveAction", "", "Archive");
+            AddActionColumn("RemoveBlacklistAction", "", "Remove Blacklist");
         }
         else
         {
@@ -390,7 +389,7 @@ public sealed class CustomerControl : UserControl
         SetFillWeight("ViewAction", 58);
         SetFillWeight("EditAction", 58);
         SetFillWeight("BlacklistAction", 74);
-        SetFillWeight("RemoveBlacklistAction", 74);
+        SetFillWeight("RemoveBlacklistAction", 120);
         SetFillWeight("ArchiveAction", 62);
         SetFillWeight("RestoreAction", 68);
     }

@@ -60,76 +60,52 @@ public sealed class RoleRepository
         const string sql = """
             IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
             BEGIN
-                ;WITH OwnerCandidates AS
-                (
-                    SELECT
-                        r.RoleId,
-                        KeepRank = ROW_NUMBER() OVER
-                        (
-                            ORDER BY
-                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
-                                r.IsArchived,
-                                r.RoleId
-                        )
-                    FROM dbo.Roles r
-                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                )
-                UPDATE r
+                DECLARE @CanonicalOwnerRoleId int;
+
+                SELECT TOP 1 @CanonicalOwnerRoleId = r.RoleId
+                FROM dbo.Roles r
+                WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                ORDER BY
+                    CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                    r.IsArchived,
+                    r.RoleId;
+
+                IF @CanonicalOwnerRoleId IS NULL
+                BEGIN
+                    RETURN;
+                END
+
+                UPDATE dbo.Roles
                 SET RoleName = N'Owner',
                     IsSystemRole = 1,
                     IsActive = 1,
                     IsArchived = 0,
                     UpdatedAt = sysdatetime()
-                FROM dbo.Roles r
-                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
-                WHERE c.KeepRank = 1;
+                WHERE RoleId = @CanonicalOwnerRoleId;
 
-                ;WITH OwnerCandidates AS
-                (
-                    SELECT
-                        r.RoleId,
-                        KeepRank = ROW_NUMBER() OVER
-                        (
-                            ORDER BY
-                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
-                                r.IsArchived,
-                                r.RoleId
-                        )
-                    FROM dbo.Roles r
-                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                )
+                UPDATE u
+                SET RoleId = @CanonicalOwnerRoleId,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Users u
+                INNER JOIN dbo.Roles r ON r.RoleId = u.RoleId
+                WHERE r.RoleId <> @CanonicalOwnerRoleId
+                  AND (
+                        UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                        OR UPPER(LTRIM(RTRIM(r.RoleName))) LIKE N'OWNER DUPLICATE%'
+                      );
+
                 UPDATE r
                 SET IsArchived = 1,
                     IsActive = 0,
                     IsSystemRole = 0,
                     UpdatedAt = sysdatetime()
                 FROM dbo.Roles r
-                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
-                WHERE c.KeepRank > 1
+                WHERE r.RoleId <> @CanonicalOwnerRoleId
+                  AND (
+                        UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                        OR UPPER(LTRIM(RTRIM(r.RoleName))) LIKE N'OWNER DUPLICATE%'
+                      )
                   AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
-
-                ;WITH OwnerCandidates AS
-                (
-                    SELECT
-                        r.RoleId,
-                        KeepRank = ROW_NUMBER() OVER
-                        (
-                            ORDER BY
-                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
-                                r.IsArchived,
-                                r.RoleId
-                        )
-                    FROM dbo.Roles r
-                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                )
-                UPDATE r
-                SET RoleName = CONCAT(N'Owner Duplicate ', r.RoleId),
-                    IsSystemRole = 0,
-                    UpdatedAt = sysdatetime()
-                FROM dbo.Roles r
-                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
-                WHERE c.KeepRank > 1
-                  AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
             END;
             """;
         using var connection = _connectionFactory.CreateConnection();

@@ -30,6 +30,11 @@ public sealed class UserService
         return _userRepository.GetByIdAsync(userId);
     }
 
+    public Task<User?> GetActiveOwnerAsync()
+    {
+        return _userRepository.GetActiveOwnerAsync();
+    }
+
     public async Task CreateUserAsync(CreateUserRequest request, int currentUserId)
     {
         AccessControlService.EnforcePermission("ManageSystem.Users");

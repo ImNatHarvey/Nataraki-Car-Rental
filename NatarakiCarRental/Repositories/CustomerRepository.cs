@@ -35,6 +35,7 @@ public sealed class CustomerRepository
                 StreetAddress,
                 IsBlacklisted,
                 BlacklistReason,
+                IsWalkIn,
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
@@ -67,6 +68,7 @@ public sealed class CustomerRepository
                 StreetAddress,
                 IsBlacklisted,
                 BlacklistReason,
+                IsWalkIn,
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
@@ -89,64 +91,104 @@ public sealed class CustomerRepository
             IF EXISTS (
                 SELECT 1
                 FROM dbo.Customers WITH (UPDLOCK, HOLDLOCK)
-                WHERE PhoneNumber = N'00000000000'
+                WHERE IsWalkIn = 1
             )
             BEGIN
-                UPDATE dbo.Customers
-                SET FirstName = N'Walk-In',
-                    LastName = N'Customer',
-                    IsBlacklisted = 0,
-                    BlacklistReason = NULL,
-                    IsArchived = 0,
-                    ArchivedAt = NULL,
-                    UpdatedAt = sysdatetime()
-                WHERE PhoneNumber = N'00000000000';
+                SELECT TOP 1
+                    CustomerId,
+                    FirstName,
+                    LastName,
+                    Email,
+                    PhoneNumber,
+                    Region,
+                    Province,
+                    City,
+                    Barangay,
+                    StreetAddress,
+                    IsBlacklisted,
+                    BlacklistReason,
+                    IsWalkIn,
+                    IsArchived,
+                    DriverLicensePath,
+                    ProofOfBillingPath,
+                    ValidIdFilePath,
+                    SelfieWithValidIdFilePath,
+                    CreatedAt,
+                    UpdatedAt,
+                    ArchivedAt
+                FROM dbo.Customers
+                WHERE IsWalkIn = 1
+                ORDER BY IsArchived, CustomerId;
             END
             ELSE
             BEGIN
-                INSERT INTO dbo.Customers
-                (
+                IF EXISTS (
+                    SELECT 1
+                    FROM dbo.Customers WITH (UPDLOCK, HOLDLOCK)
+                    WHERE PhoneNumber = N'00000000000'
+                )
+                BEGIN
+                    UPDATE dbo.Customers
+                    SET IsWalkIn = 1,
+                        UpdatedAt = sysdatetime()
+                    WHERE CustomerId =
+                    (
+                        SELECT TOP 1 CustomerId
+                        FROM dbo.Customers
+                        WHERE PhoneNumber = N'00000000000'
+                        ORDER BY IsArchived, CustomerId
+                    );
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO dbo.Customers
+                    (
+                        FirstName,
+                        LastName,
+                        PhoneNumber,
+                        IsBlacklisted,
+                        BlacklistReason,
+                        IsWalkIn,
+                        IsArchived
+                    )
+                    VALUES
+                    (
+                        N'Walk-In',
+                        N'Customer',
+                        N'00000000000',
+                        0,
+                        NULL,
+                        1,
+                        0
+                    );
+                END;
+
+                SELECT TOP 1
+                    CustomerId,
                     FirstName,
                     LastName,
+                    Email,
                     PhoneNumber,
+                    Region,
+                    Province,
+                    City,
+                    Barangay,
+                    StreetAddress,
                     IsBlacklisted,
                     BlacklistReason,
-                    IsArchived
-                )
-                VALUES
-                (
-                    N'Walk-In',
-                    N'Customer',
-                    N'00000000000',
-                    0,
-                    NULL,
-                    0
-                );
+                    IsWalkIn,
+                    IsArchived,
+                    DriverLicensePath,
+                    ProofOfBillingPath,
+                    ValidIdFilePath,
+                    SelfieWithValidIdFilePath,
+                    CreatedAt,
+                    UpdatedAt,
+                    ArchivedAt
+                FROM dbo.Customers
+                WHERE IsWalkIn = 1
+                ORDER BY IsArchived, CustomerId;
             END;
-
-            SELECT
-                CustomerId,
-                FirstName,
-                LastName,
-                Email,
-                PhoneNumber,
-                Region,
-                Province,
-                City,
-                Barangay,
-                StreetAddress,
-                IsBlacklisted,
-                BlacklistReason,
-                IsArchived,
-                DriverLicensePath,
-                ProofOfBillingPath,
-                ValidIdFilePath,
-                SelfieWithValidIdFilePath,
-                CreatedAt,
-                UpdatedAt,
-                ArchivedAt
-            FROM dbo.Customers
-            WHERE PhoneNumber = N'00000000000';
             """;
 
         IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
@@ -183,6 +225,7 @@ public sealed class CustomerRepository
                 StreetAddress,
                 IsBlacklisted,
                 BlacklistReason,
+                IsWalkIn,
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
@@ -192,7 +235,7 @@ public sealed class CustomerRepository
                 UpdatedAt,
                 ArchivedAt
             FROM dbo.Customers
-            WHERE PhoneNumber <> N'00000000000'
+            WHERE IsWalkIn = 0
               AND (
                     (@Filter = 0 AND IsArchived = 0 AND IsBlacklisted = 0)
                     OR (@Filter = 1 AND IsArchived = 0 AND IsBlacklisted = 1)
@@ -241,7 +284,7 @@ public sealed class CustomerRepository
                 BlacklistedCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 1 THEN 1 END),
                 ArchivedCustomers = COUNT(CASE WHEN IsArchived = 1 THEN 1 END)
             FROM dbo.Customers
-            WHERE PhoneNumber <> N'00000000000';
+            WHERE IsWalkIn = 0;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -266,6 +309,7 @@ public sealed class CustomerRepository
                 StreetAddress,
                 IsBlacklisted,
                 BlacklistReason,
+                IsWalkIn,
                 IsArchived,
                 DriverLicensePath,
                 ProofOfBillingPath,
@@ -276,7 +320,7 @@ public sealed class CustomerRepository
                 ArchivedAt
             FROM dbo.Customers
             WHERE IsArchived = 0
-              AND PhoneNumber <> N'00000000000'
+              AND IsWalkIn = 0
             ORDER BY CreatedAt DESC, CustomerId DESC;
             """;
 

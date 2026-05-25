@@ -105,10 +105,31 @@ public sealed class UserRepository
     {
         await EnsureOwnerUserFlagAsync();
         const string sql = """
-            SELECT TOP 1 *
-            FROM dbo.Users
-            WHERE IsOwner = 1 AND IsActive = 1 AND IsArchived = 0
-            ORDER BY COALESCE(UpdatedAt, CreatedAt) DESC, UserId DESC;
+            SELECT TOP 1
+                u.UserId,
+                u.RoleId,
+                u.Username,
+                u.PasswordHash,
+                u.FirstName,
+                u.LastName,
+                u.Email,
+                u.PhoneNumber,
+                u.IsActive,
+                IsOwner = CAST(1 AS bit),
+                u.IsArchived,
+                u.CreatedAt,
+                u.UpdatedAt,
+                u.LastLoginAt,
+                u.ArchivedAt
+            FROM dbo.Users u
+            LEFT JOIN dbo.Roles r ON r.RoleId = u.RoleId
+            WHERE u.IsOwner = 1
+              AND u.IsActive = 1
+              AND u.IsArchived = 0
+            ORDER BY
+                CASE WHEN UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 0 ELSE 1 END,
+                COALESCE(u.UpdatedAt, u.CreatedAt) DESC,
+                u.UserId DESC;
             """;
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<User>(sql);

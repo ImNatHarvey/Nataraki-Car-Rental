@@ -301,6 +301,15 @@ public sealed class FleetScheduleService
                 [new ValidationFailure(nameof(FleetSchedule.CarId), "Selected car was not found or is archived.")]);
         }
 
+        if (schedule.ScheduleType is FleetScheduleConstants.Type.Reservation or FleetScheduleConstants.Type.Rental
+            && CodingDayValidationHelper.DateRangeContainsCodingDay(schedule.StartDate, schedule.EndDate, car.CodingDay))
+        {
+            throw new ValidationException(
+                [new ValidationFailure(
+                    nameof(FleetSchedule.StartDate),
+                    $"This car cannot be rented on its coding day: {car.CodingDay}.")]);
+        }
+
         if (schedule.CustomerId.HasValue)
         {
             Customer? customer = await _customerRepository.GetCustomerByIdAsync(schedule.CustomerId.Value);

@@ -21,51 +21,39 @@ internal static class Program
 
         try
         {
-            AddressDataSeeder.EnsureSeededAsync().GetAwaiter().GetResult();
+            Task.Run(InitializeApplicationAsync).GetAwaiter().GetResult();
         }
         catch (Exception exception)
         {
             MessageBox.Show(
                 BuildStartupErrorMessage(exception),
-                "Address Data Setup Failed",
+                "Startup Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
-
-            return;
-        }
-
-        try
-        {
-            DatabaseInitializer.ResetApplicationDataIfRequested();
-            DatabaseInitializer.Initialize();
-            AppBrandingManager.LoadSettingsAsync().GetAwaiter().GetResult();
-        }
-        catch (Exception exception)
-        {
-            MessageBoxHelper.ShowDatabaseError(exception);
             return;
         }
 
         Application.Run(new LoginForm());
     }
 
+    private static async Task InitializeApplicationAsync()
+    {
+        await AddressDataSeeder.EnsureSeededAsync();
+        DatabaseInitializer.ResetApplicationDataIfRequested();
+        DatabaseInitializer.Initialize();
+        await AppBrandingManager.LoadSettingsAsync();
+    }
+
     private static string BuildStartupErrorMessage(Exception exception)
     {
-        string innerExceptionDetails = exception.InnerException is null
-            ? "None"
-            : exception.InnerException.ToString();
-
         return
-            "The local Philippine address database could not be prepared during startup." +
+            "Nataraki Car Rental could not complete startup initialization." +
             Environment.NewLine +
             Environment.NewLine +
-            $"Message: {exception.Message}" +
+            "Please check the database connection and local app data permissions, then try again." +
             Environment.NewLine +
             Environment.NewLine +
-            $"Inner exception: {innerExceptionDetails}" +
-            Environment.NewLine +
-            Environment.NewLine +
-            $"Stack trace:{Environment.NewLine}{exception.StackTrace}";
+            $"Details: {exception.Message}";
     }
 
     private static void Application_ThreadException(object sender, System.Threading.ThreadExceptionEventArgs e)

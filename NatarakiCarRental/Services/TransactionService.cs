@@ -887,7 +887,13 @@ public sealed class TransactionService
     {
         if (string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName))
         {
-            return await _customerRepository.GetOrCreateWalkInCustomerAsync();
+            Customer walkInCustomer = await _customerRepository.GetOrCreateWalkInCustomerAsync();
+            if (walkInCustomer.IsArchived)
+            {
+                throw Validation(nameof(CreateWalkInTransactionRequest.CustomerId), "Walk-In Customer is archived. Restore the protected system customer before creating unnamed walk-in transactions.");
+            }
+
+            return walkInCustomer;
         }
 
         if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))

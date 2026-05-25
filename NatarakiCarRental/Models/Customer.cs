@@ -14,6 +14,7 @@ public sealed class Customer
     public string? StreetAddress { get; set; }
     public bool IsBlacklisted { get; set; }
     public string? BlacklistReason { get; set; }
+    public bool IsWalkIn { get; set; }
     public bool IsArchived { get; set; }
     public string? DriverLicensePath { get; set; }
     public string? ProofOfBillingPath { get; set; }

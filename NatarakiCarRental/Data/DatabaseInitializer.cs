@@ -64,9 +64,6 @@ public static class DatabaseInitializer
 
     private static void CreateTablesIfMissing()
     {
-        string availableStatus = SqlLiteral(CarConstants.Status.Available);
-        string validStatuses = SqlInList(CarConstants.Status.All);
-
         // 1. Roles Table
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Roles', N'U') IS NULL
@@ -180,7 +177,7 @@ public static class DatabaseInitializer
             """);
 
         // 3. Cars Table & Schema Updates
-        ExecuteDatabaseCommand($$"""
+        ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Cars', N'U') IS NULL
             BEGIN
                 CREATE TABLE dbo.Cars
@@ -196,7 +193,7 @@ public static class DatabaseInitializer
                     FuelType nvarchar(50) NULL,
                     SeatingCapacity int NULL,
                     RatePerDay decimal(18,2) NOT NULL,
-                    Status nvarchar(30) NOT NULL DEFAULT {{availableStatus}},
+                    Status nvarchar(30) NOT NULL DEFAULT N'Available',
                     CodingDay nvarchar(30) NULL,
                     Mileage int NULL,
                     RegistrationExpirationDate date NULL,
@@ -211,7 +208,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Cars_Mileage_NonNegative CHECK (Mileage IS NULL OR Mileage >= 0),
                     CONSTRAINT CK_Cars_SeatingCapacity_Positive CHECK (SeatingCapacity IS NULL OR SeatingCapacity > 0),
                     CONSTRAINT CK_Cars_Year_Valid CHECK ([Year] IS NULL OR [Year] BETWEEN 1000 AND 9999),
-                    CONSTRAINT CK_Cars_Status_Valid CHECK (Status IN ({{validStatuses}}))
+                    CONSTRAINT CK_Cars_Status_Valid CHECK (Status IN (N'Available', N'Rented', N'Maintenance'))
                 );
             END;
             """);
@@ -241,7 +238,7 @@ public static class DatabaseInitializer
             END;
             """);
 
-        ExecuteDatabaseCommand($$"""
+        ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL
             BEGIN
                 IF OBJECT_ID(N'dbo.CK_Cars_RatePerDay_Positive', N'C') IS NULL
@@ -271,7 +268,7 @@ public static class DatabaseInitializer
                 IF OBJECT_ID(N'dbo.CK_Cars_Status_Valid', N'C') IS NULL
                 BEGIN
                     ALTER TABLE dbo.Cars WITH CHECK
-                    ADD CONSTRAINT CK_Cars_Status_Valid CHECK (Status IN ({{validStatuses}}));
+                    ADD CONSTRAINT CK_Cars_Status_Valid CHECK (Status IN (N'Available', N'Rented', N'Maintenance'));
                 END;
             END;
             """);
@@ -362,6 +359,7 @@ public static class DatabaseInitializer
                     StreetAddress nvarchar(255) NULL,
                     IsBlacklisted bit NOT NULL DEFAULT 0,
                     BlacklistReason nvarchar(255) NULL,
+                    IsWalkIn bit NOT NULL DEFAULT 0,
                     IsArchived bit NOT NULL DEFAULT 0,
                     DriverLicensePath nvarchar(500) NULL,
                     ProofOfBillingPath nvarchar(500) NULL,
@@ -858,6 +856,11 @@ public static class DatabaseInitializer
                 BEGIN
                     ALTER TABLE dbo.Customers ADD SelfieWithValidIdFilePath nvarchar(500) NULL;
                 END;
+
+                IF COL_LENGTH(N'dbo.Customers', N'IsWalkIn') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD IsWalkIn bit NOT NULL DEFAULT 0;
+                END;
             END;
             """);
 
@@ -951,23 +954,22 @@ public static class DatabaseInitializer
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
             BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM dbo.Customers
-                    WHERE PhoneNumber = N'00000000000'
-                )
+                IF NOT EXISTS (SELECT 1 FROM dbo.Customers WHERE IsWalkIn = 1)
+                   AND EXISTS (SELECT 1 FROM dbo.Customers WHERE PhoneNumber = N'00000000000')
                 BEGIN
                     UPDATE dbo.Customers
-                    SET FirstName = N'Walk-In',
-                        LastName = N'Customer',
-                        IsBlacklisted = 0,
-                        BlacklistReason = NULL,
-                        IsArchived = 0,
-                        ArchivedAt = NULL,
+                    SET IsWalkIn = 1,
                         UpdatedAt = sysdatetime()
-                    WHERE PhoneNumber = N'00000000000';
+                    WHERE CustomerId =
+                    (
+                        SELECT TOP 1 CustomerId
+                        FROM dbo.Customers
+                        WHERE PhoneNumber = N'00000000000'
+                        ORDER BY IsArchived, CustomerId
+                    );
                 END
-                ELSE
+
+                IF NOT EXISTS (SELECT 1 FROM dbo.Customers WHERE IsWalkIn = 1)
                 BEGIN
                     INSERT INTO dbo.Customers
                     (
@@ -976,6 +978,7 @@ public static class DatabaseInitializer
                         PhoneNumber,
                         IsBlacklisted,
                         BlacklistReason,
+                        IsWalkIn,
                         IsArchived
                     )
                     VALUES
@@ -985,6 +988,7 @@ public static class DatabaseInitializer
                         N'00000000000',
                         0,
                         NULL,
+                        1,
                         0
                     );
                 END;
@@ -1417,76 +1421,52 @@ public static class DatabaseInitializer
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
             BEGIN
-                ;WITH OwnerCandidates AS
-                (
-                    SELECT
-                        r.RoleId,
-                        KeepRank = ROW_NUMBER() OVER
-                        (
-                            ORDER BY
-                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
-                                r.IsArchived,
-                                r.RoleId
-                        )
-                    FROM dbo.Roles r
-                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                )
-                UPDATE r
+                DECLARE @CanonicalOwnerRoleId int;
+
+                SELECT TOP 1 @CanonicalOwnerRoleId = r.RoleId
+                FROM dbo.Roles r
+                WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                ORDER BY
+                    CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
+                    r.IsArchived,
+                    r.RoleId;
+
+                IF @CanonicalOwnerRoleId IS NULL
+                BEGIN
+                    RETURN;
+                END
+
+                UPDATE dbo.Roles
                 SET RoleName = N'Owner',
                     IsSystemRole = 1,
                     IsActive = 1,
                     IsArchived = 0,
                     UpdatedAt = sysdatetime()
-                FROM dbo.Roles r
-                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
-                WHERE c.KeepRank = 1;
+                WHERE RoleId = @CanonicalOwnerRoleId;
 
-                ;WITH OwnerCandidates AS
-                (
-                    SELECT
-                        r.RoleId,
-                        KeepRank = ROW_NUMBER() OVER
-                        (
-                            ORDER BY
-                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
-                                r.IsArchived,
-                                r.RoleId
-                        )
-                    FROM dbo.Roles r
-                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                )
+                UPDATE u
+                SET RoleId = @CanonicalOwnerRoleId,
+                    UpdatedAt = sysdatetime()
+                FROM dbo.Users u
+                INNER JOIN dbo.Roles r ON r.RoleId = u.RoleId
+                WHERE r.RoleId <> @CanonicalOwnerRoleId
+                  AND (
+                        UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                        OR UPPER(LTRIM(RTRIM(r.RoleName))) LIKE N'OWNER DUPLICATE%'
+                      );
+
                 UPDATE r
                 SET IsArchived = 1,
                     IsActive = 0,
                     IsSystemRole = 0,
                     UpdatedAt = sysdatetime()
                 FROM dbo.Roles r
-                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
-                WHERE c.KeepRank > 1
+                WHERE r.RoleId <> @CanonicalOwnerRoleId
+                  AND (
+                        UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
+                        OR UPPER(LTRIM(RTRIM(r.RoleName))) LIKE N'OWNER DUPLICATE%'
+                      )
                   AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
-
-                ;WITH OwnerCandidates AS
-                (
-                    SELECT
-                        r.RoleId,
-                        KeepRank = ROW_NUMBER() OVER
-                        (
-                            ORDER BY
-                                CASE WHEN EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId AND u.IsOwner = 1) THEN 0 ELSE 1 END,
-                                r.IsArchived,
-                                r.RoleId
-                        )
-                    FROM dbo.Roles r
-                    WHERE UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER'
-                )
-                UPDATE r
-                SET RoleName = CONCAT(N'Owner Duplicate ', r.RoleId),
-                    IsSystemRole = 0,
-                    UpdatedAt = sysdatetime()
-                FROM dbo.Roles r
-                JOIN OwnerCandidates c ON c.RoleId = r.RoleId
-                WHERE c.KeepRank > 1
-                  AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
             END;
             """);
     }
@@ -1760,16 +1740,6 @@ public static class DatabaseInitializer
 
         using SqlCommand command = new(sql, connection);
         command.ExecuteNonQuery();
-    }
-
-    private static string SqlInList(IEnumerable<string> values)
-    {
-        return string.Join(", ", values.Select(SqlLiteral));
-    }
-
-    private static string SqlLiteral(string value)
-    {
-        return $"N'{value.Replace("'", "''")}'";
     }
 
     private static string GetBootstrapValue(string environmentVariable, string? configuredValue, string fallbackValue)

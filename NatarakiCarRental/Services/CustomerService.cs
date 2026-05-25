@@ -137,6 +137,13 @@ public sealed class CustomerService
         AccessControlService.EnforcePermission("Customers.Edit");
         ValidateCustomer(customer);
 
+        Customer? existing = await _customerRepository.GetCustomerByIdAsync(customer.CustomerId);
+        if (existing?.IsWalkIn == true)
+        {
+            throw new ValidationException(
+                [new ValidationFailure(nameof(Customer.CustomerId), "Walk-In Customer is a protected system customer and cannot be edited.")]);
+        }
+
         bool phoneExists = await _customerRepository.PhoneNumberExistsAsync(customer.PhoneNumber, customer.CustomerId);
 
         if (phoneExists)
@@ -182,6 +189,18 @@ public sealed class CustomerService
     {
         AccessControlService.EnforcePermission("Customers.ArchiveRestore");
         Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+        if (customer?.IsWalkIn == true)
+        {
+            throw new ValidationException(
+                [new ValidationFailure(nameof(Customer.CustomerId), "Walk-In Customer is protected and cannot be archived.")]);
+        }
+
+        if (customer?.IsBlacklisted == true)
+        {
+            throw new ValidationException(
+                [new ValidationFailure(nameof(Customer.CustomerId), "Blacklisted customers cannot be archived. Remove the blacklist flag first.")]);
+        }
+
         FleetSchedule? blockingSchedule = await _fleetScheduleRepository.GetActiveOrUpcomingOperationalScheduleForCustomerAsync(customerId, DateTime.Today);
 
         if (blockingSchedule is not null)
@@ -259,13 +278,19 @@ public sealed class CustomerService
         AccessControlService.EnforcePermission("Customers.Blacklist");
         reason = NullIfWhiteSpace(reason);
 
+        Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+        if (customer?.IsWalkIn == true)
+        {
+            throw new ValidationException(
+                [new ValidationFailure(nameof(Customer.CustomerId), "Walk-In Customer is protected and cannot be blacklisted.")]);
+        }
+
         if (isBlacklisted && string.IsNullOrWhiteSpace(reason))
         {
             throw new ValidationException(
                 [new ValidationFailure(nameof(Customer.BlacklistReason), "Blacklist reason is required.")]);
         }
 
-        Customer? customer = await _customerRepository.GetCustomerByIdAsync(customerId);
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
