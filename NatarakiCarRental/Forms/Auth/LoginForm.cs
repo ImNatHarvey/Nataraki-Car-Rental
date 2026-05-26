@@ -26,7 +26,7 @@ public sealed class LoginForm : Form
     {
         Text = AppBrandingManager.CurrentSettings.BusinessName;
         ThemeHelper.ApplyCompactDialogFormSettings(this);
-        ApplyWindowIcon(this);
+        ApplyWindowIcon();
 
         TableLayoutPanel rootLayout = new()
         {
@@ -105,7 +105,7 @@ public sealed class LoginForm : Form
     {
         DisposeBrandingPanelControls();
         Text = AppBrandingManager.CurrentSettings.BusinessName;
-        ApplyWindowIcon(this);
+        ApplyWindowIcon();
 
         if (AppBrandingManager.CurrentSettings.UseCustomLoginPoster &&
             !string.IsNullOrWhiteSpace(AppBrandingManager.CurrentSettings.LoginPosterPath) &&
@@ -195,7 +195,7 @@ public sealed class LoginForm : Form
         };
     }
 
-    private static void ApplyWindowIcon(Form form)
+    private void ApplyWindowIcon()
     {
         System.Drawing.Icon? icon = BrandingHelper.LoadCurrentWindowIcon();
         if (icon is null)
@@ -203,7 +203,7 @@ public sealed class LoginForm : Form
             return;
         }
 
-        form.Icon = icon;
+        Icon = icon;
     }
 
     private async void LoginButton_Click(object? sender, EventArgs e)
