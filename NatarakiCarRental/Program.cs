@@ -38,6 +38,7 @@ internal static class Program
 
     private static async Task InitializeApplicationAsync()
     {
+        DatabaseAutoDiscovery.ResolveActiveServer();
         await AddressDataSeeder.EnsureSeededAsync();
         DatabaseInitializer.ResetApplicationDataIfRequested();
         DatabaseInitializer.Initialize();

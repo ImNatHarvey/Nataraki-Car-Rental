@@ -16,6 +16,13 @@ public static class AppConstants
     public static string MasterConnectionString => BuildConnectionString(includeDatabase: false);
     public static string DefaultConnectionString => BuildConnectionString(includeDatabase: true);
 
+    private static string? _resolvedServerName;
+
+    public static void SetResolvedServerName(string serverName)
+    {
+        _resolvedServerName = serverName;
+    }
+
     private static string BuildConnectionString(bool includeDatabase)
     {
         string? configuredConnectionString = Environment.GetEnvironmentVariable(ConnectionStringEnvironmentVariable);
@@ -39,13 +46,21 @@ public static class AppConstants
             return builder.ConnectionString;
         }
 
-        string? configuredServerName = Environment.GetEnvironmentVariable(SqlServerEnvironmentVariable);
-        configuredServerName = string.IsNullOrWhiteSpace(configuredServerName)
-            ? AppConfiguration.DatabaseServer
-            : configuredServerName;
-        string serverName = string.IsNullOrWhiteSpace(configuredServerName)
-            ? DefaultSqlServerName
-            : configuredServerName.Trim();
+        string serverName;
+        if (!string.IsNullOrWhiteSpace(_resolvedServerName))
+        {
+            serverName = _resolvedServerName;
+        }
+        else
+        {
+            string? configuredServerName = Environment.GetEnvironmentVariable(SqlServerEnvironmentVariable);
+            configuredServerName = string.IsNullOrWhiteSpace(configuredServerName)
+                ? AppConfiguration.DatabaseServer
+                : configuredServerName;
+            serverName = string.IsNullOrWhiteSpace(configuredServerName)
+                ? DefaultSqlServerName
+                : configuredServerName.Trim();
+        }
 
         Microsoft.Data.SqlClient.SqlConnectionStringBuilder fallbackBuilder = new()
         {
