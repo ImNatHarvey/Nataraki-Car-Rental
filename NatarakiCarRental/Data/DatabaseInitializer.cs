@@ -118,6 +118,8 @@ public static class DatabaseInitializer
                     LastName nvarchar(100) NOT NULL,
                     Email nvarchar(150) NULL,
                     PhoneNumber nvarchar(30) NULL,
+                    SecurityQuestion nvarchar(300) NULL,
+                    SecurityAnswer nvarchar(300) NULL,
                     IsActive bit NOT NULL DEFAULT 1,
                     IsOwner bit NOT NULL DEFAULT 0,
                     IsArchived bit NOT NULL DEFAULT 0,
@@ -133,6 +135,14 @@ public static class DatabaseInitializer
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
             BEGIN
+                IF COL_LENGTH(N'dbo.Users', N'SecurityQuestion') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Users ADD SecurityQuestion nvarchar(300) NULL;
+                END;
+                IF COL_LENGTH(N'dbo.Users', N'SecurityAnswer') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Users ADD SecurityAnswer nvarchar(300) NULL;
+                END;
                 IF COL_LENGTH(N'dbo.Users', N'IsOwner') IS NULL
                 BEGIN
                     ALTER TABLE dbo.Users ADD IsOwner bit NOT NULL DEFAULT 0;

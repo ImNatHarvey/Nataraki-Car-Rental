@@ -527,12 +527,7 @@ public sealed class OffsiteRecordDetailsForm : Form
 
             if (_mode == FormMode.Add)
             {
-                IReadOnlyList<FleetScheduleModel> allSchedules = await _fleetScheduleService.GetSchedulesForMonthAsync(DateTime.Now.Year, DateTime.Now.Month);
-                List<FleetScheduleModel> eligible = allSchedules
-                    .Where(schedule => schedule.ScheduleType == FleetScheduleConstants.Type.Maintenance
-                        && (schedule.Status == FleetScheduleConstants.Status.Ongoing || schedule.Status == "Pending")
-                        && !schedule.IsArchived)
-                    .ToList();
+                IReadOnlyList<FleetScheduleModel> eligible = await _fleetScheduleService.GetMaintenanceSchedulesAsync();
 
                 _scheduleComboBox.Items.Clear();
                 _scheduleComboBox.Items.Add("Select an eligible maintenance schedule");

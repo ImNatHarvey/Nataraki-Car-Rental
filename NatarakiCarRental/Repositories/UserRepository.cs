@@ -31,6 +31,8 @@ public sealed class UserRepository
                 u.LastName,
                 u.Email,
                 u.PhoneNumber,
+                u.SecurityQuestion,
+                u.SecurityAnswer,
                 u.IsActive,
                 IsOwner = CAST(CASE WHEN u.IsOwner = 1 OR UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 1 ELSE 0 END AS bit),
                 u.IsArchived,
@@ -58,6 +60,8 @@ public sealed class UserRepository
                 u.LastName,
                 u.Email,
                 u.PhoneNumber,
+                u.SecurityQuestion,
+                u.SecurityAnswer,
                 u.IsActive,
                 IsOwner = CAST(CASE WHEN u.IsOwner = 1 OR UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 1 ELSE 0 END AS bit),
                 u.IsArchived,
@@ -114,6 +118,8 @@ public sealed class UserRepository
                 u.LastName,
                 u.Email,
                 u.PhoneNumber,
+                u.SecurityQuestion,
+                u.SecurityAnswer,
                 u.IsActive,
                 IsOwner = CAST(1 AS bit),
                 u.IsArchived,
@@ -196,8 +202,8 @@ public sealed class UserRepository
     public async Task<int> AddAsync(User user, IDbTransaction? transaction = null)
     {
         const string sql = """
-            INSERT INTO dbo.Users (RoleId, Username, PasswordHash, FirstName, LastName, Email, PhoneNumber, IsActive, IsOwner, IsArchived, CreatedAt)
-            VALUES (@RoleId, @Username, @PasswordHash, @FirstName, @LastName, @Email, @PhoneNumber, @IsActive, @IsOwner, 0, sysdatetime());
+            INSERT INTO dbo.Users (RoleId, Username, PasswordHash, FirstName, LastName, Email, PhoneNumber, SecurityQuestion, SecurityAnswer, IsActive, IsOwner, IsArchived, CreatedAt)
+            VALUES (@RoleId, @Username, @PasswordHash, @FirstName, @LastName, @Email, @PhoneNumber, @SecurityQuestion, @SecurityAnswer, @IsActive, @IsOwner, 0, sysdatetime());
             SELECT CAST(SCOPE_IDENTITY() as int);
             """;
         using var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
@@ -214,6 +220,8 @@ public sealed class UserRepository
                 LastName = @LastName,
                 Email = @Email,
                 PhoneNumber = @PhoneNumber,
+                SecurityQuestion = @SecurityQuestion,
+                SecurityAnswer = @SecurityAnswer,
                 IsActive = @IsActive,
                 UpdatedAt = sysdatetime()
             WHERE UserId = @UserId;

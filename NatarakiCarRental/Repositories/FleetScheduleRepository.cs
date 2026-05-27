@@ -189,6 +189,47 @@ public sealed class FleetScheduleRepository
         return schedules.ToList();
     }
 
+    public async Task<IReadOnlyList<FleetSchedule>> GetMaintenanceSchedulesAsync()
+    {
+        const string sql = """
+            SELECT
+                schedules.ScheduleId,
+                schedules.CarId,
+                schedules.CustomerId,
+                cars.CarName,
+                cars.PlateNumber,
+                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                schedules.Title,
+                schedules.ScheduleType,
+                schedules.Status,
+                schedules.StartDate,
+                schedules.EndDate,
+                schedules.Notes,
+                schedules.CreatedByUserId,
+                schedules.CreatedAt,
+                schedules.UpdatedAt,
+                schedules.IsArchived
+            FROM dbo.FleetSchedules AS schedules
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
+            LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
+            WHERE schedules.IsArchived = 0
+              AND schedules.ScheduleType = @MaintenanceType
+              AND schedules.Status IN @MaintenanceStatuses
+            ORDER BY schedules.StartDate, schedules.ScheduleId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        IEnumerable<FleetSchedule> schedules = await connection.QueryAsync<FleetSchedule>(
+            sql,
+            new
+            {
+                MaintenanceType = FleetScheduleConstants.Type.Maintenance,
+                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Ongoing, "Pending" }
+            });
+
+        return (schedules ?? Enumerable.Empty<FleetSchedule>()).ToList();
+    }
+
     public async Task<FleetSchedule?> GetByIdAsync(int scheduleId)
     {
         const string sql = """

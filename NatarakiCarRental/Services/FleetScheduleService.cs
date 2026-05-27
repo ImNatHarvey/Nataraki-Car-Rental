@@ -59,6 +59,12 @@ public sealed class FleetScheduleService
         return _scheduleRepository.GetSchedulesForMonthAsync(year, month);
     }
 
+    public async Task<IReadOnlyList<FleetSchedule>> GetMaintenanceSchedulesAsync()
+    {
+        var result = await _scheduleRepository.GetMaintenanceSchedulesAsync();
+        return result ?? new List<FleetSchedule>();
+    }
+
     public Task<FleetSchedule?> GetByIdAsync(int scheduleId)
     {
         return _scheduleRepository.GetByIdAsync(scheduleId);

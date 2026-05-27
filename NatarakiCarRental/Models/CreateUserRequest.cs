@@ -8,6 +8,8 @@ public sealed class CreateUserRequest
     public string LastName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? SecurityQuestion { get; set; }
+    public string? SecurityAnswer { get; set; }
     public int RoleId { get; set; }
     public bool IsActive { get; set; } = true;
 }
@@ -20,6 +22,8 @@ public sealed class UpdateUserRequest
     public string LastName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? SecurityQuestion { get; set; }
+    public string? SecurityAnswer { get; set; }
     public int RoleId { get; set; }
     public bool IsActive { get; set; }
 }

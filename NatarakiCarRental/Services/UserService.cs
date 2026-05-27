@@ -30,6 +30,42 @@ public sealed class UserService
         return _userRepository.GetByIdAsync(userId);
     }
 
+    public async Task<bool> CheckUserExistsAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return false;
+        User? user = await _userRepository.GetActiveUserByUsernameAsync(username.Trim());
+        return user != null;
+    }
+
+    public async Task ResetPasswordAsync(string username, string lastName, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username is required.");
+        if (string.IsNullOrWhiteSpace(lastName)) throw new ArgumentException("Last name is required for verification.");
+        
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+        {
+            throw new ValidationException([new ValidationFailure("NewPassword", "Password must be at least 8 characters.")]);
+        }
+
+        User? user = await _userRepository.GetActiveUserByUsernameAsync(username.Trim());
+        if (user == null) throw new InvalidOperationException("User not found.");
+
+        if (!string.Equals(user.LastName.Trim(), lastName.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Verification Failed: Last Name does not match records.");
+        }
+
+        string hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        await _userRepository.UpdatePasswordAsync(user.UserId, hash);
+
+        await _activityLogService.LogAsync(
+            "Update",
+            "User",
+            user.UserId,
+            $"Password reset via last name verification for user {user.Username}.",
+            user.UserId);
+    }
+
     public Task<User?> GetActiveOwnerAsync()
     {
         return _userRepository.GetActiveOwnerAsync();
@@ -53,6 +89,8 @@ public sealed class UserService
             LastName = request.LastName.Trim(),
             Email = request.Email?.Trim(),
             PhoneNumber = request.PhoneNumber?.Trim(),
+            SecurityQuestion = request.SecurityQuestion?.Trim(),
+            SecurityAnswer = request.SecurityAnswer?.Trim(),
             RoleId = request.RoleId,
             IsActive = request.IsActive,
             IsOwner = false // Only system can seed owner
@@ -86,6 +124,8 @@ public sealed class UserService
         existing.LastName = request.LastName.Trim();
         existing.Email = request.Email?.Trim();
         existing.PhoneNumber = request.PhoneNumber?.Trim();
+        existing.SecurityQuestion = request.SecurityQuestion?.Trim();
+        existing.SecurityAnswer = request.SecurityAnswer?.Trim();
         existing.Username = username;
 
         if (existing.IsOwner)
