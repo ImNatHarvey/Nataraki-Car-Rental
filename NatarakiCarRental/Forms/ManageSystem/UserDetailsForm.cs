@@ -23,8 +23,6 @@ public sealed class UserDetailsForm : Form
     private readonly TextBox _usernameInput = ControlFactory.CreateTextBox(InputWidth);
     private readonly TextBox _passwordInput = ControlFactory.CreatePasswordTextBox(InputWidth);
     private readonly TextBox _confirmPasswordInput = ControlFactory.CreatePasswordTextBox(InputWidth);
-    private readonly TextBox _securityQuestionInput = ControlFactory.CreateTextBox(InputWidth);
-    private readonly TextBox _securityAnswerInput = ControlFactory.CreateTextBox(InputWidth);
     private readonly ComboBox _roleComboBox = CreateComboBox(InputWidth);
     private readonly CheckBox _isActiveCheckBox = new()
     {
@@ -55,7 +53,7 @@ public sealed class UserDetailsForm : Form
     {
         Text = _isViewOnly ? "View User" : _isEdit ? "Edit User" : "Add User";
         ThemeHelper.ApplyCompactDialogFormSettings(this);
-        ClientSize = new Size(760, _isViewOnly ? 430 : 600);
+        ClientSize = new Size(760, _isViewOnly ? 410 : 520);
 
         Panel root = new()
         {
@@ -76,7 +74,7 @@ public sealed class UserDetailsForm : Form
             Padding = new Padding(0, 14, 0, 14)
         };
 
-        GroupBox accountGroup = CreateGroupBox("Account Information", _isEdit || _isViewOnly ? 220 : 220);
+        GroupBox accountGroup = CreateGroupBox("Account Information", 220);
         accountGroup.Location = new Point(0, 0);
         accountGroup.Width = 706;
         AddLabeledControl(accountGroup, "First Name *", _firstNameInput, 24, 34);
@@ -101,7 +99,7 @@ public sealed class UserDetailsForm : Form
 
         if (!_isViewOnly)
         {
-            GroupBox securityGroup = CreateGroupBox("Security", 280);
+            GroupBox securityGroup = CreateGroupBox("Security", 140);
             securityGroup.Location = new Point(0, accountGroup.Bottom + 14);
             securityGroup.Width = 706;
             if (_isEdit)
@@ -118,33 +116,17 @@ public sealed class UserDetailsForm : Form
                     ForeColor = ThemeHelper.TextSecondary
                 };
                 securityGroup.Controls.Add(helper);
-
-                AddLabeledControl(securityGroup, "Security Question *", _securityQuestionInput, 24, 140);
-                AddLabeledControl(securityGroup, "Security Answer *", _securityAnswerInput, 372, 140);
-                Label questionHelper = new()
-                {
-                    Text = "Used for account recovery via Forgot Password.",
-                    AutoSize = false,
-                    Location = new Point(24, 208),
-                    Size = new Size(540, 24),
-                    Font = FontHelper.Regular(9F),
-                    ForeColor = ThemeHelper.TextSecondary
-                };
-                securityGroup.Controls.Add(questionHelper);
             }
             else
             {
                 AddLabeledPasswordControl(securityGroup, "Password *", _passwordInput, 24, 34);
                 AddLabeledPasswordControl(securityGroup, "Confirm Password *", _confirmPasswordInput, 372, 34);
                 
-                AddLabeledControl(securityGroup, "Security Question *", _securityQuestionInput, 24, 102);
-                AddLabeledControl(securityGroup, "Security Answer *", _securityAnswerInput, 372, 102);
-                
                 Label helper = new()
                 {
-                    Text = "Minimum 8 characters. Security fields are required for recovery.",
+                    Text = "Minimum 8 characters. Password is required for account security.",
                     AutoSize = false,
-                    Location = new Point(24, 170),
+                    Location = new Point(24, 102),
                     Size = new Size(540, 24),
                     Font = FontHelper.Regular(9F),
                     ForeColor = ThemeHelper.TextSecondary
@@ -161,8 +143,6 @@ public sealed class UserDetailsForm : Form
             BackColor = ThemeHelper.ContentBackground,
             Padding = new Padding(0, 14, 0, 18)
         };
-        
-        ClientSize = new Size(760, _isViewOnly ? 430 : 700);
 
         Button cancelButton = ControlFactory.CreateSecondaryButton(_isViewOnly ? "Close" : "Cancel", 110, 38);
         cancelButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
@@ -339,8 +319,6 @@ public sealed class UserDetailsForm : Form
                     _firstNameInput.Text = user.FirstName;
                     _lastNameInput.Text = user.LastName;
                     _usernameInput.Text = user.Username;
-                    _securityQuestionInput.Text = user.SecurityQuestion;
-                    _securityAnswerInput.Text = user.SecurityAnswer;
                     _isActiveCheckBox.Checked = user.IsActive;
                     _loadedUserIsOwner = user.IsOwner;
 
@@ -374,8 +352,6 @@ public sealed class UserDetailsForm : Form
         _usernameInput.ReadOnly = true;
         _passwordInput.ReadOnly = true;
         _confirmPasswordInput.ReadOnly = true;
-        _securityQuestionInput.ReadOnly = true;
-        _securityAnswerInput.ReadOnly = true;
         _roleComboBox.Enabled = false;
         _isActiveCheckBox.Enabled = false;
     }
@@ -402,8 +378,6 @@ public sealed class UserDetailsForm : Form
                     LastName = _lastNameInput.Text,
                     RoleId = selectedRoleId,
                     IsActive = _isActiveCheckBox.Checked,
-                    SecurityQuestion = _securityQuestionInput.Text,
-                    SecurityAnswer = _securityAnswerInput.Text,
                     Email = null,
                     PhoneNumber = null
                 }, _currentUserId);
@@ -429,8 +403,6 @@ public sealed class UserDetailsForm : Form
                     LastName = _lastNameInput.Text,
                     RoleId = selectedRoleId,
                     IsActive = _isActiveCheckBox.Checked,
-                    SecurityQuestion = _securityQuestionInput.Text,
-                    SecurityAnswer = _securityAnswerInput.Text,
                     Email = null,
                     PhoneNumber = null
                 }, _currentUserId);

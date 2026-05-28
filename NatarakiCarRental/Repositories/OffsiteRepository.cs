@@ -49,7 +49,7 @@ public sealed class OffsiteRepository
                 r.SuggestedNextAction
             FROM dbo.OffsiteRecords r
             INNER JOIN dbo.Cars c ON r.CarId = c.CarId
-            WHERE (@IncludeArchived = 1 OR r.IsArchived = 0)
+            WHERE r.IsArchived = @IncludeArchived
               AND (@Status IS NULL OR r.Status = @Status)
               AND (@Type IS NULL OR r.OffsiteType = @Type)
               AND (@Search IS NULL OR (
@@ -65,7 +65,7 @@ public sealed class OffsiteRepository
         using var connection = _connectionFactory.CreateConnection();
         var items = await connection.QueryAsync<OffsiteRecordListItem>(sql, new
         {
-            IncludeArchived = includeArchived,
+            IncludeArchived = includeArchived ? 1 : 0,
             Status = string.IsNullOrWhiteSpace(status) ? null : status,
             Type = string.IsNullOrWhiteSpace(type) ? null : type,
             Search = string.IsNullOrWhiteSpace(search) ? null : search,
@@ -87,7 +87,7 @@ public sealed class OffsiteRepository
             SELECT COUNT(1)
             FROM dbo.OffsiteRecords r
             INNER JOIN dbo.Cars c ON r.CarId = c.CarId
-            WHERE (@IncludeArchived = 1 OR r.IsArchived = 0)
+            WHERE r.IsArchived = @IncludeArchived
               AND (@Status IS NULL OR r.Status = @Status)
               AND (@Type IS NULL OR r.OffsiteType = @Type)
               AND (@Search IS NULL OR (
@@ -101,7 +101,7 @@ public sealed class OffsiteRepository
         using var connection = _connectionFactory.CreateConnection();
         return await connection.ExecuteScalarAsync<int>(sql, new
         {
-            IncludeArchived = includeArchived,
+            IncludeArchived = includeArchived ? 1 : 0,
             Status = string.IsNullOrWhiteSpace(status) ? null : status,
             Type = string.IsNullOrWhiteSpace(type) ? null : type,
             Search = string.IsNullOrWhiteSpace(search) ? null : search,

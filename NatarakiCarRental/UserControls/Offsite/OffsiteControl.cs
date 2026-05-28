@@ -799,15 +799,15 @@ public sealed class OffsiteControl : UserControl
     private static Color GetActionColor(string action) => action switch
     {
         "View" => ThemeHelper.Primary,
-        "Edit" => ThemeHelper.Primary,
+        "Edit" => ThemeHelper.Success,
         "Complete" => ThemeHelper.Success,
         "Cancel" => ThemeHelper.Danger,
-        "Archive" => ThemeHelper.GrayIcon,
+        "Archive" => ThemeHelper.Danger,
         "Restore" => ThemeHelper.Success,
         _ => ThemeHelper.Primary
     };
 
-    private void RecordsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    private async void RecordsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
         if (_recordsGrid.Columns[e.ColumnIndex].Name != "Actions") return;
@@ -821,10 +821,10 @@ public sealed class OffsiteControl : UserControl
         {
             case "View": ShowDetails(item.OffsiteRecordId, true); break;
             case "Edit": ShowDetails(item.OffsiteRecordId, false); break;
-            case "Complete": _ = CompleteRecord(item.OffsiteRecordId); break;
-            case "Cancel": _ = CancelRecord(item.OffsiteRecordId); break;
-            case "Archive": _ = ArchiveRecord(item.OffsiteRecordId); break;
-            case "Restore": _ = RestoreRecord(item.OffsiteRecordId); break;
+            case "Complete": await CompleteRecord(item.OffsiteRecordId); break;
+            case "Cancel": await CancelRecord(item.OffsiteRecordId); break;
+            case "Archive": await ArchiveRecord(item.OffsiteRecordId); break;
+            case "Restore": await RestoreRecord(item.OffsiteRecordId); break;
         }
     }
 
@@ -1068,11 +1068,18 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
-        using var form = new OffsiteCompletionForm(_currentUserId, recordId);
-        if (form.ShowDialog() == DialogResult.OK)
+        try
         {
-            MessageBoxHelper.ShowSuccess("Offsite record completed successfully.");
-            await LoadRecordsAsync();
+            using var form = new OffsiteCompletionForm(_currentUserId, recordId);
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                MessageBoxHelper.ShowSuccess("Offsite record completed successfully.");
+                await LoadRecordsAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBoxHelper.ShowError($"Failed to complete record: {ex.Message}");
         }
     }
     private async Task CancelRecord(int recordId) 
@@ -1088,7 +1095,19 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
-        if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) { await _offsiteService.CancelAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); } 
+        if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) 
+        { 
+            try
+            {
+                await _offsiteService.CancelAsync(recordId); 
+                _currentPage = 1; 
+                await LoadRecordsAsync(); 
+            }
+            catch (Exception ex)
+            {
+                MessageBoxHelper.ShowError($"Failed to cancel record: {ex.Message}");
+            }
+        } 
     }
     private async Task ArchiveRecord(int recordId) 
     { 
@@ -1098,12 +1117,27 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
+        if (!MessageBoxHelper.Confirm("Are you sure you want to archive this offsite record?", "Archive Offsite"))
+        {
+            return;
+        }
+
         if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Archive offsite record"))
         {
             return;
         }
 
-        await _offsiteService.ArchiveAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); 
+        try
+        {
+            await _offsiteService.ArchiveAsync(recordId); 
+            MessageBoxHelper.ShowSuccess("Offsite record archived successfully.");
+            _currentPage = 1; 
+            await LoadRecordsAsync(); 
+        }
+        catch (Exception ex)
+        {
+            MessageBoxHelper.ShowError($"Failed to archive record: {ex.Message}");
+        }
     }
     private async Task RestoreRecord(int recordId) 
     { 
@@ -1113,12 +1147,27 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
+        if (!MessageBoxHelper.Confirm("Are you sure you want to restore this offsite record?", "Restore Offsite"))
+        {
+            return;
+        }
+
         if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Restore offsite record"))
         {
             return;
         }
 
-        await _offsiteService.RestoreAsync(recordId); _currentPage = 1; await LoadRecordsAsync(); 
+        try
+        {
+            await _offsiteService.RestoreAsync(recordId); 
+            MessageBoxHelper.ShowSuccess("Offsite record restored successfully.");
+            _currentPage = 1; 
+            await LoadRecordsAsync(); 
+        }
+        catch (Exception ex)
+        {
+            MessageBoxHelper.ShowError($"Failed to restore record: {ex.Message}");
+        }
     }
     private async Task AddRecordAsync() 
     { 

@@ -1400,6 +1400,7 @@ public sealed class ManageSystemControl : UserControl
 
             if (user.IsArchived)
             {
+                if (!MessageBoxHelper.Confirm($"Are you sure you want to restore user: {user.Username}?", "Restore User")) return;
                 if (!await ConfirmOwnerForSensitiveActionAsync($"Restore user: {user.Username}")) return;
                 await _userService.RestoreUserAsync(user.UserId, _currentUserId);
                 MessageBoxHelper.ShowSuccess("User restored successfully.");
@@ -1523,6 +1524,7 @@ public sealed class ManageSystemControl : UserControl
                 return;
             }
 
+            if (!MessageBoxHelper.Confirm($"Are you sure you want to restore role: {role.RoleName}?", "Restore Role")) return;
             if (!await ConfirmOwnerForSensitiveActionAsync($"Restore role: {role.RoleName}")) return;
             await _roleService.RestoreRoleAsync(role.RoleId, _currentUserId);
             MessageBoxHelper.ShowSuccess("Role restored successfully.");

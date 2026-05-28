@@ -89,8 +89,6 @@ public sealed class UserService
             LastName = request.LastName.Trim(),
             Email = request.Email?.Trim(),
             PhoneNumber = request.PhoneNumber?.Trim(),
-            SecurityQuestion = request.SecurityQuestion?.Trim(),
-            SecurityAnswer = request.SecurityAnswer?.Trim(),
             RoleId = request.RoleId,
             IsActive = request.IsActive,
             IsOwner = false // Only system can seed owner
@@ -124,8 +122,6 @@ public sealed class UserService
         existing.LastName = request.LastName.Trim();
         existing.Email = request.Email?.Trim();
         existing.PhoneNumber = request.PhoneNumber?.Trim();
-        existing.SecurityQuestion = request.SecurityQuestion?.Trim();
-        existing.SecurityAnswer = request.SecurityAnswer?.Trim();
         existing.Username = username;
 
         if (existing.IsOwner)

@@ -379,7 +379,8 @@ public sealed class OffsiteService
     {
         AccessControlService.EnforcePermission("Offsite.ArchiveRestore");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
-        if (existing == null || existing.IsArchived) return;
+        if (existing == null) throw new RecordNotFoundException("Record not found.");
+        if (existing.IsArchived) return;
 
         if (existing.Status == "Ongoing")
             throw new ValidationException([new ValidationFailure("Status", "Cannot archive an ongoing offsite record. Complete or cancel it first.")]);
@@ -388,14 +389,19 @@ public sealed class OffsiteService
         if (existing.FleetScheduleId.HasValue)
         {
             FleetSchedule? schedule = await _fleetScheduleService.GetByIdAsync(existing.FleetScheduleId.Value);
-            if (schedule != null && !schedule.IsArchived && schedule.StartDate.Date >= DateTime.Today)
+            if (schedule != null && !schedule.IsArchived && 
+                schedule.Status != FleetScheduleConstants.Status.Completed && 
+                schedule.Status != FleetScheduleConstants.Status.Cancelled &&
+                schedule.StartDate.Date >= DateTime.Today)
             {
-                throw new ValidationException([new ValidationFailure("Schedule", "Cannot archive an offsite record with an upcoming or current schedule. Cancel the schedule first.")]);
+                throw new ValidationException([new ValidationFailure("Schedule", "Cannot archive an offsite record with an upcoming or active maintenance schedule. Cancel the schedule first.")]);
             }
         }
 
-        await _offsiteRepository.ArchiveAsync(recordId);
-        await _activityLogService.LogAsync("Archive Offsite Record", "OffsiteRecord", recordId, $"Archived offsite record #{recordId}.");
+        int affectedRows = await _offsiteRepository.ArchiveAsync(recordId);
+        if (affectedRows == 0) throw new RecordNotFoundException("Failed to archive record. It may have been deleted or modified.");
+
+        await _activityLogService.LogAsync("Archive Offsite Record", "OffsiteRecord", recordId, $"Archived offsite record #{recordId}.", userId: _currentUserId);
     }
 
     private static void RollbackQuietly(SqlTransaction transaction)
@@ -414,7 +420,8 @@ public sealed class OffsiteService
     {
         AccessControlService.EnforcePermission("Offsite.ArchiveRestore");
         OffsiteRecord? existing = await _offsiteRepository.GetByIdAsync(recordId);
-        if (existing == null || !existing.IsArchived) return;
+        if (existing == null) throw new RecordNotFoundException("Record not found.");
+        if (!existing.IsArchived) return;
 
         if (existing.Status == "Ongoing")
         {
@@ -423,8 +430,10 @@ public sealed class OffsiteService
                 throw new ValidationException([new ValidationFailure("CarId", "Cannot restore because this car already has an ongoing offsite record.")]);
         }
 
-        await _offsiteRepository.RestoreAsync(recordId);
-        await _activityLogService.LogAsync("Restore Offsite Record", "OffsiteRecord", recordId, $"Restored offsite record #{recordId}.");
+        int affectedRows = await _offsiteRepository.RestoreAsync(recordId);
+        if (affectedRows == 0) throw new RecordNotFoundException("Failed to restore record. It may have been deleted or modified.");
+
+        await _activityLogService.LogAsync("Restore Offsite Record", "OffsiteRecord", recordId, $"Restored offsite record #{recordId}.", userId: _currentUserId);
     }
 
     private static void ValidateCompleteRequest(CompleteOffsiteRecordRequest request, OffsiteRecord? existing)
