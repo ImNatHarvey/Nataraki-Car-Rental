@@ -305,34 +305,40 @@ public sealed class UserDetailsForm : Form
     {
         try
         {
+            User? user = null;
+            if (_isEdit && _targetUserId.HasValue)
+            {
+                user = await _userService.GetUserByIdAsync(_targetUserId.Value);
+                if (user != null) _loadedUserIsOwner = user.IsOwner;
+            }
+
             IReadOnlyList<Role> roles = await _roleService.GetAllRolesAsync();
             _roles.Clear();
-            _roles.AddRange(roles.Where(role => role.IsActive && !role.IsArchived));
+            _roles.AddRange(roles.Where(role => 
+                role.IsActive && 
+                !role.IsArchived && 
+                (!role.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase) || _loadedUserIsOwner)));
+
             _roleComboBox.Items.Clear();
             _roleComboBox.Items.AddRange(_roles.Select(role => role.RoleName).ToArray());
 
-            if (_isEdit && _targetUserId.HasValue)
+            if (_isEdit && user != null)
             {
-                User? user = await _userService.GetUserByIdAsync(_targetUserId.Value);
-                if (user != null)
+                _firstNameInput.Text = user.FirstName;
+                _lastNameInput.Text = user.LastName;
+                _usernameInput.Text = user.Username;
+                _isActiveCheckBox.Checked = user.IsActive;
+
+                Role? role = _roles.FirstOrDefault(role => role.RoleId == user.RoleId);
+                if (role != null) _roleComboBox.SelectedItem = role.RoleName;
+
+                if (user.IsOwner)
                 {
-                    _firstNameInput.Text = user.FirstName;
-                    _lastNameInput.Text = user.LastName;
-                    _usernameInput.Text = user.Username;
-                    _isActiveCheckBox.Checked = user.IsActive;
-                    _loadedUserIsOwner = user.IsOwner;
-
-                    Role? role = _roles.FirstOrDefault(role => role.RoleId == user.RoleId);
-                    if (role != null) _roleComboBox.SelectedItem = role.RoleName;
-
-                    if (user.IsOwner)
-                    {
-                        // Allow Owner to edit their own username in Edit mode
-                        _usernameInput.Enabled = true;
-                        _roleComboBox.Enabled = false;
-                        _isActiveCheckBox.Enabled = false;
-                        _protectedNote!.Visible = true;
-                    }
+                    // Allow Owner to edit their own username in Edit mode
+                    _usernameInput.Enabled = true;
+                    _roleComboBox.Enabled = false;
+                    _isActiveCheckBox.Enabled = false;
+                    _protectedNote!.Visible = true;
                 }
             }
 

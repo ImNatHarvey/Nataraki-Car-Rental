@@ -45,7 +45,6 @@ public sealed class FleetScheduleDetailsForm : Form
     private Button? _archiveButton;
     
     // Maintenance execution buttons
-    private Button? _startMaintenanceButton;
     private Button? _viewRecordButton;
 
     // Transaction action button
@@ -159,13 +158,6 @@ public sealed class FleetScheduleDetailsForm : Form
             _archiveButton.Location = new Point(32, 590);
             _archiveButton.Click += ArchiveButton_Click;
 
-            // Maintenance actions
-            _startMaintenanceButton = ControlFactory.CreatePrimaryButton("Start Maintenance", 160, 38);
-            _startMaintenanceButton.BackColor = Color.FromArgb(234, 88, 12); // Maintenance orange
-            _startMaintenanceButton.Location = new Point(152, 590);
-            _startMaintenanceButton.Visible = false;
-            _startMaintenanceButton.Click += StartMaintenanceButton_Click;
-
             _viewRecordButton = CreateSecondaryButton("View Offsite Record", 160, 38);
             _viewRecordButton.Location = new Point(32, 590); // Aligned to left
             _viewRecordButton.Visible = false;
@@ -185,7 +177,6 @@ public sealed class FleetScheduleDetailsForm : Form
         Controls.Add(_saveButton);
         
         if (_archiveButton is not null) Controls.Add(_archiveButton);
-        if (_startMaintenanceButton is not null) Controls.Add(_startMaintenanceButton);
         if (_viewRecordButton is not null) Controls.Add(_viewRecordButton);
         if (_viewTransactionButton is not null) Controls.Add(_viewTransactionButton);
 
@@ -208,8 +199,6 @@ public sealed class FleetScheduleDetailsForm : Form
                                            _sourceSchedule.Status == FleetScheduleConstants.Status.Completed ||
                                            _sourceSchedule.Status == FleetScheduleConstants.Status.Cancelled;
 
-            if (_startMaintenanceButton != null) _startMaintenanceButton.Visible = isPending;
-
             if (hasOperationalExecution && _viewRecordButton != null)
             {
                 OffsiteRecord? record = await _offsiteService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
@@ -231,19 +220,6 @@ public sealed class FleetScheduleDetailsForm : Form
                 Transaction? linkedTransaction = await transactionService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
                 _viewTransactionButton.Visible = linkedTransaction is not null;
             }
-        }
-    }
-
-    private async void StartMaintenanceButton_Click(object? sender, EventArgs e)
-    {
-        if (_sourceSchedule is null) return;
-
-        using NatarakiCarRental.Forms.Offsite.OffsiteRecordDetailsForm form = new(_currentUserId);
-        // Form will pick up eligible pending schedules in its tab.
-        if (form.ShowDialog(this) == DialogResult.OK)
-        {
-            DialogResult = DialogResult.OK;
-            Close();
         }
     }
 

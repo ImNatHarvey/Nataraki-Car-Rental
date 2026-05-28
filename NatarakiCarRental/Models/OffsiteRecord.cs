@@ -21,8 +21,10 @@ public sealed class OffsiteRecord
     public string? FollowUpReason { get; set; }
     public string? SuggestedNextAction { get; set; }
     public int? CompletedByUserId { get; set; }
+    public string? CompletedByFullName { get; set; }
     public string? Notes { get; set; }
     public int? CreatedByUserId { get; set; }
+    public string? CreatedByFullName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public bool IsArchived { get; set; }

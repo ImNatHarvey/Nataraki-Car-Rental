@@ -111,14 +111,31 @@ public sealed class OffsiteRepository
 
     public async Task<OffsiteRecord?> GetByIdAsync(int offsiteRecordId)
     {
-        const string sql = "SELECT * FROM dbo.OffsiteRecords WHERE OffsiteRecordId = @Id;";
+        const string sql = """
+            SELECT r.*, 
+                   u_comp.FirstName + ' ' + u_comp.LastName as CompletedByFullName,
+                   u_creat.FirstName + ' ' + u_creat.LastName as CreatedByFullName
+            FROM dbo.OffsiteRecords r
+            LEFT JOIN dbo.Users u_comp ON r.CompletedByUserId = u_comp.UserId
+            LEFT JOIN dbo.Users u_creat ON r.CreatedByUserId = u_creat.UserId
+            WHERE r.OffsiteRecordId = @Id;
+            """;
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<OffsiteRecord>(sql, new { Id = offsiteRecordId });
     }
 
     public async Task<OffsiteRecord?> GetByFleetScheduleIdAsync(int fleetScheduleId)
     {
-        const string sql = "SELECT TOP 1 * FROM dbo.OffsiteRecords WHERE FleetScheduleId = @ScheduleId AND IsArchived = 0 ORDER BY OffsiteRecordId DESC;";
+        const string sql = """
+            SELECT TOP 1 r.*, 
+                   u_comp.FirstName + ' ' + u_comp.LastName as CompletedByFullName,
+                   u_creat.FirstName + ' ' + u_creat.LastName as CreatedByFullName
+            FROM dbo.OffsiteRecords r
+            LEFT JOIN dbo.Users u_comp ON r.CompletedByUserId = u_comp.UserId
+            LEFT JOIN dbo.Users u_creat ON r.CreatedByUserId = u_creat.UserId
+            WHERE r.FleetScheduleId = @ScheduleId AND r.IsArchived = 0 
+            ORDER BY r.OffsiteRecordId DESC;
+            """;
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<OffsiteRecord>(sql, new { ScheduleId = fleetScheduleId });
     }
@@ -126,11 +143,15 @@ public sealed class OffsiteRepository
     public async Task<OffsiteRecord?> GetActiveByCarIdAsync(int carId)
     {
         const string sql = """
-            SELECT TOP 1 *
-            FROM dbo.OffsiteRecords
-            WHERE CarId = @CarId
-              AND Status = N'Ongoing'
-              AND IsArchived = 0;
+            SELECT TOP 1 r.*, 
+                   u_comp.FirstName + ' ' + u_comp.LastName as CompletedByFullName,
+                   u_creat.FirstName + ' ' + u_creat.LastName as CreatedByFullName
+            FROM dbo.OffsiteRecords r
+            LEFT JOIN dbo.Users u_comp ON r.CompletedByUserId = u_comp.UserId
+            LEFT JOIN dbo.Users u_creat ON r.CreatedByUserId = u_creat.UserId
+            WHERE r.CarId = @CarId
+              AND r.Status = N'Ongoing'
+              AND r.IsArchived = 0;
             """;
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<OffsiteRecord>(sql, new { CarId = carId });
