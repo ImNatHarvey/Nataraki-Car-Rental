@@ -17,7 +17,7 @@ public sealed class CarGarageControl : UserControl
     private readonly MetricCardControl _totalCarsCard = new();
     private readonly MetricCardControl _availableCarsCard = new();
     private readonly MetricCardControl _rentedCarsCard = new();
-    private readonly MetricCardControl _archivedCarsCard = new();
+    private readonly MetricCardControl _maintenanceCarsCard = new();
 
     private readonly TextBox _searchTextBox = new();
     private readonly ComboBox _filterComboBox = new();
@@ -172,7 +172,7 @@ public sealed class CarGarageControl : UserControl
         AddMetricCard(grid, _totalCarsCard, IconChar.Car, "Total Cars", 0, "All active vehicles", ThemeHelper.Primary);
         AddMetricCard(grid, _availableCarsCard, IconChar.CircleCheck, "Available Cars", 1, "Ready for rental", ThemeHelper.Success);
         AddMetricCard(grid, _rentedCarsCard, IconChar.Key, "Rented Cars", 2, "Currently rented", ThemeHelper.Warning);
-        AddMetricCard(grid, _archivedCarsCard, IconChar.BoxArchive, "Archived Cars", 3, "Hidden from active list", ThemeHelper.GrayIcon);
+        AddMetricCard(grid, _maintenanceCarsCard, IconChar.ScrewdriverWrench, "Maintenance Cars", 3, "Under maintenance today", ThemeHelper.Danger);
 
         return grid;
     }
@@ -411,7 +411,7 @@ public sealed class CarGarageControl : UserControl
         SetFillWeight("PlateNumber", 80);
         SetFillWeight("RatePerDay", 70);
         SetFillWeight("CodingDay", 65);
-        SetFillWeight("Status", 75);
+        SetFillWeight("Status", 95);
 
         // INCREASED weights for the action buttons so they are all equally breathable
         if (_carsGrid.Columns["ViewAction"] is DataGridViewColumn viewColumn)
@@ -509,7 +509,7 @@ public sealed class CarGarageControl : UserControl
         _totalCarsCard.SetMetric(IconChar.Car, "Total Cars", counts.TotalCars.ToString(), "All active vehicles", ThemeHelper.Primary);
         _availableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", counts.AvailableCars.ToString(), "Ready for rental", ThemeHelper.Success);
         _rentedCarsCard.SetMetric(IconChar.Key, "Rented Cars", counts.RentedCars.ToString(), "Currently rented", ThemeHelper.Warning);
-        _archivedCarsCard.SetMetric(IconChar.BoxArchive, "Archived Cars", counts.ArchivedCars.ToString(), "Hidden from active list", ThemeHelper.GrayIcon);
+        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Maintenance Cars", counts.MaintenanceCars.ToString(), "Under maintenance today", ThemeHelper.Danger);
     }
 
     private void PopulateGrid(IReadOnlyList<Car> allCars)
@@ -591,6 +591,9 @@ public sealed class CarGarageControl : UserControl
                         break;
                     case "Maintenance":
                         backColor = ThemeHelper.Danger;
+                        break;
+                    case "Reserved":
+                        backColor = ThemeHelper.Primary;
                         break;
                     default:
                         backColor = ThemeHelper.GrayIcon;

@@ -33,7 +33,7 @@ public sealed class VehicleTrackingService
 
     public Task<IReadOnlyList<Car>> GetTrackableCarsAsync()
     {
-        return _carRepository.GetActiveCarsAsync();
+        return _carRepository.GetActiveCarsAsync(DateTime.Today);
     }
 
     public async Task<int> AddLocationAsync(VehicleLocation location)
@@ -88,7 +88,7 @@ public sealed class VehicleTrackingService
             failures.Add(new ValidationFailure(nameof(VehicleLocation.SpeedKph), "Speed cannot be negative."));
         }
 
-        Car? car = location.CarId > 0 ? await _carRepository.GetCarByIdAsync(location.CarId) : null;
+        Car? car = location.CarId > 0 ? await _carRepository.GetCarByIdAsync(location.CarId, DateTime.Today) : null;
         if (location.CarId > 0 && car is null)
         {
             failures.Add(new ValidationFailure(nameof(VehicleLocation.CarId), "The selected car was not found."));

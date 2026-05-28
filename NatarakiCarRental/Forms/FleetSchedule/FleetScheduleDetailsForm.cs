@@ -37,11 +37,20 @@ public sealed class FleetScheduleDetailsForm : Form
     private readonly Label _validationLabel = new();
     private readonly Label _codingDayLabel = new();
     private readonly Label _codingDayWarningLabel = new();
+    private readonly OffsiteService _offsiteService;
     private Label? _titleLabel;
     private Label? _transactionManagedNoteLabel;
     private Button? _cancelButton;
     private Button? _saveButton;
     private Button? _archiveButton;
+    
+    // Maintenance execution buttons
+    private Button? _startMaintenanceButton;
+    private Button? _viewRecordButton;
+
+    // Transaction action button
+    private Button? _viewTransactionButton;
+
     private bool _isViewOnly;
 
     private IReadOnlyList<Car> _cars = [];
@@ -56,6 +65,7 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         _currentUserId = currentUserId;
         _scheduleService = new FleetScheduleService(currentUserId);
+        _offsiteService = new OffsiteService(currentUserId);
         _mode = mode;
         _sourceSchedule = schedule;
         _prefilledCarId = prefilledCarId;
@@ -148,6 +158,24 @@ public sealed class FleetScheduleDetailsForm : Form
             _archiveButton = CreateDangerButton("Archive", 110, 38);
             _archiveButton.Location = new Point(32, 590);
             _archiveButton.Click += ArchiveButton_Click;
+
+            // Maintenance actions
+            _startMaintenanceButton = ControlFactory.CreatePrimaryButton("Start Maintenance", 160, 38);
+            _startMaintenanceButton.BackColor = Color.FromArgb(234, 88, 12); // Maintenance orange
+            _startMaintenanceButton.Location = new Point(152, 590);
+            _startMaintenanceButton.Visible = false;
+            _startMaintenanceButton.Click += StartMaintenanceButton_Click;
+
+            _viewRecordButton = CreateSecondaryButton("View Offsite Record", 160, 38);
+            _viewRecordButton.Location = new Point(32, 590); // Aligned to left
+            _viewRecordButton.Visible = false;
+            _viewRecordButton.Click += ViewRecordButton_Click;
+
+            // Transaction action
+            _viewTransactionButton = CreateSecondaryButton("View Transaction", 160, 38);
+            _viewTransactionButton.Location = new Point(32, 590); // Aligned to left
+            _viewTransactionButton.Visible = false;
+            _viewTransactionButton.Click += ViewTransactionButton_Click;
         }
 
         Controls.Add(_titleLabel);
@@ -155,14 +183,100 @@ public sealed class FleetScheduleDetailsForm : Form
         Controls.Add(contentPanel);
         Controls.Add(_cancelButton);
         Controls.Add(_saveButton);
-        if (_archiveButton is not null)
-        {
-            Controls.Add(_archiveButton);
-        }
         
+        if (_archiveButton is not null) Controls.Add(_archiveButton);
+        if (_startMaintenanceButton is not null) Controls.Add(_startMaintenanceButton);
+        if (_viewRecordButton is not null) Controls.Add(_viewRecordButton);
+        if (_viewTransactionButton is not null) Controls.Add(_viewTransactionButton);
+
         // Add blank area click handler to remove focus from inputs
         Click += (_, _) => ActiveControl = null;
         CancelButton = _cancelButton;
+    }
+
+    private async Task UpdateContextualActionsAsync()
+    {
+        if (_sourceSchedule is null || _mode != FleetScheduleFormMode.Edit)
+        {
+            return;
+        }
+
+        if (_sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Maintenance)
+        {
+            bool isPending = _sourceSchedule.Status == FleetScheduleConstants.Status.Pending;
+            bool hasOperationalExecution = _sourceSchedule.Status == FleetScheduleConstants.Status.Maintenance ||
+                                           _sourceSchedule.Status == FleetScheduleConstants.Status.Completed ||
+                                           _sourceSchedule.Status == FleetScheduleConstants.Status.Cancelled;
+
+            if (_startMaintenanceButton != null) _startMaintenanceButton.Visible = isPending;
+
+            if (hasOperationalExecution && _viewRecordButton != null)
+            {
+                OffsiteRecord? record = await _offsiteService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
+                _viewRecordButton.Visible = record is not null;
+            }
+
+            // Hide normal save/archive if operational execution started (execution record handles it)
+            if (hasOperationalExecution)
+            {
+                if (_saveButton != null) _saveButton.Visible = false;
+                if (_archiveButton != null) _archiveButton.Visible = false;
+            }
+        }
+        else if (_sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Rental)
+        {
+            if (_viewTransactionButton != null)
+            {
+                var transactionService = new TransactionService(_currentUserId);
+                Transaction? linkedTransaction = await transactionService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
+                _viewTransactionButton.Visible = linkedTransaction is not null;
+            }
+        }
+    }
+
+    private async void StartMaintenanceButton_Click(object? sender, EventArgs e)
+    {
+        if (_sourceSchedule is null) return;
+
+        using NatarakiCarRental.Forms.Offsite.OffsiteRecordDetailsForm form = new(_currentUserId);
+        // Form will pick up eligible pending schedules in its tab.
+        if (form.ShowDialog(this) == DialogResult.OK)
+        {
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+    }
+
+    private async void ViewRecordButton_Click(object? sender, EventArgs e)
+    {
+        if (_sourceSchedule is null) return;
+        
+        OffsiteRecord? record = await _offsiteService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
+        if (record is null)
+        {
+            MessageBoxHelper.ShowWarning("No execution record found for this schedule.");
+            return;
+        }
+
+        using NatarakiCarRental.Forms.Offsite.OffsiteRecordDetailsForm form = new(_currentUserId, record.OffsiteRecordId, isViewOnly: true);
+        form.ShowDialog(this);
+    }
+
+    private async void ViewTransactionButton_Click(object? sender, EventArgs e)
+    {
+        if (_sourceSchedule is null) return;
+
+        var transactionService = new TransactionService(_currentUserId);
+        Transaction? linkedTransaction = await transactionService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
+        
+        if (linkedTransaction is null)
+        {
+            MessageBoxHelper.ShowWarning("No transaction found for this schedule.");
+            return;
+        }
+
+        using NatarakiCarRental.Forms.Transactions.TransactionDetailsForm form = new(linkedTransaction);
+        form.ShowDialog(this);
     }
 
     private async void FleetScheduleDetailsForm_Load(object? sender, EventArgs e)
@@ -193,7 +307,7 @@ public sealed class FleetScheduleDetailsForm : Form
             }
             else
             {
-                ApplyDefaults();
+                await ApplyDefaultsAsync();
             }
         }
         catch (Exception exception)
@@ -239,7 +353,7 @@ public sealed class FleetScheduleDetailsForm : Form
             _scheduleTypeComboBox.SelectedIndex = 0;
         }
 
-        _scheduleTypeComboBox.SelectedIndexChanged += (_, _) => UpdateStatusText();
+        _scheduleTypeComboBox.SelectedIndexChanged += async (_, _) => await UpdateStatusTextAsync();
         _carComboBox.SelectedIndexChanged += (_, _) => UpdateCodingDayIndicator();
         _startDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
         _endDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
@@ -249,20 +363,36 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         if (_sourceSchedule is null) return;
 
-        bool isLinked = await _scheduleService.IsLinkedToActiveTransactionAsync(_sourceSchedule.ScheduleId);
+        bool isLinkedToTransaction = await _scheduleService.IsLinkedToActiveTransactionAsync(_sourceSchedule.ScheduleId);
         bool isRental = _sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Rental;
         
-        if (isLinked || isRental)
+        bool isCompletedOrCancelled = _sourceSchedule.Status == FleetScheduleConstants.Status.Completed || 
+                                      _sourceSchedule.Status == FleetScheduleConstants.Status.Cancelled;
+        
+        bool isActiveMaintenance = _sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Maintenance && 
+                                   _sourceSchedule.Status != FleetScheduleConstants.Status.Pending;
+
+        if (isLinkedToTransaction || isRental)
         {
-            SetToViewMode();
+            await SetToViewModeAsync("This schedule is managed through the Transactions module.");
+        }
+        else if (isActiveMaintenance)
+        {
+            await SetToViewModeAsync("This maintenance schedule is managed through the Offsite module.");
+        }
+        else if (isCompletedOrCancelled)
+        {
+            await SetToViewModeAsync("This historical schedule is view-only.");
         }
         else
         {
-            LoadSchedule(_sourceSchedule);
+            await LoadScheduleAsync(_sourceSchedule);
         }
+
+        await UpdateContextualActionsAsync();
     }
 
-    private void SetToViewMode()
+    private async Task SetToViewModeAsync(string noteText)
     {
         _isViewOnly = true;
         Text = "View Schedule";
@@ -279,7 +409,7 @@ public sealed class FleetScheduleDetailsForm : Form
 
         _transactionManagedNoteLabel = new Label
         {
-            Text = "This schedule is managed through the Transactions module.",
+            Text = noteText,
             AutoSize = true,
             Location = new Point(32, 58),
             Font = FontHelper.Regular(8.5F),
@@ -290,7 +420,7 @@ public sealed class FleetScheduleDetailsForm : Form
 
         if (_sourceSchedule is not null)
         {
-            LoadSchedule(_sourceSchedule);
+            await LoadScheduleAsync(_sourceSchedule);
             if (_saveButton is not null) _saveButton.Visible = false;
             if (_archiveButton is not null) _archiveButton.Visible = false;
             if (_cancelButton is not null)
@@ -301,18 +431,18 @@ public sealed class FleetScheduleDetailsForm : Form
         }
     }
 
-    private void ApplyDefaults()
+    private async Task ApplyDefaultsAsync()
     {
         SelectLookup(_carComboBox, _prefilledCarId);
         _scheduleTypeComboBox.SelectedItem = FleetScheduleConstants.Type.Reservation;
-        UpdateStatusText();
+        await UpdateStatusTextAsync();
         DateTime date = _prefilledDate?.Date ?? DateTime.Today;
         _startDatePicker.Value = date;
         _endDatePicker.Value = date;
         UpdateCodingDayIndicator();
     }
 
-    private void LoadSchedule(FleetScheduleModel schedule)
+    private async Task LoadScheduleAsync(FleetScheduleModel schedule)
     {
         SelectLookup(_carComboBox, schedule.CarId);
         SelectLookup(_customerComboBox, schedule.CustomerId);
@@ -321,6 +451,7 @@ public sealed class FleetScheduleDetailsForm : Form
         _startDatePicker.Value = schedule.StartDate;
         _endDatePicker.Value = schedule.EndDate;
         UpdateCodingDayIndicator();
+        await UpdateContextualActionsAsync();
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)
@@ -667,7 +798,7 @@ public sealed class FleetScheduleDetailsForm : Form
         }
     }
 
-    private void UpdateStatusText()
+    private async Task UpdateStatusTextAsync()
     {
         string scheduleType = _scheduleTypeComboBox.SelectedItem?.ToString() ?? string.Empty;
         string status = _mode == FleetScheduleFormMode.Edit
@@ -676,6 +807,7 @@ public sealed class FleetScheduleDetailsForm : Form
                 ? _sourceSchedule.Status
                 : FleetScheduleVisualHelper.GetDefaultStatusForType(scheduleType);
         SetStatusText(status);
+        await UpdateContextualActionsAsync();
     }
 
     private void SetStatusText(string status)

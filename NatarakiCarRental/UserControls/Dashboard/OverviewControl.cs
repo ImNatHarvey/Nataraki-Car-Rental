@@ -292,7 +292,7 @@ public sealed class OverviewControl : UserControl
     {
         _totalCarsCard.SetMetric(IconChar.Car, "Active Cars", carCounts.TotalCars.ToString(), "Registered active vehicles", ThemeHelper.Primary);
         _availableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", carCounts.AvailableCars.ToString(), "Ready for rental", ThemeHelper.Success);
-        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Cars Under Maintenance", carCounts.MaintenanceCars.ToString(), "Manual vehicle state", ThemeHelper.Warning);
+        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Maintenance Cars", carCounts.MaintenanceCars.ToString(), "Under maintenance today", ThemeHelper.Warning);
         _activeCustomersCard.SetMetric(IconChar.Users, "Active Customers", customerCounts.ActiveCustomers.ToString(), "Ready for booking", ThemeHelper.Success);
         _blacklistedCustomersCard.SetMetric(IconChar.UserSlash, "Blacklisted Customers", customerCounts.BlacklistedCustomers.ToString(), "Blocked from new schedules", ThemeHelper.Danger);
         _todaysSchedulesCard.SetMetric(IconChar.CalendarDay, "Today's Schedules", scheduleCounts.TodaysSchedules.ToString(), "Visible today", ThemeHelper.Primary);

@@ -127,6 +127,57 @@ public sealed class TransactionRepository
         }
     }
 
+    public async Task<Transaction?> GetByFleetScheduleIdAsync(int fleetScheduleId, IDbTransaction? dbTransaction = null)
+    {
+        const string sql = """
+            SELECT TOP 1
+                transactions.TransactionId,
+                transactions.TransactionCode,
+                transactions.FleetScheduleId,
+                transactions.CustomerId,
+                transactions.CarId,
+                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                cars.CarName,
+                cars.PlateNumber,
+                transactions.StartDate,
+                transactions.EndDate,
+                transactions.DailyRate,
+                transactions.TotalDays,
+                transactions.TotalAmount,
+                transactions.AmountPaid,
+                transactions.BalanceAmount,
+                transactions.ModeOfPayment,
+                transactions.PaymentStatus,
+                transactions.TransactionStatus,
+                transactions.Notes,
+                transactions.CreatedByUserId,
+                transactions.CreatedAt,
+                transactions.UpdatedAt,
+                transactions.ArchivedAt,
+                transactions.IsArchived
+            FROM dbo.Transactions AS transactions
+            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
+            WHERE transactions.FleetScheduleId = @FleetScheduleId
+              AND transactions.IsArchived = 0
+            ORDER BY transactions.TransactionId DESC;
+            """;
+
+        IDbConnection connection = dbTransaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.QuerySingleOrDefaultAsync<Transaction>(sql, new { FleetScheduleId = fleetScheduleId }, dbTransaction);
+        }
+        finally
+        {
+            if (dbTransaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
     public async Task<Transaction?> GetByCodeAsync(string transactionCode)
     {
         const string sql = """

@@ -57,29 +57,29 @@ public sealed class CarService
         _currentUserId = currentUserId;
     }
 
-    public Task<IReadOnlyList<Car>> GetActiveCarsAsync()
+    public async Task<IReadOnlyList<Car>> GetActiveCarsAsync()
     {
-        return _carRepository.GetActiveCarsAsync();
+        return await _carRepository.GetActiveCarsAsync(DateTime.Today);
     }
 
-    public Task<IReadOnlyList<Car>> GetArchivedCarsAsync()
+    public async Task<IReadOnlyList<Car>> GetArchivedCarsAsync()
     {
-        return _carRepository.GetArchivedCarsAsync();
+        return await _carRepository.GetArchivedCarsAsync(DateTime.Today);
     }
 
-    public Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived)
+    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived)
     {
-        return _carRepository.SearchCarsAsync(searchText, includeArchived);
+        return await _carRepository.SearchCarsAsync(searchText, includeArchived, DateTime.Today);
     }
 
     public Task<CarCounts> GetCarCountsAsync()
     {
-        return _carRepository.GetCarCountsAsync();
+        return _carRepository.GetCarCountsAsync(DateTime.Today);
     }
 
-    public Task<Car?> GetCarByIdAsync(int carId)
+    public async Task<Car?> GetCarByIdAsync(int carId)
     {
-        return _carRepository.GetCarByIdAsync(carId);
+        return await _carRepository.GetCarByIdAsync(carId, DateTime.Today);
     }
 
     public Task<bool> PlateNumberExistsAsync(string plateNumber, int? excludingCarId = null)
@@ -183,7 +183,7 @@ public sealed class CarService
     public async Task ArchiveCarAsync(int carId)
     {
         AccessControlService.EnforcePermission("Cars.ArchiveRestore");
-        Car? car = await _carRepository.GetCarByIdAsync(carId);
+        Car? car = await _carRepository.GetCarByIdAsync(carId, DateTime.Today);
         FleetSchedule? blockingSchedule = await _fleetScheduleRepository.GetActiveOrUpcomingOperationalScheduleAsync(carId, DateTime.Today);
 
         if (blockingSchedule is not null)
@@ -226,7 +226,7 @@ public sealed class CarService
     public async Task RestoreCarAsync(int carId)
     {
         AccessControlService.EnforcePermission("Cars.ArchiveRestore");
-        Car? car = await _carRepository.GetCarByIdAsync(carId);
+        Car? car = await _carRepository.GetCarByIdAsync(carId, DateTime.Today);
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 

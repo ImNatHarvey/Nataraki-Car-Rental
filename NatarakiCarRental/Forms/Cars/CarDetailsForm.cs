@@ -207,7 +207,9 @@ public sealed class CarDetailsForm : Form
 
         layout.Controls.Add(CreateInputPanel("Rate Per Day (PHP) *", _ratePerDayTextBox), 3, 0);
 
-        layout.Controls.Add(CreateInputPanel("Status *", _statusComboBox), 0, 1);
+        // Status is now system-driven and read-only
+        _statusComboBox.Enabled = false;
+        layout.Controls.Add(CreateInputPanel("Status (System-Driven)", _statusComboBox), 0, 1);
 
         return layout;
     }

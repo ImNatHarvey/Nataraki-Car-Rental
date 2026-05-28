@@ -77,6 +77,11 @@ public sealed class TransactionService
         return _transactionRepository.GetByIdAsync(transactionId);
     }
 
+    public Task<Transaction?> GetByFleetScheduleIdAsync(int fleetScheduleId)
+    {
+        return _transactionRepository.GetByFleetScheduleIdAsync(fleetScheduleId);
+    }
+
     public Task<IReadOnlyList<TransactionListItem>> SearchTransactionsAsync(
         string searchText,
         string? transactionStatus = null,
@@ -138,7 +143,6 @@ public sealed class TransactionService
             endDate,
             reservation.Notes,
             GetReservationStatusForPaidAmount(request.AmountPaid));
-        await _scheduleService.PrepareForSaveAsync(reservedSchedule, reservation.ScheduleId);
 
         Transaction transaction = BuildTransaction(
             reservation.ScheduleId,
@@ -157,6 +161,8 @@ public sealed class TransactionService
 
         try
         {
+            await _scheduleService.PrepareForSaveAsync(reservedSchedule, reservation.ScheduleId, isInternalWorkflow: false, transaction: dbTransaction);
+
             int affectedRows = await _scheduleRepository.UpdateAsync(reservedSchedule, dbTransaction);
 
             if (affectedRows == 0)
@@ -252,13 +258,13 @@ public sealed class TransactionService
                 request.StartDate.Date,
                 request.EndDate.Date,
                 request.Notes);
-        await _scheduleService.PrepareForSaveAsync(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
+            await _scheduleService.PrepareForSaveAsync(schedule, null, false, dbTransaction);
             schedule.CreatedByUserId = _currentUserId;
             int scheduleId = await _scheduleRepository.CreateAsync(schedule, dbTransaction);
             Transaction transaction = BuildTransaction(
@@ -341,13 +347,14 @@ public sealed class TransactionService
 
         schedule.ScheduleType = FleetScheduleConstants.Type.Rental;
         schedule.Status = FleetScheduleConstants.Status.Completed;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
+            await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
+
             decimal finalTotal = transaction.TotalAmount;
             decimal finalPaid = transaction.AmountPaid;
             decimal actualAdditionalCharge = request.ReturnCondition == "Good" ? 0 : request.AdditionalCharge;
@@ -563,13 +570,14 @@ public sealed class TransactionService
         }
 
         schedule.EndDate = newEndDate.Date;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
+            await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
+
             if (amountPaid > 0)
             {
                 await _transactionPaymentRepository.AddAsync(new TransactionPayment
@@ -832,13 +840,13 @@ public sealed class TransactionService
 
         schedule.ScheduleType = scheduleType;
         schedule.Status = scheduleStatus;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
+            await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
             await _transactionRepository.UpdateStatusAsync(transactionId, transactionStatus, dbTransaction);
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
             string description = reason is null
@@ -868,7 +876,7 @@ public sealed class TransactionService
 
     private async Task<Car> GetEligibleCarAsync(int carId)
     {
-        Car? car = await _carRepository.GetCarByIdAsync(carId);
+        Car? car = await _carRepository.GetCarByIdAsync(carId, DateTime.Today);
 
         if (car is null || car.IsArchived)
         {
@@ -1113,7 +1121,7 @@ public sealed class TransactionService
         }
 
         schedule.Status = scheduleStatus;
-        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true);
+        await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
         await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
     }
 

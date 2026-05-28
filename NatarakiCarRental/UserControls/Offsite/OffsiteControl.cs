@@ -78,7 +78,7 @@ public sealed class OffsiteControl : UserControl
     private int _currentPage = 1;
     private int _pageSize = 4;
     private int _totalItems;
-    private bool _isMapTabActive = true;
+    private bool _isMapTabActive = false;
     private bool _showArchivedRecords;
 
     private static Button CreateAddButton()
@@ -204,19 +204,27 @@ public sealed class OffsiteControl : UserControl
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
         
-        ConfigureTabButton(_mapTrackingTabButton, "Map Tracking", IconChar.MapLocationDot, new Point(0, 10), 160);
-        ConfigureTabButton(_offsiteRecordsTabButton, "Offsite Records", IconChar.ClipboardList, new Point(168, 10), 160);
+        ConfigureTabButton(_offsiteRecordsTabButton, "Offsite Records", IconChar.ClipboardList, new Point(0, 10), 160);
+        ConfigureTabButton(_mapTrackingTabButton, "Map Tracking", IconChar.MapLocationDot, new Point(168, 10), 160);
 
         _mapTrackingTabButton.Click += (_, _) => ShowMapTrackingView();
         _offsiteRecordsTabButton.Click += async (_, _) => await ShowRecordsViewAsync();
 
-        panel.Controls.Add(_mapTrackingTabButton);
         panel.Controls.Add(_offsiteRecordsTabButton);
+        panel.Controls.Add(_mapTrackingTabButton);
         return panel;
     }
 
-    private void ShowMapTrackingView()
+    private bool _isMapInitialized;
+
+    private async void ShowMapTrackingView()
     {
+        if (!_isMapInitialized)
+        {
+            await InitializeMapAsync();
+            _isMapInitialized = true;
+        }
+
         _isMapTabActive = true;
         UpdateMainTabStyles();
         _mainContentPanel.Controls.Clear();
@@ -942,9 +950,8 @@ public sealed class OffsiteControl : UserControl
     private async void OffsiteControl_Load(object? sender, EventArgs e)
     {
         Load -= OffsiteControl_Load;
-        await InitializeMapAsync();
         await LoadCarsAsync();
-        ShowMapTrackingView();
+        await ShowRecordsViewAsync();
         _refreshTimer.Start();
     }
 

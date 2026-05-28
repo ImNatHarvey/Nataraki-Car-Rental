@@ -80,6 +80,11 @@ public sealed class OffsiteService
         return _offsiteRepository.GetByIdAsync(offsiteRecordId);
     }
 
+    public Task<OffsiteRecord?> GetByFleetScheduleIdAsync(int fleetScheduleId)
+    {
+        return _offsiteRepository.GetByFleetScheduleIdAsync(fleetScheduleId);
+    }
+
     public async Task<int> CreateAsync(CreateOffsiteRecordRequest request)
     {
         AccessControlService.EnforcePermission("Offsite.Create");
@@ -100,32 +105,32 @@ public sealed class OffsiteService
                 {
                     CarId = request.CarId,
                     ScheduleType = FleetScheduleConstants.Type.Maintenance,
-                    Status = FleetScheduleConstants.Status.Ongoing,
+                    Status = FleetScheduleConstants.Status.Maintenance,
                     StartDate = request.StartDate,
                     EndDate = request.ExpectedReturnDate ?? request.StartDate,
                     Notes = $"Operational Offsite: {request.OffsiteType}"
                 };
                 
-                // Use the fleet service logic so it handles title generation and conflict validation
-                // Pass true for internal workflow if needed to bypass some UI-only checks
-                scheduleId = await _fleetScheduleService.CreateAsync(schedule);
+                scheduleId = await _fleetScheduleService.CreateFromInternalAsync(schedule, transaction);
             }
             else
             {
                 // If scheduleId was provided (Create from Schedule tab), 
-                // we should ensure it matches our criteria (though validation should have caught this)
+                // we should ensure it matches our criteria
                 FleetSchedule? existingSchedule = await _fleetScheduleService.GetByIdAsync(scheduleId.Value);
                 if (existingSchedule == null || existingSchedule.IsArchived || existingSchedule.ScheduleType != FleetScheduleConstants.Type.Maintenance)
                 {
                     throw new ValidationException([new ValidationFailure("FleetScheduleId", "Selected maintenance schedule is invalid or archived.")]);
                 }
 
-                // Update the existing schedule status to Ongoing if it's not already
-                if (existingSchedule.Status != FleetScheduleConstants.Status.Ongoing)
+                if (existingSchedule.Status != FleetScheduleConstants.Status.Pending)
                 {
-                    existingSchedule.Status = FleetScheduleConstants.Status.Ongoing;
-                    await _fleetScheduleService.UpdateAsync(existingSchedule);
+                    throw new ValidationException([new ValidationFailure("FleetScheduleId", "Only pending maintenance schedules can be started.")]);
                 }
+
+                // Update the existing schedule status to Maintenance
+                existingSchedule.Status = FleetScheduleConstants.Status.Maintenance;
+                await _fleetScheduleService.UpdateFromInternalAsync(existingSchedule, transaction);
             }
 
             // 2. Handle Proof File path
@@ -196,7 +201,7 @@ public sealed class OffsiteService
                     schedule.StartDate = request.StartDate;
                     schedule.EndDate = request.ExpectedReturnDate ?? request.StartDate;
                     schedule.Notes = $"Operational Offsite: {request.OffsiteType}";
-                    await _fleetScheduleService.UpdateAsync(schedule);
+                    await _fleetScheduleService.UpdateFromInternalAsync(schedule, transaction);
                 }
             }
 
@@ -299,7 +304,7 @@ public sealed class OffsiteService
                     schedule.ScheduleType = FleetScheduleConstants.Type.Maintenance;
                     schedule.Status = FleetScheduleConstants.Status.Completed;
                     schedule.EndDate = completion.CompletedDate;
-                    await _fleetScheduleService.UpdateAsync(schedule);
+                    await _fleetScheduleService.UpdateFromInternalAsync(schedule, transaction);
                 }
             }
 
@@ -346,7 +351,7 @@ public sealed class OffsiteService
                 if (schedule != null)
                 {
                     schedule.Status = FleetScheduleConstants.Status.Cancelled;
-                    await _fleetScheduleService.UpdateAsync(schedule);
+                    await _fleetScheduleService.UpdateFromInternalAsync(schedule, transaction);
                 }
             }
 
@@ -504,7 +509,7 @@ public sealed class OffsiteService
 
         if (failures.Count > 0) throw new ValidationException(failures);
 
-        Car? car = await _carRepository.GetCarByIdAsync(request.CarId);
+        Car? car = await _carRepository.GetCarByIdAsync(request.CarId, DateTime.Today);
         if (car == null || car.IsArchived)
             throw new ValidationException([new ValidationFailure("CarId", "Selected car was not found or is archived.")]);
 

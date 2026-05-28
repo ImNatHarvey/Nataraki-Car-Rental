@@ -99,9 +99,9 @@ public sealed class MainForm : Form
             new("Overview", IconChar.ChartLine, AccessControlService.HasPermission("Overview.View")),
             new("Fleet Schedule", IconChar.CalendarDays, AccessControlService.HasPermission("FleetSchedule.View")),
             new("Transactions", IconChar.Receipt, AccessControlService.HasPermission("Transactions.View")),
+            new("Offsite", IconChar.LocationDot, AccessControlService.HasPermission("Offsite.View")),
             new("Customers", IconChar.Users, AccessControlService.HasPermission("Customers.View")),
             new("Car Garage", IconChar.Car, AccessControlService.HasPermission("Cars.View")),
-            new("Offsite", IconChar.LocationDot, AccessControlService.HasPermission("Offsite.View")),
             new("Reports & Analytics", IconChar.ChartColumn, AccessControlService.HasPermission("Reports.View")),
             new("Activity Log", IconChar.ClipboardList, AccessControlService.HasPermission("ActivityLog.View")),
             new("Manage System", IconChar.Gear, AccessControlService.HasPermission("ManageSystem.View"))

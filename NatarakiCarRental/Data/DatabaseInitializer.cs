@@ -504,37 +504,34 @@ public static class DatabaseInitializer
                     );
                 END;
 
-                IF OBJECT_ID(N'dbo.CK_FleetSchedules_Status_Valid', N'C') IS NULL
-                   AND NOT EXISTS (
-                        SELECT 1
-                        FROM dbo.FleetSchedules
-                        WHERE Status NOT IN (N'Pending', N'Reserved', N'Rented', N'Ongoing', N'Completed', N'Cancelled')
-                   )
-                BEGIN
-                    ALTER TABLE dbo.FleetSchedules WITH CHECK
-                    ADD CONSTRAINT CK_FleetSchedules_Status_Valid CHECK (
-                        Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing', N'Completed', N'Cancelled')
-                    );
-                END;
+                IF OBJECT_ID(N'dbo.CK_FleetSchedules_Status_Valid', N'C') IS NOT NULL
+                    ALTER TABLE dbo.FleetSchedules DROP CONSTRAINT CK_FleetSchedules_Status_Valid;
 
-                IF OBJECT_ID(N'dbo.CK_FleetSchedules_TypeStatus_Valid', N'C') IS NULL
-                   AND NOT EXISTS (
-                        SELECT 1
-                        FROM dbo.FleetSchedules
-                        WHERE NOT (
-                            (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Reserved', N'Cancelled'))
-                            OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
-                            OR (ScheduleType = N'Maintenance' AND Status IN (N'Ongoing', N'Completed', N'Cancelled'))
-                        )
-                   )
-                BEGIN
-                    ALTER TABLE dbo.FleetSchedules WITH CHECK
-                    ADD CONSTRAINT CK_FleetSchedules_TypeStatus_Valid CHECK (
-                        (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Reserved', N'Cancelled'))
-                        OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
-                        OR (ScheduleType = N'Maintenance' AND Status IN (N'Ongoing', N'Completed', N'Cancelled'))
-                    );
-                END;
+                IF OBJECT_ID(N'dbo.CK_FleetSchedules_TypeStatus_Valid', N'C') IS NOT NULL
+                    ALTER TABLE dbo.FleetSchedules DROP CONSTRAINT CK_FleetSchedules_TypeStatus_Valid;
+
+                UPDATE dbo.FleetSchedules
+                SET Status = CASE
+                    WHEN ScheduleType = N'Maintenance' AND Status = N'Ongoing' THEN N'Maintenance'
+                    WHEN ScheduleType = N'Rental' AND Status = N'Ongoing' THEN N'Rented'
+                    WHEN ScheduleType = N'Rental' AND Status = N'Active' THEN N'Rented'
+                    WHEN ScheduleType = N'Reservation' AND Status = N'Ongoing' THEN N'Reserved'
+                    WHEN ScheduleType = N'Reservation' AND Status = N'Active' THEN N'Reserved'
+                    ELSE Status
+                END
+                WHERE Status IN (N'Ongoing', N'Active');
+
+                ALTER TABLE dbo.FleetSchedules WITH CHECK
+                ADD CONSTRAINT CK_FleetSchedules_Status_Valid CHECK (
+                    Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing', N'Maintenance', N'Completed', N'Cancelled')
+                );
+
+                ALTER TABLE dbo.FleetSchedules WITH CHECK
+                ADD CONSTRAINT CK_FleetSchedules_TypeStatus_Valid CHECK (
+                    (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Reserved', N'Cancelled'))
+                    OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
+                    OR (ScheduleType = N'Maintenance' AND Status IN (N'Pending', N'Maintenance', N'Completed', N'Cancelled'))
+                );
             END;
             """);
 

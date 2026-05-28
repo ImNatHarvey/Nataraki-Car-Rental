@@ -58,7 +58,7 @@ public sealed class FleetScheduleRepository
             {
                 ReferenceDate = referenceDate.Date,
                 MaintenanceType = FleetScheduleConstants.Type.Maintenance,
-                OngoingStatus = FleetScheduleConstants.Status.Ongoing,
+                OngoingStatus = FleetScheduleConstants.Status.Maintenance,
                 OperationalStatuses = FleetScheduleConstants.Status.Operational
             });
 
@@ -224,7 +224,7 @@ public sealed class FleetScheduleRepository
             new
             {
                 MaintenanceType = FleetScheduleConstants.Type.Maintenance,
-                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Ongoing, "Pending" }
+                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Pending }
             });
 
         return (schedules ?? Enumerable.Empty<FleetSchedule>()).ToList();
@@ -384,6 +384,7 @@ public sealed class FleetScheduleRepository
             WHERE CarId = @CarId
               AND IsArchived = 0
               AND Status IN @OperationalStatuses
+              AND NOT (ScheduleType = N'Maintenance' AND Status = N'Pending')
               AND (@ExcludedScheduleId IS NULL OR ScheduleId <> @ExcludedScheduleId)
               AND StartDate <= @EndDate
               AND EndDate >= @StartDate;
@@ -434,6 +435,7 @@ public sealed class FleetScheduleRepository
             WHERE schedules.CarId = @CarId
               AND schedules.IsArchived = 0
               AND schedules.Status IN @OperationalStatuses
+              AND NOT (schedules.ScheduleType = N'Maintenance' AND schedules.Status = N'Pending')
               AND (@ExcludedScheduleId IS NULL OR schedules.ScheduleId <> @ExcludedScheduleId)
               AND schedules.StartDate <= @EndDate
               AND schedules.EndDate >= @StartDate

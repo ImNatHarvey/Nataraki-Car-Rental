@@ -116,6 +116,13 @@ public sealed class OffsiteRepository
         return await connection.QuerySingleOrDefaultAsync<OffsiteRecord>(sql, new { Id = offsiteRecordId });
     }
 
+    public async Task<OffsiteRecord?> GetByFleetScheduleIdAsync(int fleetScheduleId)
+    {
+        const string sql = "SELECT TOP 1 * FROM dbo.OffsiteRecords WHERE FleetScheduleId = @ScheduleId AND IsArchived = 0 ORDER BY OffsiteRecordId DESC;";
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<OffsiteRecord>(sql, new { ScheduleId = fleetScheduleId });
+    }
+
     public async Task<OffsiteRecord?> GetActiveByCarIdAsync(int carId)
     {
         const string sql = """

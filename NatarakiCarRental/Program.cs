@@ -47,6 +47,14 @@ internal static class Program
 
     private static string BuildStartupErrorMessage(Exception exception)
     {
+        string message = exception.Message;
+        Exception? inner = exception.InnerException;
+        while (inner != null)
+        {
+            message += Environment.NewLine + "Inner Exception: " + inner.Message;
+            inner = inner.InnerException;
+        }
+
         return
             "Nataraki Car Rental could not complete startup initialization." +
             Environment.NewLine +
@@ -54,7 +62,7 @@ internal static class Program
             "Please check the database connection and local app data permissions, then try again." +
             Environment.NewLine +
             Environment.NewLine +
-            $"Details: {exception.Message}";
+            $"Details: {message}";
     }
 
     private static void Application_ThreadException(object sender, System.Threading.ThreadExceptionEventArgs e)

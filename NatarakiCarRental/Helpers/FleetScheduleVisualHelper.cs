@@ -35,7 +35,7 @@ public static class FleetScheduleVisualHelper
         {
             FleetScheduleConstants.Type.Reservation => FleetScheduleConstants.Status.Pending,
             FleetScheduleConstants.Type.Rental => FleetScheduleConstants.Status.Rented,
-            FleetScheduleConstants.Type.Maintenance => FleetScheduleConstants.Status.Ongoing,
+            FleetScheduleConstants.Type.Maintenance => FleetScheduleConstants.Status.Pending,
             _ => string.Empty
         };
     }

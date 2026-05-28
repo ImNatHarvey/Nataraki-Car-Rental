@@ -1,3 +1,4 @@
+using System.Data;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Data.SqlClient;
@@ -90,10 +91,10 @@ public sealed class FleetScheduleService
         return _transactionRepository.HasActiveForFleetScheduleAsync(scheduleId);
     }
 
-    public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null, bool isInternalWorkflow = false)
+    public async Task PrepareForSaveAsync(FleetSchedule schedule, int? excludedScheduleId = null, bool isInternalWorkflow = false, IDbTransaction? transaction = null)
     {
         Normalize(schedule);
-        await ValidateAsync(schedule, excludedScheduleId, isInternalWorkflow);
+        await ValidateAsync(schedule, excludedScheduleId, isInternalWorkflow, transaction);
         GenerateTitle(schedule);
     }
 
@@ -189,6 +190,24 @@ public sealed class FleetScheduleService
         }
     }
 
+    public async Task<int> CreateFromInternalAsync(FleetSchedule schedule, IDbTransaction transaction)
+    {
+        await PrepareForSaveAsync(schedule, transaction: transaction);
+        schedule.CreatedByUserId = _currentUserId;
+        return await _scheduleRepository.CreateAsync(schedule, transaction);
+    }
+
+    public async Task UpdateFromInternalAsync(FleetSchedule schedule, IDbTransaction transaction)
+    {
+        await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId, isInternalWorkflow: true, transaction: transaction);
+        int affectedRows = await _scheduleRepository.UpdateAsync(schedule, transaction);
+        
+        if (affectedRows == 0)
+        {
+            throw new RecordNotFoundException($"Schedule record #{schedule.ScheduleId} was not found or is archived.");
+        }
+    }
+
     private async Task ValidateTransactionLifecycleLockAsync(FleetSchedule schedule)
     {
         FleetSchedule? existingSchedule = await _scheduleRepository.GetByIdAsync(schedule.ScheduleId);
@@ -260,7 +279,7 @@ public sealed class FleetScheduleService
         }
     }
 
-    private async Task ValidateAsync(FleetSchedule schedule, int? excludedScheduleId = null, bool isInternalWorkflow = false)
+    private async Task ValidateAsync(FleetSchedule schedule, int? excludedScheduleId = null, bool isInternalWorkflow = false, IDbTransaction? transaction = null)
     {
         List<ValidationFailure> failures = [];
 
@@ -299,7 +318,7 @@ public sealed class FleetScheduleService
             throw new ValidationException(failures);
         }
 
-        Car? car = await _carRepository.GetCarByIdAsync(schedule.CarId);
+        Car? car = await _carRepository.GetCarByIdAsync(schedule.CarId, DateTime.Today, transaction);
 
         if (car is null || car.IsArchived)
         {

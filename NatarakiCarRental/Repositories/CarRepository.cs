@@ -20,21 +20,45 @@ public sealed class CarRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<IReadOnlyList<Car>> GetActiveCarsAsync()
+    public async Task<IReadOnlyList<Car>> GetActiveCarsAsync(DateTime referenceDate)
     {
-        return await SearchCarsAsync(string.Empty, includeArchived: false);
+        return await SearchCarsAsync(string.Empty, includeArchived: false, referenceDate);
     }
 
-    public async Task<IReadOnlyList<Car>> GetArchivedCarsAsync()
+    public async Task<IReadOnlyList<Car>> GetArchivedCarsAsync(DateTime referenceDate)
     {
-        return await SearchCarsAsync(string.Empty, includeArchived: true);
+        return await SearchCarsAsync(string.Empty, includeArchived: true, referenceDate);
     }
 
-    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived)
+    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived, DateTime referenceDate)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
 
         const string sql = """
+            WITH CarStatus AS (
+                SELECT 
+                    c.*,
+                    CASE 
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.OffsiteRecords o 
+                            WHERE o.CarId = c.CarId AND o.Status = N'Ongoing' AND o.IsArchived = 0
+                              AND o.OffsiteType IN (N'Maintenance', N'Repair', N'Cleaning')
+                        ) THEN N'Maintenance'
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.Transactions t 
+                            WHERE t.CarId = c.CarId AND t.TransactionStatus = N'Active' AND t.IsArchived = 0
+                        ) OR EXISTS (
+                            SELECT 1 FROM dbo.FleetSchedules s 
+                            WHERE s.CarId = c.CarId AND s.ScheduleType = N'Rental' AND s.Status IN (N'Ongoing', N'Rented') AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
+                        ) THEN N'Rented'
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.FleetSchedules s 
+                            WHERE s.CarId = c.CarId AND s.ScheduleType = N'Reservation' AND s.Status IN (N'Pending', N'Reserved') AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
+                        ) THEN N'Reserved'
+                        ELSE N'Available'
+                    END AS ComputedStatus
+                FROM dbo.Cars c
+            )
             SELECT
                 CarId,
                 CarName,
@@ -47,7 +71,7 @@ public sealed class CarRepository
                 FuelType,
                 SeatingCapacity,
                 RatePerDay,
-                Status,
+                Status = ComputedStatus,
                 CodingDay,
                 Mileage,
                 RegistrationExpirationDate,
@@ -58,7 +82,7 @@ public sealed class CarRepository
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
-            FROM dbo.Cars
+            FROM CarStatus
             WHERE IsArchived = @IsArchived
               AND (
                     @SearchText = N''
@@ -76,15 +100,40 @@ public sealed class CarRepository
             {
                 IsArchived = includeArchived,
                 SearchText = normalizedSearchText,
-                SearchPattern = $"%{normalizedSearchText}%"
+                SearchPattern = $"%{normalizedSearchText}%",
+                ReferenceDate = referenceDate.Date
             });
 
         return cars.ToList();
     }
 
-    public async Task<Car?> GetCarByIdAsync(int carId)
+    public async Task<Car?> GetCarByIdAsync(int carId, DateTime referenceDate, IDbTransaction? transaction = null)
     {
         const string sql = """
+            WITH CarStatus AS (
+                SELECT 
+                    c.*,
+                    CASE 
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.OffsiteRecords o 
+                            WHERE o.CarId = c.CarId AND o.Status = N'Ongoing' AND o.IsArchived = 0
+                              AND o.OffsiteType IN (N'Maintenance', N'Repair', N'Cleaning')
+                        ) THEN N'Maintenance'
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.Transactions t 
+                            WHERE t.CarId = c.CarId AND t.TransactionStatus = N'Active' AND t.IsArchived = 0
+                        ) OR EXISTS (
+                            SELECT 1 FROM dbo.FleetSchedules s 
+                            WHERE s.CarId = c.CarId AND s.ScheduleType = N'Rental' AND s.Status IN (N'Ongoing', N'Rented') AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
+                        ) THEN N'Rented'
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.FleetSchedules s 
+                            WHERE s.CarId = c.CarId AND s.ScheduleType = N'Reservation' AND s.Status IN (N'Pending', N'Reserved') AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND @ReferenceDate <= s.EndDate
+                        ) THEN N'Reserved'
+                        ELSE N'Available'
+                    END AS ComputedStatus
+                FROM dbo.Cars c
+            )
             SELECT
                 CarId,
                 CarName,
@@ -97,7 +146,7 @@ public sealed class CarRepository
                 FuelType,
                 SeatingCapacity,
                 RatePerDay,
-                Status,
+                Status = ComputedStatus,
                 CodingDay,
                 Mileage,
                 RegistrationExpirationDate,
@@ -108,24 +157,67 @@ public sealed class CarRepository
                 CreatedAt,
                 UpdatedAt,
                 ArchivedAt
-            FROM dbo.Cars
+            FROM CarStatus
             WHERE CarId = @CarId;
             """;
 
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QuerySingleOrDefaultAsync<Car>(sql, new { CarId = carId });
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.QuerySingleOrDefaultAsync<Car>(
+                sql,
+                new
+                {
+                    CarId = carId,
+                    ReferenceDate = referenceDate.Date
+                },
+                transaction);
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
     }
 
-    public async Task<CarCounts> GetCarCountsAsync()
+    public async Task<CarCounts> GetCarCountsAsync(DateTime referenceDate)
     {
         const string sql = """
+            WITH CarStatus AS (
+                SELECT 
+                    c.CarId,
+                    c.IsArchived,
+                    CASE 
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.OffsiteRecords o 
+                            WHERE o.CarId = c.CarId AND o.Status = N'Ongoing' AND o.IsArchived = 0
+                              AND o.OffsiteType IN (N'Maintenance', N'Repair', N'Cleaning')
+                        ) THEN N'Maintenance'
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.Transactions t 
+                            WHERE t.CarId = c.CarId AND t.TransactionStatus = N'Active' AND t.IsArchived = 0
+                        ) OR EXISTS (
+                            SELECT 1 FROM dbo.FleetSchedules s 
+                            WHERE s.CarId = c.CarId AND s.ScheduleType = N'Rental' AND s.Status IN (N'Ongoing', N'Rented') AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
+                        ) THEN N'Rented'
+                        WHEN EXISTS (
+                            SELECT 1 FROM dbo.FleetSchedules s 
+                            WHERE s.CarId = c.CarId AND s.ScheduleType = N'Reservation' AND s.Status IN (N'Pending', N'Reserved') AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
+                        ) THEN N'Reserved'
+                        ELSE N'Available'
+                    END AS ComputedStatus
+                FROM dbo.Cars c
+            )
             SELECT
                 TotalCars = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
-                AvailableCars = COUNT(CASE WHEN IsArchived = 0 AND Status = @AvailableStatus THEN 1 END),
-                MaintenanceCars = COUNT(CASE WHEN IsArchived = 0 AND Status = @MaintenanceStatus THEN 1 END),
-                RentedCars = COUNT(CASE WHEN IsArchived = 0 AND Status = @RentedStatus THEN 1 END),
+                AvailableCars = COUNT(CASE WHEN IsArchived = 0 AND ComputedStatus = N'Available' THEN 1 END),
+                MaintenanceCars = COUNT(CASE WHEN IsArchived = 0 AND ComputedStatus = N'Maintenance' THEN 1 END),
+                RentedCars = COUNT(CASE WHEN IsArchived = 0 AND ComputedStatus = N'Rented' THEN 1 END),
                 ArchivedCars = COUNT(CASE WHEN IsArchived = 1 THEN 1 END)
-            FROM dbo.Cars;
+            FROM CarStatus;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -133,9 +225,7 @@ public sealed class CarRepository
             sql,
             new
             {
-                AvailableStatus = CarConstants.Status.Available,
-                MaintenanceStatus = CarConstants.Status.Maintenance,
-                RentedStatus = CarConstants.Status.Rented
+                ReferenceDate = referenceDate.Date
             });
 
         return counts ?? new CarCounts();
