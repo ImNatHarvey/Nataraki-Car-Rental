@@ -208,7 +208,7 @@ public sealed class FleetScheduleService
         }
     }
 
-    private async Task ValidateTransactionLifecycleLockAsync(FleetSchedule schedule)
+    private async Task ValidateTransactionLifecycleLockAsync(FleetSchedule schedule, IDbTransaction? transaction = null)
     {
         FleetSchedule? existingSchedule = await _scheduleRepository.GetByIdAsync(schedule.ScheduleId);
 
@@ -225,7 +225,7 @@ public sealed class FleetScheduleService
             return;
         }
 
-        if (await _transactionRepository.HasActiveForFleetScheduleAsync(schedule.ScheduleId))
+        if (await _transactionRepository.HasActiveForFleetScheduleAsync(schedule.ScheduleId, transaction))
         {
             throw new ValidationException(
                 [new ValidationFailure(
@@ -243,19 +243,19 @@ public sealed class FleetScheduleService
             throw new RecordNotFoundException($"Schedule record #{scheduleId} was not found or is archived.");
         }
 
-        if (await _transactionRepository.HasActiveForFleetScheduleAsync(scheduleId))
-        {
-            throw new ValidationException(
-                [new ValidationFailure(
-                    nameof(FleetSchedule.ScheduleId),
-                    "This schedule is linked to a transaction. Archive or cancel it from the Transaction module first.")]);
-        }
-
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
         try
         {
+            if (await _transactionRepository.HasActiveForFleetScheduleAsync(scheduleId, transaction))
+            {
+                throw new ValidationException(
+                    [new ValidationFailure(
+                        nameof(FleetSchedule.ScheduleId),
+                        "This schedule is linked to a transaction. Archive or cancel it from the Transaction module first.")]);
+            }
+
             int affectedRows = await _scheduleRepository.ArchiveAsync(scheduleId, transaction);
 
             if (affectedRows == 0)
@@ -337,7 +337,7 @@ public sealed class FleetScheduleService
 
         if (schedule.CustomerId.HasValue)
         {
-            Customer? customer = await _customerRepository.GetCustomerByIdAsync(schedule.CustomerId.Value);
+            Customer? customer = await _customerRepository.GetCustomerByIdAsync(schedule.CustomerId.Value, transaction);
 
             if (customer is null || customer.IsArchived)
             {
@@ -367,7 +367,8 @@ public sealed class FleetScheduleService
                 schedule.CarId,
                 schedule.StartDate,
                 schedule.EndDate,
-                excludedScheduleId);
+                excludedScheduleId,
+                transaction);
 
         if (conflict is not null)
         {

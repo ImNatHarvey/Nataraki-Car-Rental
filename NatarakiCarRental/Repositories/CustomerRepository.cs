@@ -19,7 +19,7 @@ public sealed class CustomerRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<Customer?> GetCustomerByIdAsync(int customerId)
+    public async Task<Customer?> GetCustomerByIdAsync(int customerId, IDbTransaction? transaction = null)
     {
         const string sql = """
             SELECT
@@ -48,8 +48,19 @@ public sealed class CustomerRepository
             WHERE CustomerId = @CustomerId;
             """;
 
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QuerySingleOrDefaultAsync<Customer>(sql, new { CustomerId = customerId });
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.QuerySingleOrDefaultAsync<Customer>(sql, new { CustomerId = customerId }, transaction);
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
     }
 
     public async Task<Customer?> GetCustomerByPhoneNumberAsync(string phoneNumber)

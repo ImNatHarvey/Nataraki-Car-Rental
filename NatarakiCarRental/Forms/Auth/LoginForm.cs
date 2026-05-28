@@ -533,14 +533,18 @@ public sealed class LoginForm : Form
         Hide();
 
         MainForm mainForm = new(user);
-        mainForm.LoggedOut += (_, _) =>
+        
+        void OnLoggedOut(object? s, EventArgs e)
         {
+            mainForm.LoggedOut -= OnLoggedOut;
             RefreshBrandingPanel();
             _isReturningFromLogout = true;
             _passwordTextBox.Clear();
             Show();
             _passwordTextBox.Focus();
-        };
+        }
+
+        mainForm.LoggedOut += OnLoggedOut;
         mainForm.FormClosed += (_, _) =>
         {
             if (_isReturningFromLogout)

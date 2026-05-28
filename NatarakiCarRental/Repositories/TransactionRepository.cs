@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using NatarakiCarRental.Data;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 
 namespace NatarakiCarRental.Repositories;
@@ -303,14 +304,14 @@ public sealed class TransactionRepository
 
     public async Task<TransactionMetrics> GetMetricsAsync(DateTime referenceDate)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 TotalTransactions = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
-                ActiveTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionStatus = N'Active' THEN 1 END),
-                UnpaidTransactions = COUNT(CASE WHEN IsArchived = 0 AND PaymentStatus = N'Unpaid' THEN 1 END),
+                ActiveTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionStatus = N'{TransactionConstants.Status.Active}' THEN 1 END),
+                UnpaidTransactions = COUNT(CASE WHEN IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Unpaid}' THEN 1 END),
                 CompletedTransactions = COUNT(CASE
                     WHEN IsArchived = 0
-                     AND TransactionStatus = N'Completed'
+                     AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
                      AND YEAR(ISNULL(UpdatedAt, CreatedAt)) = YEAR(@ReferenceDate)
                      AND MONTH(ISNULL(UpdatedAt, CreatedAt)) = MONTH(@ReferenceDate)
                     THEN 1 END)

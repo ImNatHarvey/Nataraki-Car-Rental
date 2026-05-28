@@ -376,42 +376,56 @@ public sealed class FleetScheduleRepository
         int carId,
         DateTime startDate,
         DateTime endDate,
-        int? excludedScheduleId = null)
+        int? excludedScheduleId = null,
+        IDbTransaction? transaction = null)
     {
-        const string sql = """
+        string sql = $"""
             SELECT COUNT(1)
-            FROM dbo.FleetSchedules
+            FROM dbo.FleetSchedules WITH (UPDLOCK, HOLDLOCK)
             WHERE CarId = @CarId
               AND IsArchived = 0
               AND Status IN @OperationalStatuses
-              AND NOT (ScheduleType = N'Maintenance' AND Status = N'Pending')
+              AND NOT (ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND Status = N'{FleetScheduleConstants.Status.Pending}')
               AND (@ExcludedScheduleId IS NULL OR ScheduleId <> @ExcludedScheduleId)
               AND StartDate <= @EndDate
               AND EndDate >= @StartDate;
             """;
 
-        using var connection = _connectionFactory.CreateConnection();
-        int count = await connection.ExecuteScalarAsync<int>(
-            sql,
-            new
-            {
-                CarId = carId,
-                StartDate = startDate.Date,
-                EndDate = endDate.Date,
-                ExcludedScheduleId = excludedScheduleId,
-                OperationalStatuses = FleetScheduleConstants.Status.Operational
-            });
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
 
-        return count > 0;
+        try
+        {
+            int count = await connection.ExecuteScalarAsync<int>(
+                sql,
+                new
+                {
+                    CarId = carId,
+                    StartDate = startDate.Date,
+                    EndDate = endDate.Date,
+                    ExcludedScheduleId = excludedScheduleId,
+                    OperationalStatuses = FleetScheduleConstants.Status.Operational
+                },
+                transaction);
+
+            return count > 0;
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
     }
 
     public async Task<FleetSchedule?> GetConflictingScheduleAsync(
         int carId,
         DateTime startDate,
         DateTime endDate,
-        int? excludedScheduleId = null)
+        int? excludedScheduleId = null,
+        IDbTransaction? transaction = null)
     {
-        const string sql = """
+        string sql = $"""
             SELECT TOP (1)
                 schedules.ScheduleId,
                 schedules.CarId,
@@ -429,30 +443,42 @@ public sealed class FleetScheduleRepository
                 schedules.CreatedAt,
                 schedules.UpdatedAt,
                 schedules.IsArchived
-            FROM dbo.FleetSchedules AS schedules
+            FROM dbo.FleetSchedules AS schedules WITH (UPDLOCK, HOLDLOCK)
             INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
             LEFT JOIN dbo.Customers AS customers ON customers.CustomerId = schedules.CustomerId
             WHERE schedules.CarId = @CarId
               AND schedules.IsArchived = 0
               AND schedules.Status IN @OperationalStatuses
-              AND NOT (schedules.ScheduleType = N'Maintenance' AND schedules.Status = N'Pending')
+              AND NOT (schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND schedules.Status = N'{FleetScheduleConstants.Status.Pending}')
               AND (@ExcludedScheduleId IS NULL OR schedules.ScheduleId <> @ExcludedScheduleId)
               AND schedules.StartDate <= @EndDate
               AND schedules.EndDate >= @StartDate
             ORDER BY schedules.StartDate, schedules.ScheduleId;
             """;
 
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.QuerySingleOrDefaultAsync<FleetSchedule>(
-            sql,
-            new
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.QuerySingleOrDefaultAsync<FleetSchedule>(
+                sql,
+                new
+                {
+                    CarId = carId,
+                    StartDate = startDate.Date,
+                    EndDate = endDate.Date,
+                    ExcludedScheduleId = excludedScheduleId,
+                    OperationalStatuses = FleetScheduleConstants.Status.Operational
+                },
+                transaction);
+        }
+        finally
+        {
+            if (transaction is null)
             {
-                CarId = carId,
-                StartDate = startDate.Date,
-                EndDate = endDate.Date,
-                ExcludedScheduleId = excludedScheduleId,
-                OperationalStatuses = FleetScheduleConstants.Status.Operational
-            });
+                connection.Dispose();
+            }
+        }
     }
 
     public async Task<FleetSchedule?> GetActiveOrUpcomingOperationalScheduleAsync(int carId, DateTime referenceDate)

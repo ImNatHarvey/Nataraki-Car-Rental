@@ -315,6 +315,10 @@ public sealed class MainForm : Form
 
     private void LoadContent(Control control)
     {
+        foreach (Control c in _contentPanel.Controls)
+        {
+            c.Dispose();
+        }
         _contentPanel.Controls.Clear();
         control.Dock = DockStyle.Fill;
         _contentPanel.Controls.Add(control);

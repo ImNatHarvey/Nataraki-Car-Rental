@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using NatarakiCarRental.Data;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 
 namespace NatarakiCarRental.Repositories;
@@ -142,7 +143,7 @@ public sealed class OffsiteRepository
 
     public async Task<OffsiteRecord?> GetActiveByCarIdAsync(int carId)
     {
-        const string sql = """
+        string sql = $"""
             SELECT TOP 1 r.*, 
                    u_comp.FirstName + ' ' + u_comp.LastName as CompletedByFullName,
                    u_creat.FirstName + ' ' + u_creat.LastName as CreatedByFullName
@@ -150,7 +151,7 @@ public sealed class OffsiteRepository
             LEFT JOIN dbo.Users u_comp ON r.CompletedByUserId = u_comp.UserId
             LEFT JOIN dbo.Users u_creat ON r.CreatedByUserId = u_creat.UserId
             WHERE r.CarId = @CarId
-              AND r.Status = N'Ongoing'
+              AND r.Status = N'{OffsiteConstants.Status.Ongoing}'
               AND r.IsArchived = 0;
             """;
         using var connection = _connectionFactory.CreateConnection();
@@ -219,10 +220,10 @@ public sealed class OffsiteRepository
 
     public async Task<int> CompleteAsync(CompleteOffsiteRecordRequest request, IDbTransaction? transaction = null)
     {
-        const string sql = """
+        string sql = $"""
             UPDATE dbo.OffsiteRecords
             SET
-                Status = N'Completed',
+                Status = N'{OffsiteConstants.Status.Completed}',
                 CompletedDate = @CompletedDate,
                 ActualCost = @AmountPaid,
                 ProofFilePath = @ProofFilePath,
@@ -233,7 +234,7 @@ public sealed class OffsiteRepository
                 CompletedByUserId = @CompletedByUserId,
                 UpdatedAt = sysdatetime()
             WHERE OffsiteRecordId = @OffsiteRecordId
-              AND Status = N'Ongoing'
+              AND Status = N'{OffsiteConstants.Status.Ongoing}'
               AND IsArchived = 0;
             """;
 
@@ -250,13 +251,13 @@ public sealed class OffsiteRepository
 
     public async Task<int> CancelAsync(int offsiteRecordId, IDbTransaction? transaction = null)
     {
-        const string sql = """
+        string sql = $"""
             UPDATE dbo.OffsiteRecords
             SET
-                Status = N'Cancelled',
+                Status = N'{OffsiteConstants.Status.Cancelled}',
                 UpdatedAt = sysdatetime()
             WHERE OffsiteRecordId = @Id
-              AND Status = N'Ongoing'
+              AND Status = N'{OffsiteConstants.Status.Ongoing}'
               AND IsArchived = 0;
             """;
 
@@ -287,11 +288,11 @@ public sealed class OffsiteRepository
 
     public async Task<bool> HasActiveOffsiteForCarAsync(int carId, int? excludeId = null)
     {
-        const string sql = """
+        string sql = $"""
             SELECT COUNT(1)
             FROM dbo.OffsiteRecords
             WHERE CarId = @CarId
-              AND Status = N'Ongoing'
+              AND Status = N'{OffsiteConstants.Status.Ongoing}'
               AND IsArchived = 0
               AND (@ExcludeId IS NULL OR OffsiteRecordId <> @ExcludeId);
             """;

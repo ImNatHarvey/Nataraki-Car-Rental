@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using NatarakiCarRental.Data;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 
 namespace NatarakiCarRental.Repositories;
@@ -18,7 +19,7 @@ public sealed class ReportRepository
 
     public async Task<ReportSummaryMetrics> GetSummaryMetricsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             -- Revenue Metrics
             DECLARE @TotalRevenue decimal(18,2) = (
                 SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
@@ -53,28 +54,28 @@ public sealed class ReportRepository
             -- Transaction Metrics (based on CreatedAt)
             DECLARE @PaidTransactions int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus = N'Paid' AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Paid}' AND CreatedAt >= @From AND CreatedAt <= @To
             );
             
             DECLARE @PartialTransactions int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus = N'Partial' AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Partial}' AND CreatedAt >= @From AND CreatedAt <= @To
             );
 
             DECLARE @UnpaidTransactions int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus = N'Unpaid' AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Unpaid}' AND CreatedAt >= @From AND CreatedAt <= @To
             );
 
             -- Operational Metrics
             DECLARE @ActiveRentals int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND TransactionStatus = N'Active'
+                WHERE IsArchived = 0 AND TransactionStatus = N'{TransactionConstants.Status.Active}'
             );
             
             DECLARE @CompletedRentals int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND TransactionStatus = N'Completed' AND UpdatedAt >= @From AND UpdatedAt <= @To
+                WHERE IsArchived = 0 AND TransactionStatus = N'{TransactionConstants.Status.Completed}' AND UpdatedAt >= @From AND UpdatedAt <= @To
             );
 
             -- Car Performance
@@ -182,7 +183,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<TransactionListItem>> GetOutstandingTransactionsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT 
                 t.TransactionId,
                 t.TransactionCode,
@@ -200,7 +201,7 @@ public sealed class ReportRepository
             JOIN dbo.Customers cu ON cu.CustomerId = t.CustomerId
             JOIN dbo.Cars c ON c.CarId = t.CarId
             WHERE t.IsArchived = 0 
-              AND t.PaymentStatus IN (N'Partial', N'Unpaid')
+              AND t.PaymentStatus IN (N'{TransactionConstants.PaymentStatus.Partial}', N'{TransactionConstants.PaymentStatus.Unpaid}')
               AND t.CreatedAt >= @From AND t.CreatedAt <= @To
             ORDER BY t.BalanceAmount DESC;
             """;
@@ -323,7 +324,7 @@ public sealed class ReportRepository
 
     public async Task<FleetPerformanceMetrics> GetFleetPerformanceMetricsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             DECLARE @RangeDays int = DATEDIFF(day, CONVERT(date, @From), CONVERT(date, @To)) + 1;
 
             WITH ActiveCars AS
@@ -343,8 +344,8 @@ public sealed class ReportRepository
                     ) + 1
                 FROM dbo.FleetSchedules
                 WHERE IsArchived = 0
-                  AND ScheduleType = N'Rental'
-                  AND Status IN (N'Rented', N'Completed')
+                  AND ScheduleType = N'{FleetScheduleConstants.Type.Rental}'
+                  AND Status IN (N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Completed}')
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
             ),
@@ -379,7 +380,7 @@ public sealed class ReportRepository
                 WHERE IsArchived = 0
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
-                  AND TransactionStatus IN (N'Active', N'Completed')
+                  AND TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
                 GROUP BY CarId
             )
             SELECT
@@ -412,7 +413,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Active'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -420,7 +421,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Completed'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -428,8 +429,8 @@ public sealed class ReportRepository
                     SELECT COUNT(DISTINCT CarId)
                     FROM dbo.FleetSchedules
                     WHERE IsArchived = 0
-                      AND ScheduleType = N'Maintenance'
-                      AND Status = N'Ongoing'
+                      AND ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
+                      AND Status = N'{FleetScheduleConstants.Status.Ongoing}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 );
@@ -442,7 +443,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<FleetUtilizationItem>> GetFleetUtilizationAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             DECLARE @RangeDays int = DATEDIFF(day, CONVERT(date, @From), CONVERT(date, @To)) + 1;
 
             WITH RentalSchedules AS
@@ -456,8 +457,8 @@ public sealed class ReportRepository
                     ) + 1
                 FROM dbo.FleetSchedules
                 WHERE IsArchived = 0
-                  AND ScheduleType = N'Rental'
-                  AND Status IN (N'Rented', N'Completed')
+                  AND ScheduleType = N'{FleetScheduleConstants.Type.Rental}'
+                  AND Status IN (N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Completed}')
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
             ),
@@ -468,7 +469,7 @@ public sealed class ReportRepository
                 WHERE IsArchived = 0
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
-                  AND TransactionStatus IN (N'Active', N'Completed')
+                  AND TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
                 GROUP BY CarId
             )
             SELECT
@@ -532,7 +533,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<TopCarItem>> GetLeastUsedCarsAsync(DateTime from, DateTime to, int limit)
     {
-        const string sql = """
+        string sql = $"""
             SELECT TOP (@Limit)
                 cars.CarName,
                 cars.PlateNumber,
@@ -549,7 +550,7 @@ public sealed class ReportRepository
                AND transactions.IsArchived = 0
                AND transactions.StartDate <= CONVERT(date, @To)
                AND transactions.EndDate >= CONVERT(date, @From)
-               AND transactions.TransactionStatus IN (N'Active', N'Completed')
+               AND transactions.TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
             LEFT JOIN dbo.TransactionPayments AS payments
                 ON payments.TransactionId = transactions.TransactionId
                AND payments.IsArchived = 0
@@ -567,7 +568,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<FleetMaintenanceItem>> GetCarsUnderMaintenanceAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 cars.CarName,
                 cars.PlateNumber,
@@ -579,8 +580,8 @@ public sealed class ReportRepository
             INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
             WHERE schedules.IsArchived = 0
               AND cars.IsArchived = 0
-              AND schedules.ScheduleType = N'Maintenance'
-              AND schedules.Status = N'Ongoing'
+              AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
+              AND schedules.Status = N'{FleetScheduleConstants.Status.Ongoing}'
               AND schedules.StartDate <= CONVERT(date, @To)
               AND schedules.EndDate >= CONVERT(date, @From)
             ORDER BY schedules.StartDate, cars.CarName;
@@ -593,13 +594,13 @@ public sealed class ReportRepository
 
     public async Task<OperationsMetrics> GetOperationsMetricsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 UpcomingReturns = (
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Active'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND EndDate >= CONVERT(date, @From)
                       AND EndDate <= CONVERT(date, @To)
                 ),
@@ -607,14 +608,14 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Active'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND EndDate < CONVERT(date, @Today)
                 ),
                 ActiveRentals = (
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Active'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -622,8 +623,8 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.FleetSchedules
                     WHERE IsArchived = 0
-                      AND ScheduleType = N'Reservation'
-                      AND Status IN (N'Pending', N'Reserved')
+                      AND ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
+                      AND Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}')
                       AND StartDate >= CONVERT(date, @From)
                       AND StartDate <= CONVERT(date, @To)
                 ),
@@ -631,8 +632,8 @@ public sealed class ReportRepository
                     SELECT COUNT(DISTINCT CarId)
                     FROM dbo.FleetSchedules
                     WHERE IsArchived = 0
-                      AND ScheduleType = N'Reservation'
-                      AND Status = N'Reserved'
+                      AND ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
+                      AND Status = N'{FleetScheduleConstants.Status.Reserved}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -640,8 +641,8 @@ public sealed class ReportRepository
                     SELECT COUNT(DISTINCT CarId)
                     FROM dbo.FleetSchedules
                     WHERE IsArchived = 0
-                      AND ScheduleType = N'Maintenance'
-                      AND Status = N'Ongoing'
+                      AND ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
+                      AND Status = N'{FleetScheduleConstants.Status.Ongoing}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -654,7 +655,7 @@ public sealed class ReportRepository
                             FROM dbo.FleetSchedules AS schedules
                             WHERE schedules.CarId = cars.CarId
                               AND schedules.IsArchived = 0
-                              AND schedules.Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing')
+                              AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
                               AND schedules.StartDate <= CONVERT(date, @To)
                               AND schedules.EndDate >= CONVERT(date, @From)
                       )
@@ -663,7 +664,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Completed'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
                       AND EndDate >= CONVERT(date, @From)
                       AND EndDate <= CONVERT(date, @To)
                 );
@@ -678,7 +679,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<OperationsReturnItem>> GetUpcomingReturnsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 ExpectedReturn = transactions.EndDate,
                 transactions.TransactionCode,
@@ -691,7 +692,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
-              AND transactions.TransactionStatus = N'Active'
+              AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.EndDate >= CONVERT(date, @From)
               AND transactions.EndDate <= CONVERT(date, @To)
             ORDER BY transactions.EndDate, transactions.TransactionCode;
@@ -704,7 +705,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<OperationsReturnItem>> GetLateReturnsAsync(DateTime today)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 ExpectedReturn = transactions.EndDate,
                 DaysLate = DATEDIFF(day, transactions.EndDate, CONVERT(date, @Today)),
@@ -719,7 +720,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
-              AND transactions.TransactionStatus = N'Active'
+              AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.EndDate < CONVERT(date, @Today)
             ORDER BY DaysLate DESC, transactions.EndDate;
             """;
@@ -731,7 +732,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<OperationsActiveRentalItem>> GetActiveRentalsReportAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 transactions.TransactionCode,
                 CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
@@ -745,7 +746,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
-              AND transactions.TransactionStatus = N'Active'
+              AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.StartDate <= CONVERT(date, @To)
               AND transactions.EndDate >= CONVERT(date, @From)
             ORDER BY transactions.EndDate, transactions.TransactionCode;
@@ -758,7 +759,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<OperationsReservationItem>> GetUpcomingReservationsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 ScheduleDate = schedules.StartDate,
                 CustomerName = ISNULL(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'-'),
@@ -774,8 +775,8 @@ public sealed class ReportRepository
                 ON transactions.FleetScheduleId = schedules.ScheduleId
                AND transactions.IsArchived = 0
             WHERE schedules.IsArchived = 0
-              AND schedules.ScheduleType = N'Reservation'
-              AND schedules.Status IN (N'Pending', N'Reserved')
+              AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
+              AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}')
               AND schedules.StartDate >= CONVERT(date, @From)
               AND schedules.StartDate <= CONVERT(date, @To)
             ORDER BY schedules.StartDate, schedules.ScheduleId;
@@ -788,7 +789,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<OperationsMaintenanceItem>> GetMaintenanceVisibilityAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 schedules.StartDate,
                 schedules.EndDate,
@@ -800,7 +801,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
             WHERE schedules.IsArchived = 0
               AND cars.IsArchived = 0
-              AND schedules.ScheduleType = N'Maintenance'
+              AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
               AND schedules.StartDate <= CONVERT(date, @To)
               AND schedules.EndDate >= CONVERT(date, @From)
             ORDER BY schedules.StartDate, cars.CarName;
@@ -813,7 +814,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<OperationsAvailableCarItem>> GetAvailableCarsReportAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 cars.CarName,
                 cars.PlateNumber,
@@ -827,7 +828,7 @@ public sealed class ReportRepository
                     FROM dbo.FleetSchedules AS schedules
                     WHERE schedules.CarId = cars.CarId
                       AND schedules.IsArchived = 0
-                      AND schedules.Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing')
+                      AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
                       AND schedules.StartDate <= CONVERT(date, @To)
                       AND schedules.EndDate >= CONVERT(date, @From)
               )
@@ -841,7 +842,7 @@ public sealed class ReportRepository
 
     public async Task<CustomerAnalyticsMetrics> GetCustomerAnalyticsMetricsAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             WITH CustomerRevenue AS
             (
                 SELECT
@@ -903,7 +904,7 @@ public sealed class ReportRepository
                     SELECT COUNT(DISTINCT CustomerId)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND TransactionStatus = N'Active'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND EndDate < CONVERT(date, @Today)
                 ),
                 CustomersWithDamageFees = (
@@ -965,13 +966,13 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<CustomerRentalCountReportItem>> GetTopCustomersByRentalCountAsync(DateTime from, DateTime to, int limit)
     {
-        const string sql = """
+        string sql = $"""
             SELECT TOP (@Limit)
                 CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
                 Contact = customers.PhoneNumber,
                 RentalCount = COUNT(1),
-                CompletedRentals = SUM(CASE WHEN transactions.TransactionStatus = N'Completed' THEN 1 ELSE 0 END),
-                ActiveRentals = SUM(CASE WHEN transactions.TransactionStatus = N'Active' THEN 1 ELSE 0 END),
+                CompletedRentals = SUM(CASE WHEN transactions.TransactionStatus = N'{TransactionConstants.Status.Completed}' THEN 1 ELSE 0 END),
+                ActiveRentals = SUM(CASE WHEN transactions.TransactionStatus = N'{TransactionConstants.Status.Active}' THEN 1 ELSE 0 END),
                 LastRentalDate = MAX(transactions.StartDate)
             FROM dbo.Customers AS customers
             INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
@@ -990,7 +991,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<CustomerOutstandingBalanceReportItem>> GetCustomersWithOutstandingBalancesAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
                 Contact = customers.PhoneNumber,
@@ -1003,7 +1004,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
-              AND transactions.PaymentStatus IN (N'Unpaid', N'Partial')
+              AND transactions.PaymentStatus IN (N'{TransactionConstants.PaymentStatus.Unpaid}', N'{TransactionConstants.PaymentStatus.Partial}')
               AND transactions.CreatedAt >= @From
               AND transactions.CreatedAt <= @To
             ORDER BY transactions.BalanceAmount DESC, transactions.TransactionCode;
@@ -1016,7 +1017,7 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<CustomerLateReturnReportItem>> GetCustomersWithLateReturnsAsync(DateTime today)
     {
-        const string sql = """
+        string sql = $"""
             SELECT
                 CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
                 Contact = customers.PhoneNumber,
@@ -1030,7 +1031,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
-              AND transactions.TransactionStatus = N'Active'
+              AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.EndDate < CONVERT(date, @Today)
             ORDER BY DaysLate DESC, transactions.EndDate;
             """;
@@ -1098,19 +1099,19 @@ public sealed class ReportRepository
 
     public async Task<OperatingProfitabilitySummary> GetOperatingProfitabilityAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             DECLARE @TotalRevenue decimal(18,2) = (
                 SELECT ISNULL(SUM(tp.Amount), 0)
                 FROM dbo.TransactionPayments tp
                 JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
-                WHERE tp.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionStatus <> N'Cancelled'
+                WHERE tp.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
                   AND tp.PaymentDate >= @From AND tp.PaymentDate <= @To
             );
 
             DECLARE @TotalOffsiteCost decimal(18,2) = (
                 SELECT ISNULL(SUM(ActualCost), 0)
                 FROM dbo.OffsiteRecords
-                WHERE IsArchived = 0 AND [Status] = N'Completed'
+                WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}'
                   AND CompletedDate >= @From AND CompletedDate <= @To
             );
 
@@ -1119,9 +1120,9 @@ public sealed class ReportRepository
                 TotalOffsiteCost = @TotalOffsiteCost,
                 NetAfterOffsiteCost = @TotalRevenue - @TotalOffsiteCost,
                 CostToRevenueRatio = CASE WHEN @TotalRevenue > 0 THEN (@TotalOffsiteCost / @TotalRevenue) * 100 ELSE 0 END,
-                MaintenanceCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'Completed' AND OffsiteType = N'Maintenance' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
-                RepairCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'Completed' AND OffsiteType = N'Repair' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
-                CleaningCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'Completed' AND OffsiteType = N'Cleaning' AND CompletedDate >= @From AND CompletedDate <= @To), 0);
+                MaintenanceCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}' AND OffsiteType = N'{OffsiteConstants.Type.Maintenance}' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
+                RepairCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}' AND OffsiteType = N'{OffsiteConstants.Type.Repair}' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
+                CleaningCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}' AND OffsiteType = N'{OffsiteConstants.Type.Cleaning}' AND CompletedDate >= @From AND CompletedDate <= @To), 0);
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -1131,14 +1132,14 @@ public sealed class ReportRepository
 
     public async Task<IReadOnlyList<VehicleCostProfitabilityItem>> GetVehicleProfitabilityAsync(DateTime from, DateTime to)
     {
-        const string sql = """
+        string sql = $"""
             SELECT 
                 c.CarId,
                 CarDisplayName = c.CarName,
                 c.PlateNumber,
-                MaintenanceCount = COUNT(CASE WHEN o.OffsiteType = N'Maintenance' THEN 1 END),
-                RepairCount = COUNT(CASE WHEN o.OffsiteType = N'Repair' THEN 1 END),
-                CleaningCount = COUNT(CASE WHEN o.OffsiteType = N'Cleaning' THEN 1 END),
+                MaintenanceCount = COUNT(CASE WHEN o.OffsiteType = N'{OffsiteConstants.Type.Maintenance}' THEN 1 END),
+                RepairCount = COUNT(CASE WHEN o.OffsiteType = N'{OffsiteConstants.Type.Repair}' THEN 1 END),
+                CleaningCount = COUNT(CASE WHEN o.OffsiteType = N'{OffsiteConstants.Type.Cleaning}' THEN 1 END),
                 TotalOffsiteCost = SUM(ISNULL(o.ActualCost, 0)),
                 RevenueGenerated = ISNULL((
                     SELECT SUM(tp.Amount)
@@ -1147,7 +1148,7 @@ public sealed class ReportRepository
                     WHERE t.CarId = c.CarId 
                       AND tp.IsArchived = 0 
                       AND t.IsArchived = 0 
-                      AND t.TransactionStatus <> N'Cancelled'
+                      AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
                       AND tp.PaymentDate >= @From 
                       AND tp.PaymentDate <= @To
                 ), 0),
@@ -1158,14 +1159,14 @@ public sealed class ReportRepository
                     WHERE t.CarId = c.CarId 
                       AND tp.IsArchived = 0 
                       AND t.IsArchived = 0 
-                      AND t.TransactionStatus <> N'Cancelled'
+                      AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
                       AND tp.PaymentDate >= @From 
                       AND tp.PaymentDate <= @To
                 ), 0) - SUM(ISNULL(o.ActualCost, 0))
             FROM dbo.Cars c
             LEFT JOIN dbo.OffsiteRecords o ON o.CarId = c.CarId 
                 AND o.IsArchived = 0 
-                AND o.[Status] = N'Completed'
+                AND o.[Status] = N'{OffsiteConstants.Status.Completed}'
                 AND o.CompletedDate >= @From 
                 AND o.CompletedDate <= @To
             WHERE c.IsArchived = 0
@@ -1177,7 +1178,7 @@ public sealed class ReportRepository
                 WHERE t.CarId = c.CarId 
                   AND tp.IsArchived = 0 
                   AND t.IsArchived = 0 
-                  AND t.TransactionStatus <> N'Cancelled'
+                  AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
                   AND tp.PaymentDate >= @From 
                   AND tp.PaymentDate <= @To
             ) > 0

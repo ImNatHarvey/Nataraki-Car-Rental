@@ -13,13 +13,28 @@ public static class DatabaseInitializer
     public static void Initialize()
     {
         CreateDatabaseIfMissing();
-        CreateTablesIfMissing();
-        SeedRoles();
-        SeedPermissions();
-        SeedRolePermissions();
-        SeedDefaultDemoOwner();
-        NormalizeOwnerUserFlags();
-        RepairInvalidOwnerPasswordHash();
+
+        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
+        connection.Open();
+        using SqlTransaction transaction = connection.BeginTransaction();
+
+        try
+        {
+            CreateTablesIfMissing(connection, transaction);
+            SeedRoles(connection, transaction);
+            SeedPermissions(connection, transaction);
+            SeedRolePermissions(connection, transaction);
+            SeedDefaultDemoOwner(connection, transaction);
+            NormalizeOwnerUserFlags(connection, transaction);
+            RepairInvalidOwnerPasswordHash(connection, transaction);
+            
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     public static void ResetApplicationDataIfRequested()
@@ -30,16 +45,31 @@ public static class DatabaseInitializer
         }
 
         CreateDatabaseIfMissing();
-        ExecuteDatabaseCommand("""
-            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL DELETE FROM dbo.TransactionPayments;
-            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL DELETE FROM dbo.Transactions;
-            IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL DELETE FROM dbo.FleetSchedules;
-            IF OBJECT_ID(N'dbo.ActivityLogs', N'U') IS NOT NULL DELETE FROM dbo.ActivityLogs;
-            IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL DELETE FROM dbo.Cars;
-            IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL DELETE FROM dbo.Customers;
-            IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL DELETE FROM dbo.Users;
-            IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL DELETE FROM dbo.Roles;
-            """);
+
+        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
+        connection.Open();
+        using SqlTransaction transaction = connection.BeginTransaction();
+
+        try
+        {
+            ExecuteDatabaseCommand("""
+                IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL DELETE FROM dbo.TransactionPayments;
+                IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL DELETE FROM dbo.Transactions;
+                IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL DELETE FROM dbo.FleetSchedules;
+                IF OBJECT_ID(N'dbo.ActivityLogs', N'U') IS NOT NULL DELETE FROM dbo.ActivityLogs;
+                IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL DELETE FROM dbo.Cars;
+                IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL DELETE FROM dbo.Customers;
+                IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL DELETE FROM dbo.Users;
+                IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL DELETE FROM dbo.Roles;
+                """, connection, transaction);
+            
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     private static void CreateDatabaseIfMissing()
@@ -62,7 +92,7 @@ public static class DatabaseInitializer
         command.ExecuteNonQuery();
     }
 
-    private static void CreateTablesIfMissing()
+    private static void CreateTablesIfMissing(SqlConnection connection, SqlTransaction transaction)
     {
         // 1. Roles Table
         ExecuteDatabaseCommand("""
@@ -80,7 +110,7 @@ public static class DatabaseInitializer
                     UpdatedAt datetime2 NULL
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL
@@ -102,7 +132,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Roles ADD UpdatedAt datetime2 NULL;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 2. Users Table
         ExecuteDatabaseCommand("""
@@ -130,7 +160,7 @@ public static class DatabaseInitializer
                     CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleId) REFERENCES dbo.Roles(RoleId)
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
@@ -152,7 +182,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Users ADD LastLoginAt datetime2 NULL;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 2.1 Permissions Table
         ExecuteDatabaseCommand("""
@@ -168,7 +198,7 @@ public static class DatabaseInitializer
                     CreatedAt datetime2 NOT NULL DEFAULT sysdatetime()
                 );
             END;
-            """);
+            """, connection, transaction);
 
         // 2.2 RolePermissions Table
         ExecuteDatabaseCommand("""
@@ -184,7 +214,7 @@ public static class DatabaseInitializer
                     CONSTRAINT FK_RolePermissions_Permissions FOREIGN KEY (PermissionId) REFERENCES dbo.Permissions(PermissionId)
                 );
             END;
-            """);
+            """, connection, transaction);
 
         // 3. Cars Table & Schema Updates
         ExecuteDatabaseCommand("""
@@ -221,7 +251,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Cars_Status_Valid CHECK (Status IN (N'Available', N'Rented', N'Maintenance'))
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL
@@ -246,7 +276,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Cars ADD InsuranceExpirationDate date NULL;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL
@@ -281,7 +311,7 @@ public static class DatabaseInitializer
                     ADD CONSTRAINT CK_Cars_Status_Valid CHECK (Status IN (N'Available', N'Rented', N'Maintenance'));
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 4. Vehicle Locations
         ExecuteDatabaseCommand("""
@@ -303,7 +333,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_VehicleLocations_Longitude CHECK (Longitude BETWEEN -180 AND 180)
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.VehicleLocations', N'U') IS NOT NULL
@@ -331,7 +361,7 @@ public static class DatabaseInitializer
                     WHERE IsArchived = 0;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 5. Activity Logs
         ExecuteDatabaseCommand("""
@@ -349,7 +379,7 @@ public static class DatabaseInitializer
                     CONSTRAINT FK_ActivityLogs_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId)
                 );
             END;
-            """);
+            """, connection, transaction);
 
         // 5. Customers Table
         ExecuteDatabaseCommand("""
@@ -380,7 +410,7 @@ public static class DatabaseInitializer
                     ArchivedAt datetime2 NULL
                 );
             END;
-            """);
+            """, connection, transaction);
 
         // 6. Fleet Schedules
         ExecuteDatabaseCommand("""
@@ -406,7 +436,7 @@ public static class DatabaseInitializer
                     CONSTRAINT FK_FleetSchedules_Users FOREIGN KEY (CreatedByUserId) REFERENCES dbo.Users(UserId)
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL
@@ -475,7 +505,7 @@ public static class DatabaseInitializer
                 END
                 WHERE Status IN (N'Confirmed', N'Active');
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL
@@ -533,7 +563,7 @@ public static class DatabaseInitializer
                     OR (ScheduleType = N'Maintenance' AND Status IN (N'Pending', N'Maintenance', N'Completed', N'Cancelled'))
                 );
             END;
-            """);
+            """, connection, transaction);
 
         // 7. Transactions
         ExecuteDatabaseCommand("""
@@ -578,7 +608,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled'))
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -598,7 +628,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Transactions ADD AdditionalCharge decimal(18,2) NOT NULL CONSTRAINT DF_Transactions_AdditionalCharge DEFAULT 0;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -613,7 +643,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Transactions ADD BalanceAmount decimal(18,2) NOT NULL CONSTRAINT DF_Transactions_BalanceAmount DEFAULT 0;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -635,7 +665,7 @@ public static class DatabaseInitializer
                         ELSE N'Paid'
                     END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -651,7 +681,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Transactions DROP CONSTRAINT CK_Transactions_Status_Valid;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -745,7 +775,7 @@ public static class DatabaseInitializer
                     ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled'));
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 8. Transaction Payments Ledger
         ExecuteDatabaseCommand("""
@@ -770,7 +800,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_TransactionPayments_Mode_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'))
                 );
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
@@ -785,7 +815,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.TransactionPayments ADD CONSTRAINT DF_TransactionPayments_PaymentCategory DEFAULT N'Rental Payment' FOR PaymentCategory;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -818,7 +848,7 @@ public static class DatabaseInitializer
                       AND payments.IsArchived = 0
                   );
             END;
-            """);
+            """, connection, transaction);
 
         // 9. Customers Schema Updates
         ExecuteDatabaseCommand("""
@@ -869,7 +899,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Customers ADD IsWalkIn bit NOT NULL DEFAULT 0;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 9. Customers Data Migration (Wrapped in sp_executesql to prevent parser errors)
         ExecuteDatabaseCommand("""
@@ -887,7 +917,7 @@ public static class DatabaseInitializer
                     ';
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 10. Customers Constraints
         ExecuteDatabaseCommand("""
@@ -956,7 +986,7 @@ public static class DatabaseInitializer
                     );
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
@@ -1000,7 +1030,7 @@ public static class DatabaseInitializer
                     );
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // 11. Indexes
         ExecuteDatabaseCommand("""
@@ -1015,7 +1045,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Cars_IsArchived_CarId
                 ON dbo.Cars (IsArchived, CarId DESC);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Cars', N'U') IS NOT NULL
@@ -1029,7 +1059,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Cars_IsArchived_Status
                 ON dbo.Cars (IsArchived, Status);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.ActivityLogs', N'U') IS NOT NULL
@@ -1043,7 +1073,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_ActivityLogs_CreatedAt
                 ON dbo.ActivityLogs (CreatedAt DESC);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.FleetSchedules', N'U') IS NOT NULL
@@ -1057,7 +1087,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_FleetSchedules_CarId_DateRange
                 ON dbo.FleetSchedules (CarId, IsArchived, Status, StartDate, EndDate);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
@@ -1071,7 +1101,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Customers_IsArchived_IsBlacklisted
                 ON dbo.Customers (IsArchived, IsBlacklisted);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1085,7 +1115,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Transactions_CustomerId
                 ON dbo.Transactions (CustomerId);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1099,7 +1129,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Transactions_CarId
                 ON dbo.Transactions (CarId);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1113,7 +1143,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Transactions_FleetScheduleId
                 ON dbo.Transactions (FleetScheduleId);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1135,7 +1165,7 @@ public static class DatabaseInitializer
                 ON dbo.Transactions (FleetScheduleId)
                 WHERE IsArchived = 0;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1149,7 +1179,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Transactions_DateRange
                 ON dbo.Transactions (StartDate, EndDate);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1163,7 +1193,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_Transactions_TransactionStatus
                 ON dbo.Transactions (TransactionStatus);
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
@@ -1213,7 +1243,7 @@ public static class DatabaseInitializer
                 CREATE NONCLUSTERED INDEX IX_TransactionPayments_IsArchived
                 ON dbo.TransactionPayments (IsArchived);
             END;
-            """);
+            """, connection, transaction);
 
         // 12. Offsite Records
         ExecuteDatabaseCommand("""
@@ -1250,8 +1280,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Ongoing', N'Completed', N'Cancelled'))
                 );
             END;
-
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
@@ -1286,7 +1315,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.OffsiteRecords ADD CompletedByUserId int NULL;
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
@@ -1302,7 +1331,7 @@ public static class DatabaseInitializer
                 SET FollowUpRequired = 0
                 WHERE FollowUpRequired IS NULL;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
@@ -1338,7 +1367,7 @@ public static class DatabaseInitializer
                     ADD CONSTRAINT CK_OffsiteRecords_WorkResult_Valid CHECK (WorkResult IS NULL OR WorkResult IN (N'Completed', N'Needs Follow-up', N'Not Repaired'));
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.OffsiteRecords', N'U') IS NOT NULL
@@ -1376,7 +1405,7 @@ public static class DatabaseInitializer
                     ON dbo.OffsiteRecords (IsArchived);
                 END;
             END;
-            """);
+            """, connection, transaction);
 
         // System Settings
         ExecuteDatabaseCommand("""
@@ -1413,17 +1442,17 @@ public static class DatabaseInitializer
                 (N'LoginDescription', N'Internal scheduling and record management system'),
                 (N'ReportHeaderName', N'Nataraki Car Rental');
             END;
-            """);
+            """, connection, transaction);
     }
 
-    private static void SeedRoles()
+    private static void SeedRoles(SqlConnection connection, SqlTransaction transaction)
     {
-        InsertRoleIfMissing("Owner", "Full system owner access", isSystemRole: true);
-        NormalizeDuplicateOwnerRoles();
-        ArchiveUnusedPresetRoles();
+        InsertRoleIfMissing("Owner", "Full system owner access", connection, transaction, isSystemRole: true);
+        NormalizeDuplicateOwnerRoles(connection, transaction);
+        ArchiveUnusedPresetRoles(connection, transaction);
     }
 
-    private static void NormalizeDuplicateOwnerRoles()
+    private static void NormalizeDuplicateOwnerRoles(SqlConnection connection, SqlTransaction transaction)
     {
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
@@ -1475,10 +1504,10 @@ public static class DatabaseInitializer
                       )
                   AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
             END;
-            """);
+            """, connection, transaction);
     }
 
-    private static void ArchiveUnusedPresetRoles()
+    private static void ArchiveUnusedPresetRoles(SqlConnection connection, SqlTransaction transaction)
     {
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
@@ -1499,10 +1528,10 @@ public static class DatabaseInitializer
                 WHERE r.RoleName IN (N'Admin', N'Manager', N'Agent', N'Staff')
                   AND EXISTS (SELECT 1 FROM dbo.Users u WHERE u.RoleId = r.RoleId);
             END;
-            """);
+            """, connection, transaction);
     }
 
-    private static void InsertRoleIfMissing(string roleName, string description, bool isSystemRole = false)
+    private static void InsertRoleIfMissing(string roleName, string description, SqlConnection connection, SqlTransaction transaction, bool isSystemRole = false)
     {
         const string sql = """
             IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE UPPER(LTRIM(RTRIM(RoleName))) = UPPER(LTRIM(RTRIM(@RoleName))))
@@ -1512,75 +1541,72 @@ public static class DatabaseInitializer
             END;
             """;
 
-        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
-        connection.Open();
-
-        using SqlCommand command = new(sql, connection);
+        using SqlCommand command = new(sql, connection, transaction);
         command.Parameters.AddWithValue("@RoleName", roleName);
         command.Parameters.AddWithValue("@Description", description);
         command.Parameters.AddWithValue("@IsSystemRole", isSystemRole);
         command.ExecuteNonQuery();
     }
 
-    private static void SeedPermissions()
+    private static void SeedPermissions(SqlConnection connection, SqlTransaction transaction)
     {
         // Overview
-        InsertPermissionIfMissing("Overview.View", "View Dashboard", "Overview");
+        InsertPermissionIfMissing("Overview.View", "View Dashboard", "Overview", connection, transaction);
 
         // Fleet Schedule
-        InsertPermissionIfMissing("FleetSchedule.View", "View Fleet Schedule", "Fleet Schedule");
-        InsertPermissionIfMissing("FleetSchedule.Create", "Create Schedule", "Fleet Schedule");
-        InsertPermissionIfMissing("FleetSchedule.Edit", "Edit Schedule", "Fleet Schedule");
-        InsertPermissionIfMissing("FleetSchedule.Cancel", "Cancel Schedule", "Fleet Schedule");
+        InsertPermissionIfMissing("FleetSchedule.View", "View Fleet Schedule", "Fleet Schedule", connection, transaction);
+        InsertPermissionIfMissing("FleetSchedule.Create", "Create Schedule", "Fleet Schedule", connection, transaction);
+        InsertPermissionIfMissing("FleetSchedule.Edit", "Edit Schedule", "Fleet Schedule", connection, transaction);
+        InsertPermissionIfMissing("FleetSchedule.Cancel", "Cancel Schedule", "Fleet Schedule", connection, transaction);
 
         // Transactions
-        InsertPermissionIfMissing("Transactions.View", "View Transactions", "Transactions");
-        InsertPermissionIfMissing("Transactions.Create", "Create Transaction", "Transactions");
-        InsertPermissionIfMissing("Transactions.Edit", "Edit Transaction", "Transactions");
-        InsertPermissionIfMissing("Transactions.StartRental", "Start Rental", "Transactions");
-        InsertPermissionIfMissing("Transactions.AddPayment", "Add Payment", "Transactions");
-        InsertPermissionIfMissing("Transactions.Complete", "Complete Transaction", "Transactions");
-        InsertPermissionIfMissing("Transactions.Cancel", "Cancel Transaction", "Transactions");
-        InsertPermissionIfMissing("Transactions.ArchiveRestore", "Archive/Restore Transactions", "Transactions");
+        InsertPermissionIfMissing("Transactions.View", "View Transactions", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.Create", "Create Transaction", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.Edit", "Edit Transaction", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.StartRental", "Start Rental", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.AddPayment", "Add Payment", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.Complete", "Complete Transaction", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.Cancel", "Cancel Transaction", "Transactions", connection, transaction);
+        InsertPermissionIfMissing("Transactions.ArchiveRestore", "Archive/Restore Transactions", "Transactions", connection, transaction);
 
         // Customers
-        InsertPermissionIfMissing("Customers.View", "View Customers", "Customers");
-        InsertPermissionIfMissing("Customers.Create", "Add Customer", "Customers");
-        InsertPermissionIfMissing("Customers.Edit", "Edit Customer", "Customers");
-        InsertPermissionIfMissing("Customers.Blacklist", "Manage Blacklist", "Customers");
-        InsertPermissionIfMissing("Customers.ArchiveRestore", "Archive/Restore Customers", "Customers");
+        InsertPermissionIfMissing("Customers.View", "View Customers", "Customers", connection, transaction);
+        InsertPermissionIfMissing("Customers.Create", "Add Customer", "Customers", connection, transaction);
+        InsertPermissionIfMissing("Customers.Edit", "Edit Customer", "Customers", connection, transaction);
+        InsertPermissionIfMissing("Customers.Blacklist", "Manage Blacklist", "Customers", connection, transaction);
+        InsertPermissionIfMissing("Customers.ArchiveRestore", "Archive/Restore Customers", "Customers", connection, transaction);
 
         // Car Garage
-        InsertPermissionIfMissing("Cars.View", "View Car Garage", "Car Garage");
-        InsertPermissionIfMissing("Cars.Create", "Add Car", "Car Garage");
-        InsertPermissionIfMissing("Cars.Edit", "Edit Car", "Car Garage");
-        InsertPermissionIfMissing("Cars.ArchiveRestore", "Archive/Restore Cars", "Car Garage");
+        InsertPermissionIfMissing("Cars.View", "View Car Garage", "Car Garage", connection, transaction);
+        InsertPermissionIfMissing("Cars.Create", "Add Car", "Car Garage", connection, transaction);
+        InsertPermissionIfMissing("Cars.Edit", "Edit Car", "Car Garage", connection, transaction);
+        InsertPermissionIfMissing("Cars.ArchiveRestore", "Archive/Restore Cars", "Car Garage", connection, transaction);
 
         // Offsite
-        InsertPermissionIfMissing("Offsite.View", "View Offsite Records", "Offsite");
-        InsertPermissionIfMissing("Offsite.Create", "Create Offsite Record", "Offsite");
-        InsertPermissionIfMissing("Offsite.Edit", "Edit Offsite Record", "Offsite");
-        InsertPermissionIfMissing("Offsite.Complete", "Complete Offsite Record", "Offsite");
-        InsertPermissionIfMissing("Offsite.Cancel", "Cancel Offsite Record", "Offsite");
-        InsertPermissionIfMissing("Offsite.ArchiveRestore", "Archive/Restore Offsite", "Offsite");
-        InsertPermissionIfMissing("Offsite.MapTracking", "Access Map Tracking", "Offsite");
+        InsertPermissionIfMissing("Offsite.View", "View Offsite Records", "Offsite", connection, transaction);
+        InsertPermissionIfMissing("Offsite.Create", "Create Offsite Record", "Offsite", connection, transaction);
+        InsertPermissionIfMissing("Offsite.Edit", "Edit Offsite Record", "Offsite", connection, transaction);
+        InsertPermissionIfMissing("Offsite.Complete", "Complete Offsite Record", "Offsite", connection, transaction);
+        InsertPermissionIfMissing("Offsite.Cancel", "Cancel Offsite Record", "Offsite", connection, transaction);
+        InsertPermissionIfMissing("Offsite.ArchiveRestore", "Archive/Restore Offsite", "Offsite", connection, transaction);
+        InsertPermissionIfMissing("Offsite.MapTracking", "Access Map Tracking", "Offsite", connection, transaction);
 
         // Activity Log
-        InsertPermissionIfMissing("ActivityLog.View", "View Activity Logs", "Activity Log");
+        InsertPermissionIfMissing("ActivityLog.View", "View Activity Logs", "Activity Log", connection, transaction);
 
         // Reports
-        InsertPermissionIfMissing("Reports.View", "View Reports", "Reports");
-        InsertPermissionIfMissing("Reports.Export", "Export Reports", "Reports");
+        InsertPermissionIfMissing("Reports.View", "View Reports", "Reports", connection, transaction);
+        InsertPermissionIfMissing("Reports.Export", "Export Reports", "Reports", connection, transaction);
 
         // Manage System
-        InsertPermissionIfMissing("ManageSystem.View", "View Manage System", "Manage System");
-        InsertPermissionIfMissing("ManageSystem.Settings", "Edit System Settings", "Manage System");
-        InsertPermissionIfMissing("ManageSystem.Branding", "Edit Branding & Theme", "Manage System");
-        InsertPermissionIfMissing("ManageSystem.Users", "Manage Users", "Manage System");
-        InsertPermissionIfMissing("ManageSystem.Roles", "Manage Roles & Permissions", "Manage System");
+        InsertPermissionIfMissing("ManageSystem.View", "View Manage System", "Manage System", connection, transaction);
+        InsertPermissionIfMissing("ManageSystem.Settings", "Edit System Settings", "Manage System", connection, transaction);
+        InsertPermissionIfMissing("ManageSystem.Branding", "Edit Branding & Theme", "Manage System", connection, transaction);
+        InsertPermissionIfMissing("ManageSystem.Users", "Manage Users", "Manage System", connection, transaction);
+        InsertPermissionIfMissing("ManageSystem.Roles", "Manage Roles & Permissions", "Manage System", connection, transaction);
     }
 
-    private static void InsertPermissionIfMissing(string key, string name, string module)
+    private static void InsertPermissionIfMissing(string key, string name, string module, SqlConnection connection, SqlTransaction transaction)
     {
         const string sql = """
             IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE PermissionKey = @Key)
@@ -1590,17 +1616,14 @@ public static class DatabaseInitializer
             END;
             """;
 
-        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
-        connection.Open();
-
-        using SqlCommand command = new(sql, connection);
+        using SqlCommand command = new(sql, connection, transaction);
         command.Parameters.AddWithValue("@Key", key);
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@Module", module);
         command.ExecuteNonQuery();
     }
 
-    private static void SeedRolePermissions()
+    private static void SeedRolePermissions(SqlConnection connection, SqlTransaction transaction)
     {
         // 1. Owner - All Permissions
         ExecuteDatabaseCommand("""
@@ -1609,11 +1632,11 @@ public static class DatabaseInitializer
             FROM dbo.Roles r CROSS JOIN dbo.Permissions p
             WHERE r.RoleName = N'Owner'
               AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.RoleId AND rp.PermissionId = p.PermissionId);
-            """);
+            """, connection, transaction);
 
     }
 
-    private static void SeedDefaultDemoOwner()
+    private static void SeedDefaultDemoOwner(SqlConnection connection, SqlTransaction transaction)
     {
         const string sql = """
             IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE IsOwner = 1)
@@ -1656,10 +1679,7 @@ public static class DatabaseInitializer
             DefaultDemoBootstrapOwnerPassword);
         string passwordHash = BCrypt.Net.BCrypt.HashPassword(bootstrapPassword);
 
-        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
-        connection.Open();
-
-        using SqlCommand command = new(sql, connection);
+        using SqlCommand command = new(sql, connection, transaction);
         command.Parameters.AddWithValue("@Username", bootstrapUsername);
         command.Parameters.AddWithValue("@PasswordHash", passwordHash);
         command.Parameters.AddWithValue("@FirstName", "System");
@@ -1667,7 +1687,7 @@ public static class DatabaseInitializer
         command.ExecuteNonQuery();
     }
 
-    private static void NormalizeOwnerUserFlags()
+    private static void NormalizeOwnerUserFlags(SqlConnection connection, SqlTransaction transaction)
     {
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL
@@ -1693,10 +1713,10 @@ public static class DatabaseInitializer
                     );
                 END;
             END;
-            """);
+            """, connection, transaction);
     }
 
-    private static void RepairInvalidOwnerPasswordHash()
+    private static void RepairInvalidOwnerPasswordHash(SqlConnection connection, SqlTransaction transaction)
     {
         string defaultPasswordHash = BCrypt.Net.BCrypt.HashPassword(DefaultDemoBootstrapOwnerPassword);
         const string selectSql = """
@@ -1713,10 +1733,7 @@ public static class DatabaseInitializer
               AND IsOwner = 1;
             """;
 
-        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
-        connection.Open();
-
-        using SqlCommand selectCommand = new(selectSql, connection);
+        using SqlCommand selectCommand = new(selectSql, connection, transaction);
         using SqlDataReader reader = selectCommand.ExecuteReader();
         if (!reader.Read()) return;
 
@@ -1726,7 +1743,7 @@ public static class DatabaseInitializer
 
         if (IsValidBCryptHash(passwordHash)) return;
 
-        using SqlCommand updateCommand = new(updateSql, connection);
+        using SqlCommand updateCommand = new(updateSql, connection, transaction);
         updateCommand.Parameters.AddWithValue("@UserId", userId);
         updateCommand.Parameters.AddWithValue("@PasswordHash", defaultPasswordHash);
         updateCommand.ExecuteNonQuery();
@@ -1740,12 +1757,9 @@ public static class DatabaseInitializer
                || passwordHash.StartsWith("$2y$", StringComparison.Ordinal);
     }
 
-    private static void ExecuteDatabaseCommand(string sql)
+    private static void ExecuteDatabaseCommand(string sql, SqlConnection connection, SqlTransaction transaction)
     {
-        using SqlConnection connection = new(AppConstants.DefaultConnectionString);
-        connection.Open();
-
-        using SqlCommand command = new(sql, connection);
+        using SqlCommand command = new(sql, connection, transaction);
         command.ExecuteNonQuery();
     }
 
