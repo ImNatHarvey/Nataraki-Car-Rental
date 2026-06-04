@@ -26,7 +26,15 @@ public sealed class ActivityLogControl : UserControl
     private readonly ComboBox _entityTypeComboBox = new();
     private readonly DateTimePicker _dateFromPicker = CreateDatePicker();
     private readonly DateTimePicker _dateToPicker = CreateDatePicker();
-    private readonly DataGridView _logsGrid = new();
+    private readonly FlowLayoutPanel _timelinePanel = new()
+    {
+        Dock = DockStyle.Fill,
+        AutoScroll = true,
+        WrapContents = false,
+        FlowDirection = FlowDirection.TopDown,
+        BackColor = ThemeHelper.ContentBackground,
+        Padding = new Padding(0)
+    };
     private readonly Label _emptyStateLabel = new();
     private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 350 };
     private readonly System.Windows.Forms.Timer _resizeTimer = new() { Interval = 300 };
@@ -54,14 +62,38 @@ public sealed class ActivityLogControl : UserControl
     private async void ResizeTimer_Tick(object? sender, EventArgs e)
     {
         _resizeTimer.Stop();
-        UpdateColumnLayout();
         
+        ResizeTimelineItems();
+
         if (Math.Abs(Height - _lastHeight) > 50)
         {
             _lastHeight = Height;
             _currentPage = 1;
             await LoadLogsAsync();
         }
+    }
+
+    private void ResizeTimelineItems()
+    {
+        if (_timelinePanel.Controls.Count == 0) return;
+
+        _timelinePanel.SuspendLayout();
+        
+        int targetWidth = Math.Max(100, _timelinePanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 24);
+
+        foreach (Control control in _timelinePanel.Controls)
+        {
+            if (control is BorderedPanel panel)
+            {
+                panel.Width = targetWidth;
+            }
+            else if (control is Label label && label.TextAlign == ContentAlignment.BottomLeft)
+            {
+                label.Width = targetWidth;
+            }
+        }
+        
+        _timelinePanel.ResumeLayout(true);
     }
 
     private static DateTimePicker CreateDatePicker()
@@ -378,31 +410,8 @@ public sealed class ActivityLogControl : UserControl
         panel.Dock = DockStyle.Fill;
         panel.Padding = new Padding(18);
 
-        _logsGrid.Dock = DockStyle.Fill;
-        _logsGrid.AllowUserToAddRows = false;
-        _logsGrid.AllowUserToDeleteRows = false;
-        _logsGrid.AllowUserToResizeRows = false;
-        _logsGrid.AllowUserToResizeColumns = false;
-        _logsGrid.ScrollBars = ScrollBars.Both;
-        _logsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _logsGrid.BackgroundColor = ThemeHelper.Surface;
-        _logsGrid.BorderStyle = BorderStyle.FixedSingle;
-        _logsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
-        _logsGrid.ColumnHeadersHeight = 38;
-        _logsGrid.EnableHeadersVisualStyles = false;
-        _logsGrid.GridColor = ThemeHelper.TableGridLine;
-        _logsGrid.ReadOnly = true;
-        _logsGrid.RowHeadersVisible = false;
-        _logsGrid.RowTemplate.Height = 38;
-        _logsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _logsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-        _logsGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
-        _logsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
-        _logsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        _logsGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
-        _logsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
-        _logsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-        _logsGrid.CellPainting += LogsGrid_CellPainting;
+        typeof(FlowLayoutPanel).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(_timelinePanel, true, null);
 
         _emptyStateLabel.Text = "No activity logs yet.";
         _emptyStateLabel.Dock = DockStyle.Bottom;
@@ -412,7 +421,7 @@ public sealed class ActivityLogControl : UserControl
         _emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter;
         _emptyStateLabel.Visible = false;
 
-        panel.Controls.Add(_logsGrid);
+        panel.Controls.Add(_timelinePanel);
         panel.Controls.Add(_emptyStateLabel);
         return panel;
     }
@@ -511,9 +520,8 @@ public sealed class ActivityLogControl : UserControl
 
     private void PopulateGrid(IReadOnlyList<ActivityLog> allLogs)
     {
-        AddGridColumns();
-        UpdateColumnLayout();
-        _logsGrid.Rows.Clear();
+        _timelinePanel.SuspendLayout();
+        _timelinePanel.Controls.Clear();
 
         int totalItems = allLogs.Count;
         int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
@@ -525,169 +533,186 @@ public sealed class ActivityLogControl : UserControl
 
         var pagedLogs = allLogs.Skip((_currentPage - 1) * _pageSize).Take(_pageSize);
 
+        DateTime? lastDate = null;
         foreach (ActivityLog log in pagedLogs)
         {
-            _logsGrid.Rows.Add(
-                log.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                log.UserDisplayName,
-                log.EntityName ?? "System",
-                log.ActionType,
-                log.Description);
+            DateTime logDate = log.CreatedAt.Date;
+            if (lastDate != logDate)
+            {
+                _timelinePanel.Controls.Add(CreateDateHeader(logDate));
+                lastDate = logDate;
+            }
+            _timelinePanel.Controls.Add(CreateTimelineItem(log));
         }
 
         _emptyStateLabel.Visible = totalItems == 0;
+        _timelinePanel.ResumeLayout();
     }
 
-    private void AddGridColumns()
+    private Control CreateDateHeader(DateTime date)
     {
-        _logsGrid.Columns.Clear();
-        _logsGrid.Columns.Add("CreatedAt", "Date/Time");
-        _logsGrid.Columns.Add("User", "User");
-        _logsGrid.Columns.Add("Module", "Module");
-        _logsGrid.Columns.Add("Action", "Action");
-        _logsGrid.Columns.Add("Description", "Description");
-    }
-
-    private void UpdateColumnLayout()
-    {
-        if (_logsGrid.Columns.Count == 0) return;
-
-        int gridWidth = _logsGrid.ClientSize.Width;
-        int threshold = 1120; // 150 + 150 + 130 + 170 + 520
-
-        if (gridWidth < threshold && gridWidth > 0)
+        string text = date == DateTime.Today ? "TODAY" : date == DateTime.Today.AddDays(-1) ? "YESTERDAY" : date.ToString("MMM dd, yyyy").ToUpperInvariant();
+        return new Label
         {
-            _logsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-            if (_logsGrid.Columns["CreatedAt"] is DataGridViewColumn c1) c1.Width = 150;
-            if (_logsGrid.Columns["User"] is DataGridViewColumn c2) c2.Width = 150;
-            if (_logsGrid.Columns["Module"] is DataGridViewColumn c3) c3.Width = 130;
-            if (_logsGrid.Columns["Action"] is DataGridViewColumn c4) c4.Width = 170;
-            if (_logsGrid.Columns["Description"] is DataGridViewColumn c5) c5.Width = 600;
+            Text = text,
+            Font = FontHelper.SemiBold(9F),
+            ForeColor = ThemeHelper.TextSecondary,
+            AutoSize = false,
+            Size = new Size(Math.Max(100, _timelinePanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 24), 24),
+            Margin = new Padding(12, 16, 0, 8),
+            TextAlign = ContentAlignment.BottomLeft
+        };
+    }
+
+    private Control CreateTimelineItem(ActivityLog log)
+    {
+        BorderedPanel row = new BorderedPanel
+        {
+            Width = Math.Max(100, _timelinePanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 24),
+            Height = 64,
+            Margin = new Padding(16, 0, 0, 8),
+            BackColor = ThemeHelper.Surface
+        };
+
+        typeof(BorderedPanel).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(row, true, null);
+
+        ControlFactory.ApplyRoundedPanel(row);
+
+        Color actionColor = GetActionColor(log.Action);
+        Panel colorBar = new Panel { Width = 4, Dock = DockStyle.Left, BackColor = actionColor };
+        row.Controls.Add(colorBar);
+
+        Label timeLabel = new Label
+        {
+            Text = log.CreatedAt.ToString("hh:mm tt"),
+            Font = FontHelper.Regular(9F),
+            ForeColor = ThemeHelper.TextSecondary,
+            AutoSize = true,
+            Location = new Point(16, 24)
+        };
+        row.Controls.Add(timeLabel);
+
+        string[] nameParts = log.UserFullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string firstName = nameParts.Length > 0 ? nameParts[0] : log.UserFullName;
+        string lastName = nameParts.Length > 1 ? string.Join(" ", nameParts.Skip(1)) : "";
+        User fakeUser = new User { FirstName = firstName, LastName = lastName };
+
+        PictureBox avatar = new PictureBox
+        {
+            Size = new Size(32, 32),
+            Location = new Point(86, 16),
+            Image = UserAvatarHelper.CreateAvatar(fakeUser, 32),
+            SizeMode = PictureBoxSizeMode.CenterImage
+        };
+        row.Controls.Add(avatar);
+
+        string titleText = BuildActivityTitle(log);
+
+        Label titleLabel = new Label
+        {
+            Text = titleText,
+            Font = FontHelper.SemiBold(10F),
+            ForeColor = ThemeHelper.TextPrimary,
+            AutoSize = true,
+            Location = new Point(130, 12)
+        };
+        row.Controls.Add(titleLabel);
+
+        Label descLabel = new Label
+        {
+            Text = log.Description,
+            Font = FontHelper.Regular(9F),
+            ForeColor = ThemeHelper.TextSecondary,
+            AutoSize = true,
+            Location = new Point(130, 34)
+        };
+        row.Controls.Add(descLabel);
+
+        return row;
+    }
+
+    private static string BuildActivityTitle(ActivityLog log)
+    {
+        string user = log.UserFullName;
+        string action = log.Action;
+        string module = log.Module;
+        string entity = log.EntityName ?? string.Empty;
+
+        // Friendly Module Names
+        string displayModule = module switch
+        {
+            "FleetSchedule" => "Schedule",
+            "OffsiteRecord" => "Offsite Record",
+            "ManageSystem" => "Manage System",
+            "SystemSettings" => "System Settings",
+            "BrandingTheme" => "Branding Theme",
+            _ => FormatModuleName(module)
+        };
+
+        // Standardize case for logic
+        string actionLower = action.ToLowerInvariant();
+
+        // 1. Handle Auth/System Special Cases
+        if (actionLower is "login" or "logout")
+        {
+            return $"{user} {actionLower}";
+        }
+
+        if (actionLower == "system start")
+        {
+            return "System Started";
+        }
+
+        // 2. Handle Password Reset
+        if (actionLower == "reset password" || (actionLower == "updated" && entity.Contains("Password")))
+        {
+            return $"{user} reset password for {displayModule}";
+        }
+
+        // 3. Prevent Duplication
+        // If entity already contains displayModule, or vice versa, don't repeat them
+        string title;
+        if (string.IsNullOrWhiteSpace(entity) || entity.Equals(displayModule, StringComparison.OrdinalIgnoreCase))
+        {
+            title = $"{user} {actionLower} {displayModule}";
+        }
+        else if (entity.Contains(displayModule, StringComparison.OrdinalIgnoreCase))
+        {
+            title = $"{user} {actionLower} {entity}";
         }
         else
         {
-            _logsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            SetFillWeight("CreatedAt", 84);
-            SetFillWeight("User", 84);
-            SetFillWeight("Module", 70);
-            SetFillWeight("Action", 92);
-            SetFillWeight("Description", 180);
+            // Standard: User + Action + Module + Entity
+            // e.g. Harvey updated Customer Juan Dela Cruz
+            title = $"{user} {actionLower} {displayModule} {entity}";
         }
+
+        return title.Trim();
     }
 
-    private void SetFillWeight(string columnName, float weight)
+    private static Color GetActionColor(string action)
     {
-        if (_logsGrid.Columns[columnName] is DataGridViewColumn column)
-        {
-            column.FillWeight = weight;
-        }
-    }
+        string lowerText = action.ToLowerInvariant();
 
-    private void LogsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
-    {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        // GREEN
+        if (lowerText is "added" or "created" or "restored" or "completed" or "approved" or "removed from blacklist")
+            return ThemeHelper.Success;
 
-        string columnName = _logsGrid.Columns[e.ColumnIndex].Name;
-        bool isAction = columnName == "Action";
-        bool isModule = columnName == "Module";
+        // BLUE
+        if (lowerText is "updated" or "edited" or "changed" or "modified" or "saved")
+            return ThemeHelper.Primary;
 
-        if (isAction || isModule)
-        {
-            e.PaintBackground(e.CellBounds, true);
+        // ORANGE
+        if (lowerText is "cancelled" or "extended" or "warning" or "expiring" or "reset password")
+            return ThemeHelper.Warning;
 
-            string rawText = e.Value?.ToString() ?? string.Empty;
-            if (string.IsNullOrEmpty(rawText)) return;
+        // RED
+        if (lowerText is "archived" or "deleted" or "blacklisted" or "deactivated" or "removed")
+            return ThemeHelper.Danger;
 
-            string displayText = rawText;
-            if (isAction && displayText.Equals("Remove customer blacklist", StringComparison.OrdinalIgnoreCase))
-            {
-                displayText = "Remove Blacklist";
-            }
-            else if (isAction && displayText.Equals("Reserve transaction", StringComparison.OrdinalIgnoreCase))
-            {
-                displayText = "Reserve";
-            }
-
-            Color backColor = ThemeHelper.GrayIcon;
-            Color foreColor = Color.White;
-
-            string lowerText = rawText.ToLowerInvariant();
-
-            if (isAction)
-            {
-                if (lowerText.Contains("remove blacklist") || lowerText.Contains("remove customer blacklist")) backColor = ThemeHelper.Primary;
-                else if (lowerText.Contains("blacklist")) backColor = ThemeHelper.Danger;
-                else if (lowerText.Contains("archive") || lowerText.Contains("system") || lowerText.Contains("login") || lowerText.Contains("logout")) backColor = ThemeHelper.GrayIcon;
-                else if (lowerText.Contains("cancel") || lowerText.Contains("delete")) backColor = ThemeHelper.Danger;
-                else if (lowerText.Contains("create") || lowerText.Contains("add") || lowerText.Contains("complete") || lowerText.Contains("finish") || lowerText.Contains("payment")) backColor = ThemeHelper.Success;
-                else if (lowerText.Contains("update") || lowerText.Contains("edit") || lowerText.Contains("restore") || lowerText.Contains("rental") || lowerText.Contains("reserve") || lowerText.Contains("reservation")) backColor = ThemeHelper.Primary;
-            }
-            else if (isModule)
-            {
-                if (lowerText.Contains("car")) backColor = ThemeHelper.Primary;
-                else if (lowerText.Contains("customer")) backColor = ThemeHelper.Purple;
-                else if (lowerText.Contains("transaction")) backColor = ThemeHelper.Success;
-                else if (lowerText.Contains("fleet") || lowerText.Contains("schedule")) backColor = ThemeHelper.Warning;
-                else backColor = ThemeHelper.GrayIcon;
-            }
-
-            if (e.Graphics is null) return;
-
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-            Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(8.5F);
-            SizeF textSize = e.Graphics.MeasureString(displayText, font);
-            float pillHeight = 24;
-            float pillWidth = textSize.Width + 20;
-
-            if (pillWidth > e.CellBounds.Width - 12) pillWidth = e.CellBounds.Width - 12;
-
-            float x = e.CellBounds.X + 8;
-            float y = e.CellBounds.Y + (e.CellBounds.Height - pillHeight) / 2;
-
-            RectangleF rect = new RectangleF(x, y, pillWidth, pillHeight);
-
-            using var path = GetRoundedRect(rect, pillHeight / 2);
-            using SolidBrush backBrush = new(backColor);
-            using SolidBrush foreBrush = new(foreColor);
-
-            e.Graphics.FillPath(backBrush, path);
-
-            using StringFormat format = new()
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                FormatFlags = StringFormatFlags.NoWrap,
-                Trimming = StringTrimming.EllipsisCharacter
-            };
-            e.Graphics.DrawString(displayText, font, foreBrush, rect, format);
-
-            e.Handled = true;
-        }
-    }
-
-    private static System.Drawing.Drawing2D.GraphicsPath GetRoundedRect(RectangleF rect, float radius)
-    {
-        System.Drawing.Drawing2D.GraphicsPath path = new();
-        float diameter = radius * 2;
-        Size size = new Size((int)diameter, (int)diameter);
-        RectangleF arc = new RectangleF(rect.Location, size);
-
-        if (radius == 0)
-        {
-            path.AddRectangle(rect);
-            return path;
-        }
-
-        path.AddArc(arc, 180, 90);
-        arc.X = rect.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = rect.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = rect.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
+        // GRAY
+        return ThemeHelper.GrayIcon;
     }
 
     private static void SetFilterItems(ComboBox comboBox, string placeholder, IEnumerable<LookupOption> values)

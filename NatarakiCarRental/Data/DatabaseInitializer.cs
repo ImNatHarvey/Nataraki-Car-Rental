@@ -376,13 +376,35 @@ public static class DatabaseInitializer
                 (
                     ActivityLogId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     UserId int NULL,
-                    ActionType nvarchar(50) NOT NULL,
+                    UserFullName nvarchar(255) NULL,
+                    Module nvarchar(100) NULL,
+                    Action nvarchar(50) NOT NULL,
                     EntityName nvarchar(100) NULL,
                     EntityId int NULL,
                     Description nvarchar(500) NOT NULL,
+                    OldValue nvarchar(max) NULL,
+                    NewValue nvarchar(max) NULL,
                     CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
                     CONSTRAINT FK_ActivityLogs_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId)
                 );
+            END;
+            ELSE
+            BEGIN
+                IF COL_LENGTH(N'dbo.ActivityLogs', N'Action') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.ActivityLogs ADD UserFullName nvarchar(255) NULL;
+                    ALTER TABLE dbo.ActivityLogs ADD Module nvarchar(100) NULL;
+                    ALTER TABLE dbo.ActivityLogs ADD Action nvarchar(50) NULL;
+                    ALTER TABLE dbo.ActivityLogs ADD OldValue nvarchar(max) NULL;
+                    ALTER TABLE dbo.ActivityLogs ADD NewValue nvarchar(max) NULL;
+                    
+                    EXEC('UPDATE dbo.ActivityLogs SET 
+                        Action = ActionType, 
+                        Module = EntityName,
+                        UserFullName = (SELECT TOP 1 LTRIM(RTRIM(CONCAT(FirstName, '' '', LastName))) FROM dbo.Users WHERE UserId = dbo.ActivityLogs.UserId)');
+                    
+                    ALTER TABLE dbo.ActivityLogs ALTER COLUMN Action nvarchar(50) NOT NULL;
+                END;
             END;
             """, connection, transaction);
 

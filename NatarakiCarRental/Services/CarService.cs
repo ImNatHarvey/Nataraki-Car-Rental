@@ -109,11 +109,12 @@ public sealed class CarService
         {
             int carId = await _carRepository.AddCarAsync(car, transaction);
             await _activityLogService.LogAsync(
-                "Add car",
+                "Added",
                 "Car",
                 carId,
                 $"Added car {car.CarName} ({car.PlateNumber}).",
                 userId: _currentUserId,
+                entityName: $"{car.Brand} {car.Model} ({car.PlateNumber})",
                 transaction: transaction);
 
             transaction.Commit();
@@ -159,11 +160,12 @@ public sealed class CarService
             }
 
             await _activityLogService.LogAsync(
-                "Edit car",
+                "Updated",
                 "Car",
                 car.CarId,
-                $"Edited car {car.CarName} ({car.PlateNumber}).",
+                $"Updated car {car.CarName} ({car.PlateNumber}).",
                 userId: _currentUserId,
+                entityName: $"{car.Brand} {car.Model} ({car.PlateNumber})",
                 transaction: transaction);
 
             transaction.Commit();
@@ -207,11 +209,12 @@ public sealed class CarService
             }
 
             await _activityLogService.LogAsync(
-                "Archive car",
+                "Archived",
                 "Car",
                 carId,
                 $"Archived car {DescribeCar(car, carId)}.",
                 userId: _currentUserId,
+                entityName: car != null ? $"{car.Brand} {car.Model} ({car.PlateNumber})" : $"#{carId}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -240,11 +243,12 @@ public sealed class CarService
             }
 
             await _activityLogService.LogAsync(
-                "Restore car",
+                "Restored",
                 "Car",
                 carId,
                 $"Restored car {DescribeCar(car, carId)}.",
                 userId: _currentUserId,
+                entityName: car != null ? $"{car.Brand} {car.Model} ({car.PlateNumber})" : $"#{carId}",
                 transaction: transaction);
 
             transaction.Commit();

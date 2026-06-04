@@ -83,11 +83,12 @@ public sealed class RoleService
         await _permissionRepository.SetRolePermissionsAsync(role.RoleId, request.PermissionKeys);
 
         await _activityLogService.LogAsync(
-            "Create",
+            "Created",
             "Role",
             role.RoleId,
             $"Created role {role.RoleName} with {request.PermissionKeys.Count} permissions.",
-            currentUserId);
+            userId: currentUserId,
+            entityName: role.RoleName);
     }
 
     public async Task UpdateRoleAsync(RoleWithPermissions request, int currentUserId)
@@ -117,11 +118,12 @@ public sealed class RoleService
         }
 
         await _activityLogService.LogAsync(
-            "Update",
+            "Updated",
             "Role",
             existing.RoleId,
             $"Updated role permissions: {existing.RoleName}.",
-            currentUserId);
+            userId: currentUserId,
+            entityName: existing.RoleName);
     }
 
     public async Task ArchiveRoleAsync(int roleId, int currentUserId)
@@ -137,11 +139,12 @@ public sealed class RoleService
         await _roleRepository.ArchiveAsync(roleId);
 
         await _activityLogService.LogAsync(
-            "Archive",
+            "Archived",
             "Role",
             roleId,
             $"Archived role {role.RoleName}.",
-            currentUserId);
+            userId: currentUserId,
+            entityName: role.RoleName);
     }
 
     public async Task RestoreRoleAsync(int roleId, int currentUserId)
@@ -154,10 +157,11 @@ public sealed class RoleService
         await _roleRepository.RestoreAsync(roleId);
 
         await _activityLogService.LogAsync(
-            "Restore",
+            "Restored",
             "Role",
             roleId,
             $"Restored role {role.RoleName}.",
-            currentUserId);
+            userId: currentUserId,
+            entityName: role.RoleName);
     }
 }

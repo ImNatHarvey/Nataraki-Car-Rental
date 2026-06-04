@@ -111,11 +111,12 @@ public sealed class FleetScheduleService
             schedule.CreatedByUserId = _currentUserId;
             int scheduleId = await _scheduleRepository.CreateAsync(schedule, transaction);
             await _activityLogService.LogAsync(
-                "Create schedule",
+                "Created",
                 "FleetSchedule",
                 scheduleId,
                 $"Created {schedule.ScheduleType.ToLowerInvariant()} schedule '{schedule.Title}' for car #{schedule.CarId}.",
                 userId: _currentUserId,
+                entityName: schedule.Title,
                 transaction: transaction);
             transaction.Commit();
             return scheduleId;
@@ -146,11 +147,12 @@ public sealed class FleetScheduleService
             }
 
             await _activityLogService.LogAsync(
-                "Update schedule",
+                "Updated",
                 "FleetSchedule",
                 schedule.ScheduleId,
                 $"Updated schedule '{schedule.Title}' for car #{schedule.CarId}.",
                 userId: _currentUserId,
+                entityName: schedule.Title,
                 transaction: transaction);
             transaction.Commit();
         }
@@ -264,11 +266,12 @@ public sealed class FleetScheduleService
             }
 
             await _activityLogService.LogAsync(
-                "Archive schedule",
+                "Archived",
                 "FleetSchedule",
                 scheduleId,
                 $"Archived schedule '{schedule?.Title ?? $"#{scheduleId}"}'.",
                 userId: _currentUserId,
+                entityName: schedule?.Title ?? $"#{scheduleId}",
                 transaction: transaction);
             transaction.Commit();
         }

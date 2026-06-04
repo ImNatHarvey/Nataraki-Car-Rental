@@ -21,8 +21,8 @@ public sealed class ActivityLogRepository
 
     public async Task<IReadOnlyList<ActivityLog>> SearchLogsAsync(
         string searchText,
-        string? actionType,
-        string? entityName,
+        string? action,
+        string? module,
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
         int maxRows = 500)
@@ -33,33 +33,25 @@ public sealed class ActivityLogRepository
             SELECT TOP (@MaxRows)
                 logs.ActivityLogId,
                 logs.UserId,
-                UserDisplayName =
-                    CASE
-                        WHEN logs.UserId IS NULL THEN N'System'
-                        WHEN users.UserId IS NULL THEN N'Unknown User'
-                        WHEN LEN(LTRIM(RTRIM(CONCAT(users.FirstName, N' ', users.LastName)))) > 0
-                            THEN LTRIM(RTRIM(CONCAT(users.FirstName, N' ', users.LastName)))
-                        ELSE users.Username
-                    END,
-                logs.ActionType,
+                UserFullName = logs.UserFullName,
+                Module = logs.Module,
+                Action = logs.Action,
                 logs.EntityName,
                 logs.EntityId,
                 logs.Description,
+                logs.OldValue,
+                logs.NewValue,
                 logs.CreatedAt
             FROM dbo.ActivityLogs AS logs
-            LEFT JOIN dbo.Users AS users
-                ON users.UserId = logs.UserId
-            WHERE (@ActionType IS NULL OR logs.ActionType = @ActionType)
-              AND (@EntityName IS NULL OR logs.EntityName = @EntityName)
+            WHERE (@Action IS NULL OR logs.Action = @Action)
+              AND (@Module IS NULL OR logs.Module = @Module)
               AND (@DateFrom IS NULL OR logs.CreatedAt >= @DateFrom)
               AND (@DateTo IS NULL OR logs.CreatedAt <= @DateTo)
               AND (
                     @SearchText = N''
-                    OR users.Username LIKE @SearchPattern
-                    OR users.FirstName LIKE @SearchPattern
-                    OR users.LastName LIKE @SearchPattern
-                    OR CONCAT(users.FirstName, N' ', users.LastName) LIKE @SearchPattern
-                    OR logs.ActionType LIKE @SearchPattern
+                    OR logs.UserFullName LIKE @SearchPattern
+                    OR logs.Action LIKE @SearchPattern
+                    OR logs.Module LIKE @SearchPattern
                     OR logs.EntityName LIKE @SearchPattern
                     OR logs.Description LIKE @SearchPattern
                   )
@@ -74,8 +66,8 @@ public sealed class ActivityLogRepository
                 MaxRows = Math.Clamp(maxRows, 1, 1000),
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
-                ActionType = NullIfWhiteSpace(actionType),
-                EntityName = NullIfWhiteSpace(entityName),
+                Action = NullIfWhiteSpace(action),
+                Module = NullIfWhiteSpace(module),
                 DateFrom = dateFrom,
                 DateTo = dateTo
             });
@@ -89,18 +81,28 @@ public sealed class ActivityLogRepository
             INSERT INTO dbo.ActivityLogs
             (
                 UserId,
+                UserFullName,
+                Module,
+                Action,
                 ActionType,
                 EntityName,
                 EntityId,
-                Description
+                Description,
+                OldValue,
+                NewValue
             )
             VALUES
             (
                 @UserId,
+                @UserFullName,
+                @Module,
+                @Action,
                 @ActionType,
                 @EntityName,
                 @EntityId,
-                @Description
+                @Description,
+                @OldValue,
+                @NewValue
             );
             """;
 
@@ -125,10 +127,10 @@ public sealed class ActivityLogRepository
             SELECT
                 TotalLogs = COUNT(1),
                 TodaysLogs = COUNT(CASE WHEN CONVERT(date, CreatedAt) = CONVERT(date, SYSDATETIME()) THEN 1 END),
-                CarActions = COUNT(CASE WHEN EntityName = N'Car' THEN 1 END),
-                CustomerActions = COUNT(CASE WHEN EntityName = N'Customer' THEN 1 END),
-                TransactionActions = COUNT(CASE WHEN EntityName = N'Transaction' THEN 1 END),
-                FleetActions = COUNT(CASE WHEN EntityName = N'FleetSchedule' THEN 1 END)
+                CarActions = COUNT(CASE WHEN Module = N'Car' THEN 1 END),
+                CustomerActions = COUNT(CASE WHEN Module = N'Customer' THEN 1 END),
+                TransactionActions = COUNT(CASE WHEN Module = N'Transaction' THEN 1 END),
+                FleetActions = COUNT(CASE WHEN Module = N'FleetSchedule' THEN 1 END)
             FROM dbo.ActivityLogs;
             """;
 
@@ -140,10 +142,10 @@ public sealed class ActivityLogRepository
     public async Task<IReadOnlyList<string>> GetActionTypesAsync()
     {
         const string sql = """
-            SELECT DISTINCT ActionType
+            SELECT DISTINCT Action
             FROM dbo.ActivityLogs
-            WHERE LEN(LTRIM(RTRIM(ActionType))) > 0
-            ORDER BY ActionType;
+            WHERE LEN(LTRIM(RTRIM(Action))) > 0
+            ORDER BY Action;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -151,29 +153,29 @@ public sealed class ActivityLogRepository
         return values.ToList();
     }
 
-    public async Task<IReadOnlyList<string>> GetActionTypesByEntityAsync(string entityName)
+    public async Task<IReadOnlyList<string>> GetActionTypesByEntityAsync(string module)
     {
         const string sql = """
-            SELECT DISTINCT ActionType
+            SELECT DISTINCT Action
             FROM dbo.ActivityLogs
-            WHERE EntityName = @EntityName
-              AND LEN(LTRIM(RTRIM(ActionType))) > 0
-            ORDER BY ActionType;
+            WHERE Module = @Module
+              AND LEN(LTRIM(RTRIM(Action))) > 0
+            ORDER BY Action;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
-        IEnumerable<string> values = await connection.QueryAsync<string>(sql, new { EntityName = entityName });
+        IEnumerable<string> values = await connection.QueryAsync<string>(sql, new { Module = module });
         return values.ToList();
     }
 
     public async Task<IReadOnlyList<string>> GetEntityNamesAsync()
     {
         const string sql = """
-            SELECT DISTINCT EntityName
+            SELECT DISTINCT Module
             FROM dbo.ActivityLogs
-            WHERE EntityName IS NOT NULL
-              AND LEN(LTRIM(RTRIM(EntityName))) > 0
-            ORDER BY EntityName;
+            WHERE Module IS NOT NULL
+              AND LEN(LTRIM(RTRIM(Module))) > 0
+            ORDER BY Module;
             """;
 
         using var connection = _connectionFactory.CreateConnection();

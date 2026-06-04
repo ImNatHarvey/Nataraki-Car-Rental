@@ -110,11 +110,12 @@ public sealed class CustomerService
         {
             int customerId = await _customerRepository.AddCustomerAsync(customer, transaction);
             await _activityLogService.LogAsync(
-                "Add customer",
+                "Added",
                 "Customer",
                 customerId,
                 $"Added customer {customer.FirstName} {customer.LastName} ({customer.PhoneNumber}).",
                 userId: _currentUserId,
+                entityName: $"{customer.FirstName} {customer.LastName}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -164,11 +165,12 @@ public sealed class CustomerService
             }
 
             await _activityLogService.LogAsync(
-                "Edit customer",
+                "Updated",
                 "Customer",
                 customer.CustomerId,
-                $"Edited customer {customer.FirstName} {customer.LastName} ({customer.PhoneNumber}).",
+                $"Updated customer {customer.FirstName} {customer.LastName} ({customer.PhoneNumber}).",
                 userId: _currentUserId,
+                entityName: $"{customer.FirstName} {customer.LastName}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -224,11 +226,12 @@ public sealed class CustomerService
             }
 
             await _activityLogService.LogAsync(
-                "Archive customer",
+                "Archived",
                 "Customer",
                 customerId,
                 $"Archived customer {DescribeCustomer(customer, customerId)}.",
                 userId: _currentUserId,
+                entityName: customer != null ? $"{customer.FirstName} {customer.LastName}" : $"#{customerId}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -257,11 +260,12 @@ public sealed class CustomerService
             }
 
             await _activityLogService.LogAsync(
-                "Restore customer",
+                "Restored",
                 "Customer",
                 customerId,
                 $"Restored customer {DescribeCustomer(customer, customerId)}.",
                 userId: _currentUserId,
+                entityName: customer != null ? $"{customer.FirstName} {customer.LastName}" : $"#{customerId}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -303,17 +307,17 @@ public sealed class CustomerService
                 throw new RecordNotFoundException($"Customer record #{customerId} was not found or is archived.");
             }
 
-            string action = isBlacklisted ? "Blacklist customer" : "Remove customer blacklist";
             string description = isBlacklisted
                 ? $"Blacklisted customer {DescribeCustomer(customer, customerId)}. Reason: {reason}"
                 : $"Removed blacklist flag from customer {DescribeCustomer(customer, customerId)}.";
 
             await _activityLogService.LogAsync(
-                action,
+                "Updated",
                 "Customer",
                 customerId,
                 description,
                 userId: _currentUserId,
+                entityName: customer != null ? $"{customer.FirstName} {customer.LastName}" : $"#{customerId}",
                 transaction: transaction);
 
             transaction.Commit();

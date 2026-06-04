@@ -79,11 +79,12 @@ public sealed class SystemSettingsService
         await _repository.SetManyAsync(dict, currentUserId);
         
         await _activityLogService.LogAsync(
-            "Update",
+            "Updated",
             "SystemSettings",
-            null,
-            "Updated system settings.",
-            currentUserId);
+            entityId: null,
+            description: "Updated system settings.",
+            userId: currentUserId,
+            entityName: "System Settings");
     }
 
     public async Task SaveBrandingSettingsAsync(SystemSettingsModel model, int currentUserId)
@@ -103,11 +104,12 @@ public sealed class SystemSettingsService
         await _repository.SetManyAsync(dict, currentUserId);
 
         await _activityLogService.LogAsync(
-            "Update",
+            "Updated",
             "SystemSettings",
-            null,
-            "Updated branding and theme settings.",
-            currentUserId);
+            entityId: null,
+            description: "Updated branding and theme settings.",
+            userId: currentUserId,
+            entityName: "Branding Settings");
     }
 
     public async Task ResetDefaultsAsync(int currentUserId)
@@ -141,10 +143,11 @@ public sealed class SystemSettingsService
         await _repository.SetManyAsync(dict, currentUserId);
 
         await _activityLogService.LogAsync(
-            "System",
+            "Updated",
             "SystemSettings",
-            null,
-            "Reset system settings to defaults.",
-            currentUserId);
+            entityId: null,
+            description: "Reset system settings to defaults.",
+            userId: currentUserId,
+            entityName: "System Settings");
     }
 }

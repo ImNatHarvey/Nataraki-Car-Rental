@@ -193,19 +193,21 @@ public sealed class TransactionService
             }
 
             await _activityLogService.LogAsync(
-                "Create transaction",
-                "Transaction",
-                transactionId,
-                $"Created transaction {transaction.TransactionCode} from reservation schedule #{reservation.ScheduleId}.",
-                _currentUserId,
-                dbTransaction);
+                action: "Created",
+                module: "Transaction",
+                entityId: transactionId,
+                description: $"Created transaction {transaction.TransactionCode} from reservation schedule #{reservation.ScheduleId}.",
+                userId: _currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
             await _activityLogService.LogAsync(
-                "Reserve transaction",
-                "FleetSchedule",
-                reservation.ScheduleId,
-                $"Linked reservation schedule #{reservation.ScheduleId} to reserved transaction {transaction.TransactionCode}.",
-                _currentUserId,
-                dbTransaction);
+                action: "Updated",
+                module: "FleetSchedule",
+                entityId: reservation.ScheduleId,
+                description: $"Linked reservation schedule #{reservation.ScheduleId} to reserved transaction {transaction.TransactionCode}.",
+                userId: _currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
             dbTransaction.Commit();
             return transactionId;
         }
@@ -303,12 +305,13 @@ public sealed class TransactionService
             }
 
             await _activityLogService.LogAsync(
-                "Create walk-in transaction",
-                "Transaction",
-                transactionId,
-                $"Created walk-in {transactionType.ToLowerInvariant()} transaction {transaction.TransactionCode} with schedule #{scheduleId}.",
-                _currentUserId,
-                dbTransaction);
+                action: "Created",
+                module: "Transaction",
+                entityId: transactionId,
+                description: $"Created walk-in {transactionType.ToLowerInvariant()} transaction {transaction.TransactionCode} with schedule #{scheduleId}.",
+                userId: _currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
             dbTransaction.Commit();
             return transactionId;
         }
@@ -426,18 +429,26 @@ public sealed class TransactionService
                 description += ".";
             }
 
-            await _activityLogService.LogAsync("Complete transaction", "Transaction", request.TransactionId, description, currentUserId, dbTransaction);
+            await _activityLogService.LogAsync(
+                action: "Completed",
+                module: "Transaction",
+                entityId: request.TransactionId,
+                description: description,
+                userId: currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
 
             if (request.BlacklistCustomer && !string.IsNullOrWhiteSpace(request.BlacklistReason))
             {
                 await _customerRepository.ToggleBlacklistAsync(transaction.CustomerId, true, request.BlacklistReason.Trim(), dbTransaction);
                 await _activityLogService.LogAsync(
-                    "Blacklist",
-                    "Customer",
-                    transaction.CustomerId,
-                    $"Blacklisted customer #{transaction.CustomerId} ({transaction.CustomerName}) during return inspection. Reason: {request.BlacklistReason}",
-                    currentUserId,
-                    dbTransaction);
+                    action: "Blacklisted",
+                    module: "Customer",
+                    entityId: transaction.CustomerId,
+                    description: $"Blacklisted customer #{transaction.CustomerId} ({transaction.CustomerName}) during return inspection. Reason: {request.BlacklistReason}",
+                    userId: currentUserId,
+                    entityName: transaction.CustomerName,
+                    transaction: dbTransaction);
             }
 
             dbTransaction.Commit();
@@ -470,7 +481,8 @@ public sealed class TransactionService
             TransactionConstants.Status.Active,
             FleetScheduleConstants.Type.Rental,
             FleetScheduleConstants.Status.Rented,
-            "Start rental");
+            action: "Updated",
+            description: $"Started rental for {transaction.TransactionCode}.");
     }
 
     public async Task CancelTransactionAsync(int transactionId, int currentUserId, string? reason = null)
@@ -482,7 +494,11 @@ public sealed class TransactionService
             ? FleetScheduleConstants.Type.Reservation
             : FleetScheduleConstants.Type.Rental;
 
-        await ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Cancelled, scheduleType, FleetScheduleConstants.Status.Cancelled, "Cancel transaction", trimmedReason);
+        string description = trimmedReason is null
+            ? $"Cancelled transaction {transaction.TransactionCode}."
+            : $"Cancelled transaction {transaction.TransactionCode}. Reason: {trimmedReason}";
+
+        await ChangeStatusAsync(transactionId, currentUserId, TransactionConstants.Status.Cancelled, scheduleType, FleetScheduleConstants.Status.Cancelled, action: "Cancelled", description: description);
     }
 
     public async Task ArchiveTransactionAsync(int transactionId, int currentUserId)
@@ -508,12 +524,13 @@ public sealed class TransactionService
             }
 
             await _activityLogService.LogAsync(
-                "Archive transaction",
-                "Transaction",
-                transactionId,
-                $"Archived transaction {transaction.TransactionCode}.",
-                currentUserId,
-                dbTransaction);
+                action: "Archived",
+                module: "Transaction",
+                entityId: transactionId,
+                description: $"Archived transaction {transaction.TransactionCode}.",
+                userId: currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
             dbTransaction.Commit();
         }
         catch
@@ -627,12 +644,13 @@ public sealed class TransactionService
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
 
             await _activityLogService.LogAsync(
-                "Extend rental",
-                "Transaction",
-                transactionId,
-                $"Extended rental for {transaction.TransactionCode} until {newEndDate:yyyy-MM-dd}. Extension charge: ₱{extensionCharge:N2}.",
-                currentUserId,
-                dbTransaction);
+                action: "Updated",
+                module: "Transaction",
+                entityId: transactionId,
+                description: $"Extended rental for {transaction.TransactionCode} until {newEndDate:yyyy-MM-dd}. Extension charge: ₱{extensionCharge:N2}.",
+                userId: currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
 
             dbTransaction.Commit();
         }
@@ -671,12 +689,13 @@ public sealed class TransactionService
             }
 
             await _activityLogService.LogAsync(
-                "Restore transaction",
-                "Transaction",
-                transactionId,
-                $"Restored transaction {transaction.TransactionCode}.",
-                currentUserId,
-                dbTransaction);
+                action: "Restored",
+                module: "Transaction",
+                entityId: transactionId,
+                description: $"Restored transaction {transaction.TransactionCode}.",
+                userId: currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
             dbTransaction.Commit();
         }
         catch
@@ -743,12 +762,13 @@ public sealed class TransactionService
             await SyncReservationTransactionPaymentStatusAsync(transaction, dbTransaction);
 
             await _activityLogService.LogAsync(
-                "Add payment",
-                "Transaction",
-                request.TransactionId,
-                $"Added payment of ₱{request.Amount:N2} for {transaction.TransactionCode} via {request.ModeOfPayment}.",
-                currentUserId,
-                dbTransaction);
+                action: "Updated",
+                module: "Transaction",
+                entityId: request.TransactionId,
+                description: $"Added payment of ₱{request.Amount:N2} for {transaction.TransactionCode} via {request.ModeOfPayment}.",
+                userId: currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
 
             dbTransaction.Commit();
         }
@@ -808,7 +828,8 @@ public sealed class TransactionService
             TransactionConstants.Status.Completed,
             FleetScheduleConstants.Type.Rental,
             FleetScheduleConstants.Status.Completed,
-            "Complete transaction");
+            action: "Completed",
+            description: $"Completed transaction {transaction.TransactionCode}.");
     }
 
     private async Task ChangeStatusAsync(
@@ -817,8 +838,8 @@ public sealed class TransactionService
         string transactionStatus,
         string scheduleType,
         string scheduleStatus,
-        string actionType,
-        string? reason = null)
+        string action,
+        string description)
     {
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
 
@@ -849,10 +870,15 @@ public sealed class TransactionService
             await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
             await _transactionRepository.UpdateStatusAsync(transactionId, transactionStatus, dbTransaction);
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
-            string description = reason is null
-                ? $"{actionType} for {transaction.TransactionCode}."
-                : $"{actionType} for {transaction.TransactionCode}. Reason: {reason}";
-            await _activityLogService.LogAsync(actionType, "Transaction", transactionId, description, currentUserId, dbTransaction);
+            
+            await _activityLogService.LogAsync(
+                action: action,
+                module: "Transaction",
+                entityId: transactionId,
+                description: description,
+                userId: currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
             dbTransaction.Commit();
         }
         catch

@@ -161,11 +161,12 @@ public sealed class OffsiteService
             int recordId = await _offsiteRepository.AddAsync(record, transaction);
 
             await _activityLogService.LogAsync(
-                "Create Offsite Record",
+                "Created",
                 "OffsiteRecord",
                 recordId,
                 $"Created {record.OffsiteType} offsite record for car #{record.CarId}.",
                 userId: _currentUserId,
+                entityName: $"OFF-{recordId:D4}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -229,11 +230,12 @@ public sealed class OffsiteService
             await _offsiteRepository.UpdateAsync(existing, transaction);
 
             await _activityLogService.LogAsync(
-                "Update Offsite Record",
+                "Updated",
                 "OffsiteRecord",
                 existing.OffsiteRecordId,
                 $"Updated {existing.OffsiteType} offsite record for car #{existing.CarId}.",
                 userId: _currentUserId,
+                entityName: $"OFF-{existing.OffsiteRecordId:D4}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -315,11 +317,12 @@ public sealed class OffsiteService
             }
 
             await _activityLogService.LogAsync(
-                "Complete Offsite Record",
+                "Completed",
                 "OffsiteRecord",
                 completion.OffsiteRecordId,
                 BuildCompletionLogMessage(existing, completion),
                 userId: _currentUserId,
+                entityName: $"OFF-{completion.OffsiteRecordId:D4}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -359,11 +362,12 @@ public sealed class OffsiteService
             await _offsiteRepository.CancelAsync(recordId, transaction);
 
             await _activityLogService.LogAsync(
-                "Cancel Offsite Record",
+                "Cancelled",
                 "OffsiteRecord",
                 recordId,
                 $"Cancelled offsite record for car #{existing.CarId}.",
                 userId: _currentUserId,
+                entityName: $"OFF-{recordId:D4}",
                 transaction: transaction);
 
             transaction.Commit();
@@ -401,7 +405,13 @@ public sealed class OffsiteService
         int affectedRows = await _offsiteRepository.ArchiveAsync(recordId);
         if (affectedRows == 0) throw new RecordNotFoundException("Failed to archive record. It may have been deleted or modified.");
 
-        await _activityLogService.LogAsync("Archive Offsite Record", "OffsiteRecord", recordId, $"Archived offsite record #{recordId}.", userId: _currentUserId);
+        await _activityLogService.LogAsync(
+            "Archived",
+            "OffsiteRecord",
+            recordId,
+            $"Archived offsite record #{recordId}.",
+            userId: _currentUserId,
+            entityName: $"OFF-{recordId:D4}");
     }
 
     private static void RollbackQuietly(SqlTransaction transaction)
@@ -433,7 +443,13 @@ public sealed class OffsiteService
         int affectedRows = await _offsiteRepository.RestoreAsync(recordId);
         if (affectedRows == 0) throw new RecordNotFoundException("Failed to restore record. It may have been deleted or modified.");
 
-        await _activityLogService.LogAsync("Restore Offsite Record", "OffsiteRecord", recordId, $"Restored offsite record #{recordId}.", userId: _currentUserId);
+        await _activityLogService.LogAsync(
+            "Restored",
+            "OffsiteRecord",
+            recordId,
+            $"Restored offsite record #{recordId}.",
+            userId: _currentUserId,
+            entityName: $"OFF-{recordId:D4}");
     }
 
     private static void ValidateCompleteRequest(CompleteOffsiteRecordRequest request, OffsiteRecord? existing)

@@ -59,11 +59,12 @@ public sealed class UserService
         await _userRepository.UpdatePasswordAsync(user.UserId, hash);
 
         await _activityLogService.LogAsync(
-            "Update",
-            "User",
-            user.UserId,
-            $"Password reset via last name verification for user {user.Username}.",
-            user.UserId);
+            action: "Updated",
+            module: "User",
+            entityId: user.UserId,
+            description: $"Password reset via last name verification for user {user.Username}.",
+            userId: user.UserId,
+            entityName: user.FullName);
     }
 
     public Task<User?> GetActiveOwnerAsync()
@@ -98,11 +99,12 @@ public sealed class UserService
         user.UserId = await _userRepository.AddAsync(user);
 
         await _activityLogService.LogAsync(
-            "Create",
-            "User",
-            user.UserId,
-            $"Created user {user.Username} ({user.FullName}).",
-            currentUserId);
+            action: "Created",
+            module: "User",
+            entityId: user.UserId,
+            description: $"Created user {user.Username} ({user.FullName}).",
+            userId: currentUserId,
+            entityName: user.FullName);
     }
 
     public async Task UpdateUserAsync(UpdateUserRequest request, int currentUserId)
@@ -155,11 +157,12 @@ public sealed class UserService
         }
 
         await _activityLogService.LogAsync(
-            "Update",
-            "User",
-            existing.UserId,
-            $"Updated user {existing.Username} ({existing.FullName}).",
-            currentUserId);
+            action: "Updated",
+            module: "User",
+            entityId: existing.UserId,
+            description: $"Updated user {existing.Username} ({existing.FullName}).",
+            userId: currentUserId,
+            entityName: existing.FullName);
     }
 
     public async Task<User> UpdateSelfProfileAsync(UpdateSelfProfileRequest request, int currentUserId)
@@ -196,11 +199,12 @@ public sealed class UserService
         }
 
         await _activityLogService.LogAsync(
-            "Update",
-            "User",
-            existing.UserId,
-            $"Updated own profile for user {existing.Username}.",
-            currentUserId);
+            action: "Updated",
+            module: "User",
+            entityId: existing.UserId,
+            description: $"Updated own profile for user {existing.Username}.",
+            userId: currentUserId,
+            entityName: existing.FullName);
 
         return existing;
     }
@@ -224,11 +228,12 @@ public sealed class UserService
         await _userRepository.UpdatePasswordAsync(request.UserId, hash);
 
         await _activityLogService.LogAsync(
-            "Update",
-            "User",
-            request.UserId,
-            $"Changed password for user {user?.Username ?? request.UserId.ToString()}.",
-            currentUserId);
+            action: "Updated",
+            module: "User",
+            entityId: request.UserId,
+            description: $"Changed password for user {user?.Username ?? request.UserId.ToString()}.",
+            userId: currentUserId,
+            entityName: user?.FullName ?? request.UserId.ToString());
     }
 
     public async Task ChangeOwnPasswordAsync(ChangeOwnPasswordRequest request, int currentUserId)
@@ -255,11 +260,12 @@ public sealed class UserService
         await _userRepository.UpdatePasswordAsync(request.UserId, hash);
 
         await _activityLogService.LogAsync(
-            "Update",
-            "User",
-            request.UserId,
-            $"Changed own password for user {userToUpdate.Username}.",
-            currentUserId);
+            action: "Updated",
+            module: "User",
+            entityId: request.UserId,
+            description: $"Changed own password for user {userToUpdate.Username}.",
+            userId: currentUserId,
+            entityName: userToUpdate.FullName);
     }
 
     public async Task ArchiveUserAsync(int userId, int currentUserId)
@@ -277,11 +283,12 @@ public sealed class UserService
         await _userRepository.ArchiveAsync(userId);
 
         await _activityLogService.LogAsync(
-            "Archive",
-            "User",
-            userId,
-            $"Archived user {user.Username}.",
-            currentUserId);
+            action: "Archived",
+            module: "User",
+            entityId: userId,
+            description: $"Archived user {user.Username}.",
+            userId: currentUserId,
+            entityName: user.FullName);
     }
 
     public async Task RestoreUserAsync(int userId, int currentUserId)
@@ -291,11 +298,12 @@ public sealed class UserService
         User? user = await _userRepository.GetByIdAsync(userId);
 
         await _activityLogService.LogAsync(
-            "Restore",
-            "User",
-            userId,
-            $"Restored user {user?.Username ?? userId.ToString()}.",
-            currentUserId);
+            action: "Restored",
+            module: "User",
+            entityId: userId,
+            description: $"Restored user {user?.Username ?? userId.ToString()}.",
+            userId: currentUserId,
+            entityName: user?.FullName ?? userId.ToString());
     }
 
     private static void ValidateCreateRequest(CreateUserRequest request)

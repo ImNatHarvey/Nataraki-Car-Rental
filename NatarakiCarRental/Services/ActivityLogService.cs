@@ -40,9 +40,9 @@ public sealed class ActivityLogService
         return _activityLogRepository.GetActionTypesAsync();
     }
 
-    public Task<IReadOnlyList<string>> GetActionTypesByEntityAsync(string entityName)
+    public Task<IReadOnlyList<string>> GetActionTypesByEntityAsync(string module)
     {
-        return _activityLogRepository.GetActionTypesByEntityAsync(entityName);
+        return _activityLogRepository.GetActionTypesByEntityAsync(module);
     }
 
     public Task<IReadOnlyList<string>> GetEntityNamesAsync()
@@ -51,24 +51,40 @@ public sealed class ActivityLogService
     }
 
     public async Task LogAsync(
-        string actionType,
-        string entityName,
+        string action,
+        string module,
         int? entityId,
         string description,
         int? userId = null,
+        string? userFullName = null,
+        string? entityName = null,
+        string? oldValue = null,
+        string? newValue = null,
         IDbTransaction? transaction = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(actionType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
+
+        if (string.IsNullOrWhiteSpace(userFullName) && userId.HasValue)
+        {
+            userFullName = AccessControlService.CurrentUser?.UserId == userId 
+                ? AccessControlService.CurrentUser.FullName 
+                : null;
+        }
 
         await _activityLogRepository.InsertAsync(
             new ActivityLog
             {
                 UserId = userId,
-                ActionType = actionType.Trim(),
+                UserFullName = userFullName ?? "System",
+                Module = string.IsNullOrWhiteSpace(module) ? "System" : module.Trim(),
+                Action = action.Trim(),
+                ActionType = action.Trim(),
                 EntityName = string.IsNullOrWhiteSpace(entityName) ? null : entityName.Trim(),
                 EntityId = entityId,
-                Description = description.Trim()
+                Description = description.Trim(),
+                OldValue = oldValue,
+                NewValue = newValue
             },
             transaction);
     }
