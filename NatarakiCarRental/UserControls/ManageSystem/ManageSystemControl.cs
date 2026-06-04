@@ -1880,9 +1880,17 @@ public sealed class ManageSystemControl : UserControl
     private string GetUserActions(UserListItem user)
     {
         bool isSelf = user.UserId == _currentUserId;
-        if (user.IsOwner) return isSelf ? "View" : "View | Edit";
+        bool isCurrentUserOwner = AccessControlService.CurrentUser?.IsOwner == true;
+
+        if (user.IsOwner)
+        {
+            if (!isCurrentUserOwner) return "View";
+            return "View | Edit";
+        }
+
         if (user.IsArchived) return "View | Restore";
-        return isSelf ? "View | Archive" : "View | Edit | Archive";
+
+        return isSelf ? "View | Edit" : "View | Edit | Archive";
     }
 
     private static string GetRoleActions(RoleListItem role)

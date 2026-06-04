@@ -113,6 +113,11 @@ public sealed class UserService
         User? existing = await _userRepository.GetByIdAsync(request.UserId);
         if (existing == null) throw new InvalidOperationException("User not found.");
 
+        if (existing.IsOwner && AccessControlService.CurrentUser?.IsOwner != true)
+        {
+            throw new InvalidOperationException("Only the system owner can update the owner account.");
+        }
+
         string username = request.Username.Trim();
         if (await _userRepository.ExistsByUsernameAsync(username, request.UserId))
         {
@@ -203,6 +208,13 @@ public sealed class UserService
     public async Task ChangePasswordAsync(ChangePasswordRequest request, int currentUserId)
     {
         AccessControlService.EnforcePermission("ManageSystem.Users");
+        
+        User? user = await _userRepository.GetByIdAsync(request.UserId);
+        if (user != null && user.IsOwner && AccessControlService.CurrentUser?.IsOwner != true)
+        {
+            throw new InvalidOperationException("Only the system owner can change the owner's password.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
         {
             throw new ValidationException([new ValidationFailure("NewPassword", "Password must be at least 8 characters.")]);
@@ -211,7 +223,6 @@ public sealed class UserService
         string hash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         await _userRepository.UpdatePasswordAsync(request.UserId, hash);
 
-        User? user = await _userRepository.GetByIdAsync(request.UserId);
         await _activityLogService.LogAsync(
             "Update",
             "User",
@@ -233,9 +244,9 @@ public sealed class UserService
         if (!string.Equals(request.NewPassword, request.ConfirmPassword, StringComparison.Ordinal)) failures.Add(new("ConfirmPassword", "New password confirmation must match."));
         if (failures.Count > 0) throw new ValidationException(failures);
 
-        User? user = await _userRepository.GetByIdAsync(request.UserId);
-        if (user is null) throw new InvalidOperationException("User not found.");
-        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+        User? userToUpdate = await _userRepository.GetByIdAsync(request.UserId);
+        if (userToUpdate is null) throw new InvalidOperationException("User not found.");
+        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, userToUpdate.PasswordHash))
         {
             throw new InvalidOperationException("Current password is incorrect.");
         }
@@ -247,13 +258,18 @@ public sealed class UserService
             "Update",
             "User",
             request.UserId,
-            $"Changed own password for user {user.Username}.",
+            $"Changed own password for user {userToUpdate.Username}.",
             currentUserId);
     }
 
     public async Task ArchiveUserAsync(int userId, int currentUserId)
     {
         AccessControlService.EnforcePermission("ManageSystem.Users");
+        if (userId == currentUserId)
+        {
+            throw new InvalidOperationException("You cannot archive your own account.");
+        }
+        
         User? user = await _userRepository.GetByIdAsync(userId);
         if (user == null) return;
         if (user.IsOwner) throw new InvalidOperationException("System owner account cannot be archived.");

@@ -311,6 +311,14 @@ public sealed class UserDetailsForm : Form
             {
                 user = await _userService.GetUserByIdAsync(_targetUserId.Value);
                 if (user != null) _loadedUserIsOwner = user.IsOwner;
+
+                if (_loadedUserIsOwner && AccessControlService.CurrentUser?.IsOwner != true)
+                {
+                    MessageBoxHelper.ShowWarning("Only the system owner can view or edit the owner account.");
+                    DialogResult = DialogResult.Cancel;
+                    Close();
+                    return;
+                }
             }
 
             IReadOnlyList<Role> roles = await _roleService.GetAllRolesAsync();
