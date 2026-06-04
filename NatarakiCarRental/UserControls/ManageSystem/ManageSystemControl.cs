@@ -507,9 +507,9 @@ public sealed class ManageSystemControl : UserControl
         securityCard.Height = 214;
         securityCard.Padding = new Padding(24);
         securityCard.Controls.Add(CreateSectionTitle("Security", new Point(24, 20), 320));
-        AddLabeledInput(securityCard, "Current Password", _currentPasswordInput, new Point(24, 62), 320);
-        AddLabeledInput(securityCard, "New Password", _newPasswordInput, new Point(378, 62), 320);
-        AddLabeledInput(securityCard, "Confirm Password", _confirmPasswordInput, new Point(732, 62), 320);
+        AddLabeledPasswordInput(securityCard, "Current Password", _currentPasswordInput, new Point(24, 62), 320);
+        AddLabeledPasswordInput(securityCard, "New Password", _newPasswordInput, new Point(378, 62), 320);
+        AddLabeledPasswordInput(securityCard, "Confirm Password", _confirmPasswordInput, new Point(732, 62), 320);
         Button changePasswordButton = ControlFactory.CreateSecondaryButton("Change Password", 154, 34);
         changePasswordButton.Location = new Point(24, 146);
         changePasswordButton.Click += async (_, _) => await ChangeOwnPasswordAsync();
@@ -2399,9 +2399,9 @@ public sealed class ManageSystemControl : UserControl
         int middleX = contentPadding + columnWidth + columnGap;
         int rightX = contentPadding + ((columnWidth + columnGap) * 2);
 
-        MoveLabeledControl(card, "Current Password", _currentPasswordInput, leftX, 62, columnWidth);
-        MoveLabeledControl(card, "New Password", _newPasswordInput, middleX, 62, columnWidth);
-        MoveLabeledControl(card, "Confirm Password", _confirmPasswordInput, rightX, 62, columnWidth);
+        MoveLabeledPasswordControl(card, "Current Password", _currentPasswordInput, leftX, 62, columnWidth);
+        MoveLabeledPasswordControl(card, "New Password", _newPasswordInput, middleX, 62, columnWidth);
+        MoveLabeledPasswordControl(card, "Confirm Password", _confirmPasswordInput, rightX, 62, columnWidth);
         changePasswordButton.Location = new Point(leftX, 146);
     }
 
@@ -2416,6 +2416,29 @@ public sealed class ManageSystemControl : UserControl
 
         input.Location = new Point(x, y + 24);
         input.Size = new Size(width, input.Height);
+    }
+
+    private static void MoveLabeledPasswordControl(Control parent, string labelText, TextBox input, int x, int y, int width)
+    {
+        Label? label = parent.Controls.OfType<Label>().FirstOrDefault(item => item.Text == labelText);
+        if (label is not null)
+        {
+            label.Location = new Point(x, y);
+            label.Width = width;
+        }
+
+        if (input.Parent is BorderedPanel panel)
+        {
+            panel.Location = new Point(x, y + 24);
+            panel.Size = new Size(width, 30);
+            
+            input.Size = new Size(width - 48, 26);
+            
+            if (panel.Controls.OfType<IconButton>().FirstOrDefault() is IconButton btn)
+            {
+                btn.Location = new Point(width - 35, 1);
+            }
+        }
     }
 
     private static void MoveReadOnlyValue(Control parent, string labelText, Label valueLabel, int x, int y, int width)
@@ -2498,6 +2521,63 @@ public sealed class ManageSystemControl : UserControl
         input.Font = FontHelper.Regular(10F);
         parent.Controls.Add(label);
         parent.Controls.Add(input);
+    }
+
+    private static void AddLabeledPasswordInput(Control parent, string labelText, TextBox input, Point labelLocation, int width)
+    {
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = labelLocation;
+        BorderedPanel fieldPanel = CreatePasswordFieldPanel(input, width);
+        fieldPanel.Location = new Point(labelLocation.X, labelLocation.Y + 24);
+        parent.Controls.Add(label);
+        parent.Controls.Add(fieldPanel);
+    }
+
+    private static BorderedPanel CreatePasswordFieldPanel(TextBox input, int width)
+    {
+        IconButton previewButton = new();
+        BorderedPanel panel = new()
+        {
+            Size = new Size(width, 30),
+            BackColor = ThemeHelper.Surface,
+            BorderColor = ThemeHelper.Border,
+            Cursor = Cursors.IBeam
+        };
+        panel.Click += (_, _) => input.Focus();
+
+        input.BorderStyle = BorderStyle.None;
+        input.BackColor = ThemeHelper.Surface;
+        input.Location = new Point(8, 6);
+        input.Size = new Size(width - 48, 26);
+        input.Font = FontHelper.Regular(10F);
+        input.Cursor = Cursors.IBeam;
+
+        previewButton.Size = new Size(34, 28);
+        previewButton.Location = new Point(width - 35, 1);
+        previewButton.IconChar = IconChar.Eye;
+        previewButton.IconColor = ThemeHelper.TextSecondary;
+        previewButton.IconSize = 16;
+        previewButton.BackColor = ThemeHelper.Surface;
+        previewButton.FlatStyle = FlatStyle.Flat;
+        previewButton.Cursor = Cursors.Hand;
+        previewButton.TabStop = false;
+        previewButton.Text = string.Empty;
+        previewButton.FlatAppearance.BorderSize = 0;
+        previewButton.FlatAppearance.MouseOverBackColor = ThemeHelper.ContentBackground;
+        previewButton.FlatAppearance.MouseDownBackColor = ThemeHelper.Secondary;
+        previewButton.Click += (_, _) => TogglePasswordPreview(input, previewButton);
+
+        panel.Controls.Add(input);
+        panel.Controls.Add(previewButton);
+        return panel;
+    }
+
+    private static void TogglePasswordPreview(TextBox input, IconButton previewButton)
+    {
+        bool showPassword = input.UseSystemPasswordChar;
+        input.UseSystemPasswordChar = !showPassword;
+        previewButton.IconChar = showPassword ? IconChar.EyeSlash : IconChar.Eye;
+        input.Focus();
     }
 
     private static void AddReadOnlyValue(Control parent, string labelText, Label valueLabel, Point labelLocation, int width)
