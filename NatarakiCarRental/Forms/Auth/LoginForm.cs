@@ -13,8 +13,6 @@ public sealed class LoginForm : Form
     private readonly AuthService _authService = new();
     private readonly TextBox _usernameTextBox = ControlFactory.CreateTextBox();
     private readonly TextBox _passwordTextBox = ControlFactory.CreatePasswordTextBox();
-    private readonly BorderedPanel _passwordFieldPanel = new();
-    private readonly IconButton _passwordPreviewButton = new();
     private readonly Panel _brandingPanel = new();
     private readonly Panel _formContainer = new();
     private readonly Panel _loginPanel = new();
@@ -25,6 +23,7 @@ public sealed class LoginForm : Form
     private TextBox txtResetUsername = null!;
     private TextBox txtResetLastName = null!;
     private TextBox txtNewPassword = null!;
+    private TextBox txtConfirmPassword = null!;
     private Label lblUserStatus = null!;
     private Button btnResetAction = null!;
     private Button btnBackToLogin = null!;
@@ -116,9 +115,8 @@ public sealed class LoginForm : Form
         Label passwordLabel = ControlFactory.CreateInputLabel("Password");
         passwordLabel.Location = new Point(66, 286);
 
-        ConfigurePasswordFieldPanel();
-        _passwordFieldPanel.Location = new Point(66, 310);
-        ConfigurePasswordPreviewButton();
+        BorderedPanel passwordFieldPanel = ControlFactory.CreatePasswordFieldPanel(_passwordTextBox, 320);
+        passwordFieldPanel.Location = new Point(66, 310);
 
         Button loginButton = ControlFactory.CreatePrimaryButton("Log In", 320, 40);
         loginButton.Location = new Point(66, 374);
@@ -143,7 +141,7 @@ public sealed class LoginForm : Form
         _loginPanel.Controls.Add(usernameLabel);
         _loginPanel.Controls.Add(_usernameTextBox);
         _loginPanel.Controls.Add(passwordLabel);
-        _loginPanel.Controls.Add(_passwordFieldPanel);
+        _loginPanel.Controls.Add(passwordFieldPanel);
         _loginPanel.Controls.Add(loginButton);
         _loginPanel.Controls.Add(forgotPasswordLink);
         
@@ -207,23 +205,21 @@ public sealed class LoginForm : Form
         newPasswordLabel.Location = new Point(66, 286);
 
         txtNewPassword = ControlFactory.CreatePasswordTextBox();
-        
-        BorderedPanel newPasswordWrapper = new()
-        {
-            Size = new Size(320, 30),
-            Location = new Point(66, 310),
-            BackColor = ThemeHelper.Surface,
-            BorderColor = ThemeHelper.Border
-        };
-        txtNewPassword.BorderStyle = BorderStyle.None;
-        txtNewPassword.Location = new Point(8, 6);
-        txtNewPassword.Width = 304;
-        newPasswordWrapper.Controls.Add(txtNewPassword);
+        BorderedPanel newPasswordWrapper = ControlFactory.CreatePasswordFieldPanel(txtNewPassword, 320);
+        newPasswordWrapper.Location = new Point(66, 310);
+
+        // --- Confirm Password Group ---
+        Label confirmPasswordLabel = ControlFactory.CreateInputLabel("Confirm Password");
+        confirmPasswordLabel.Location = new Point(66, 354);
+
+        txtConfirmPassword = ControlFactory.CreatePasswordTextBox();
+        BorderedPanel confirmPasswordWrapper = ControlFactory.CreatePasswordFieldPanel(txtConfirmPassword, 320);
+        confirmPasswordWrapper.Location = new Point(66, 378);
 
         // --- Action Buttons ---
         // btnResetAction is positioned at the bottom right of the 320px input group (66 + 320 - 160 = 226)
         btnResetAction = ControlFactory.CreatePrimaryButton("Reset Password", 160, 40);
-        btnResetAction.Location = new Point(226, 360);
+        btnResetAction.Location = new Point(226, 428);
 
         // btnBackToLogin is positioned at the bottom left, styled as a clickable link
         btnBackToLogin = new Button
@@ -233,7 +229,7 @@ public sealed class LoginForm : Form
             ForeColor = ThemeHelper.Primary,
             FlatStyle = FlatStyle.Flat,
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(66, 365), // Vertically offset for alignment with the action button text
+            Location = new Point(66, 433), // Vertically offset for alignment with the action button text
             Size = new Size(120, 30),
             Cursor = Cursors.Hand
         };
@@ -250,6 +246,8 @@ public sealed class LoginForm : Form
         _resetPanel.Controls.Add(txtResetLastName);
         _resetPanel.Controls.Add(newPasswordLabel);
         _resetPanel.Controls.Add(newPasswordWrapper);
+        _resetPanel.Controls.Add(confirmPasswordLabel);
+        _resetPanel.Controls.Add(confirmPasswordWrapper);
         _resetPanel.Controls.Add(btnResetAction);
         _resetPanel.Controls.Add(btnBackToLogin);
     }
@@ -342,12 +340,19 @@ public sealed class LoginForm : Form
                 return;
             }
 
+            if (txtNewPassword.Text != txtConfirmPassword.Text)
+            {
+                MessageBoxHelper.ShowWarning("Passwords do not match.");
+                return;
+            }
+
             await _userService.ResetPasswordAsync(username, lastName, newPassword);
             MessageBoxHelper.ShowInfo("Password has been reset successfully. You can now log in.");
             
             _passwordTextBox.Clear();
             txtResetLastName.Clear();
             txtNewPassword.Clear();
+            txtConfirmPassword.Clear();
             ShowLoginView();
         }
         catch (Exception exception)
@@ -481,51 +486,6 @@ public sealed class LoginForm : Form
         {
             MessageBoxHelper.ShowError($"Login failed.\n\n{exception.Message}");
         }
-    }
-
-    private void ConfigurePasswordPreviewButton()
-    {
-        _passwordPreviewButton.Size = new Size(34, 28);
-        _passwordPreviewButton.Location = new Point(285, 1);
-        _passwordPreviewButton.IconChar = IconChar.Eye;
-        _passwordPreviewButton.IconColor = ThemeHelper.TextSecondary;
-        _passwordPreviewButton.IconSize = 16;
-        _passwordPreviewButton.BackColor = ThemeHelper.Surface;
-        _passwordPreviewButton.ForeColor = ThemeHelper.TextPrimary;
-        _passwordPreviewButton.FlatStyle = FlatStyle.Flat;
-        _passwordPreviewButton.Cursor = Cursors.Hand;
-        _passwordPreviewButton.TabStop = false;
-        _passwordPreviewButton.Text = string.Empty;
-        _passwordPreviewButton.FlatAppearance.BorderSize = 0;
-        _passwordPreviewButton.FlatAppearance.MouseOverBackColor = ThemeHelper.ContentBackground;
-        _passwordPreviewButton.FlatAppearance.MouseDownBackColor = ThemeHelper.Secondary;
-        _passwordPreviewButton.Click += (_, _) => TogglePasswordPreview();
-    }
-
-    private void ConfigurePasswordFieldPanel()
-    {
-        _passwordFieldPanel.Size = new Size(320, 30);
-        _passwordFieldPanel.BackColor = ThemeHelper.Surface;
-        _passwordFieldPanel.BorderColor = ThemeHelper.Border;
-        _passwordFieldPanel.Cursor = Cursors.IBeam;
-        _passwordFieldPanel.Click += (_, _) => _passwordTextBox.Focus();
-
-        _passwordTextBox.BorderStyle = BorderStyle.None;
-        _passwordTextBox.BackColor = ThemeHelper.Surface;
-        _passwordTextBox.Location = new Point(8, 6);
-        _passwordTextBox.Width = 272;
-        _passwordTextBox.Cursor = Cursors.IBeam;
-
-        _passwordFieldPanel.Controls.Add(_passwordTextBox);
-        _passwordFieldPanel.Controls.Add(_passwordPreviewButton);
-    }
-
-    private void TogglePasswordPreview()
-    {
-        bool showPassword = _passwordTextBox.UseSystemPasswordChar;
-        _passwordTextBox.UseSystemPasswordChar = !showPassword;
-        _passwordPreviewButton.IconChar = showPassword ? IconChar.EyeSlash : IconChar.Eye;
-        _passwordTextBox.Focus();
     }
 
     private void OpenMainForm(User user)

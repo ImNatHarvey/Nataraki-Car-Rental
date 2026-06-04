@@ -102,6 +102,52 @@ public static class ControlFactory
         return textBox;
     }
 
+    public static BorderedPanel CreatePasswordFieldPanel(TextBox input, int width)
+    {
+        IconButton previewButton = new();
+        BorderedPanel panel = new()
+        {
+            Size = new Size(width, 30),
+            BackColor = ThemeHelper.Surface,
+            BorderColor = ThemeHelper.Border,
+            Cursor = Cursors.IBeam
+        };
+        panel.Click += (_, _) => input.Focus();
+
+        input.BorderStyle = BorderStyle.None;
+        input.BackColor = ThemeHelper.Surface;
+        input.Location = new Point(8, 6);
+        input.Size = new Size(width - 48, 26);
+        input.Cursor = Cursors.IBeam;
+
+        previewButton.Size = new Size(34, 28);
+        previewButton.Location = new Point(width - 35, 1);
+        previewButton.IconChar = IconChar.Eye;
+        previewButton.IconColor = ThemeHelper.TextSecondary;
+        previewButton.IconSize = 16;
+        previewButton.BackColor = ThemeHelper.Surface;
+        previewButton.FlatStyle = FlatStyle.Flat;
+        previewButton.Cursor = Cursors.Hand;
+        previewButton.TabStop = false;
+        previewButton.Text = string.Empty;
+        previewButton.FlatAppearance.BorderSize = 0;
+        previewButton.FlatAppearance.MouseOverBackColor = ThemeHelper.ContentBackground;
+        previewButton.FlatAppearance.MouseDownBackColor = ThemeHelper.Secondary;
+        previewButton.Click += (_, _) => TogglePasswordPreview(input, previewButton);
+
+        panel.Controls.Add(input);
+        panel.Controls.Add(previewButton);
+        return panel;
+    }
+
+    public static void TogglePasswordPreview(TextBox input, IconButton previewButton)
+    {
+        bool showPassword = input.UseSystemPasswordChar;
+        input.UseSystemPasswordChar = !showPassword;
+        previewButton.IconChar = showPassword ? IconChar.EyeSlash : IconChar.Eye;
+        input.Focus();
+    }
+
     public static BorderedPanel CreateCardPanel(Size size)
     {
         BorderedPanel panel = new()
