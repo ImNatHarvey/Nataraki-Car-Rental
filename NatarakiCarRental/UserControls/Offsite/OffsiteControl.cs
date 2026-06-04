@@ -1117,12 +1117,12 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
-        if (!MessageBoxHelper.Confirm("Are you sure you want to archive this offsite record?", "Archive Offsite"))
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Archive offsite record"))
         {
             return;
         }
 
-        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Archive offsite record"))
+        if (!MessageBoxHelper.Confirm("Are you sure you want to archive this offsite record?", "Archive Offsite"))
         {
             return;
         }
@@ -1147,12 +1147,12 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
-        if (!MessageBoxHelper.Confirm("Are you sure you want to restore this offsite record?", "Restore Offsite"))
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Restore offsite record"))
         {
             return;
         }
 
-        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Restore offsite record"))
+        if (!MessageBoxHelper.Confirm("Are you sure you want to restore this offsite record?", "Restore Offsite"))
         {
             return;
         }
