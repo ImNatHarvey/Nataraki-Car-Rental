@@ -21,6 +21,7 @@ public sealed class TransactionService
     private readonly CarRepository _carRepository;
     private readonly CustomerRepository _customerRepository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
 
@@ -34,17 +35,11 @@ public sealed class TransactionService
             new TransactionRepository(connectionFactory),
             new TransactionPaymentRepository(connectionFactory),
             new FleetScheduleRepository(connectionFactory),
-            new FleetScheduleService(
-                new FleetScheduleRepository(connectionFactory),
-                new CarRepository(connectionFactory),
-                new CustomerRepository(connectionFactory),
-                new TransactionRepository(connectionFactory),
-                new ActivityLogService(connectionFactory),
-                connectionFactory,
-                currentUserId),
+            new FleetScheduleService(currentUserId),
             new CarRepository(connectionFactory),
             new CustomerRepository(connectionFactory),
             new ActivityLogService(connectionFactory),
+            new NotificationService(),
             connectionFactory,
             currentUserId)
     {
@@ -58,6 +53,7 @@ public sealed class TransactionService
         CarRepository carRepository,
         CustomerRepository customerRepository,
         ActivityLogService activityLogService,
+        NotificationService notificationService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
@@ -68,6 +64,7 @@ public sealed class TransactionService
         _carRepository = carRepository;
         _customerRepository = customerRepository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
     }
@@ -200,6 +197,14 @@ public sealed class TransactionService
                 userId: _currentUserId,
                 entityName: transaction.TransactionCode,
                 transaction: dbTransaction);
+
+            await _notificationService.NotifyAsync(
+                "Transaction Created",
+                $"Transaction {transaction.TransactionCode} has been created from a reservation.",
+                type: "Success",
+                entityId: transactionId,
+                module: "Transaction",
+                transaction: dbTransaction);
             await _activityLogService.LogAsync(
                 action: "Updated",
                 module: "FleetSchedule",
@@ -311,6 +316,14 @@ public sealed class TransactionService
                 description: $"Created walk-in {transactionType.ToLowerInvariant()} transaction {transaction.TransactionCode} with schedule #{scheduleId}.",
                 userId: _currentUserId,
                 entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
+
+            await _notificationService.NotifyAsync(
+                "Walk-In Transaction",
+                $"New walk-in {transactionType.ToLowerInvariant()} {transaction.TransactionCode} created.",
+                type: "Success",
+                entityId: transactionId,
+                module: "Transaction",
                 transaction: dbTransaction);
             dbTransaction.Commit();
             return transactionId;
@@ -436,6 +449,14 @@ public sealed class TransactionService
                 description: description,
                 userId: currentUserId,
                 entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
+
+            await _notificationService.NotifyAsync(
+                "Rental Completed",
+                $"Transaction {transaction.TransactionCode} has been completed successfully.",
+                type: "Success",
+                entityId: request.TransactionId,
+                module: "Transaction",
                 transaction: dbTransaction);
 
             if (request.BlacklistCustomer && !string.IsNullOrWhiteSpace(request.BlacklistReason))
@@ -768,6 +789,14 @@ public sealed class TransactionService
                 description: $"Added payment of ₱{request.Amount:N2} for {transaction.TransactionCode} via {request.ModeOfPayment}.",
                 userId: currentUserId,
                 entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
+
+            await _notificationService.NotifyAsync(
+                "Payment Received",
+                $"Payment of ₱{request.Amount:N2} received for {transaction.TransactionCode}.",
+                type: "Success",
+                entityId: request.TransactionId,
+                module: "Transaction",
                 transaction: dbTransaction);
 
             dbTransaction.Commit();
@@ -1185,6 +1214,33 @@ public sealed class TransactionService
     private static ValidationException Validation(string propertyName, string message)
     {
         return new ValidationException([new ValidationFailure(propertyName, message)]);
+    }
+
+    public async Task CheckForOverdueRentalsAsync()
+    {
+        const string sql = """
+            SELECT t.TransactionId, t.TransactionCode, t.CustomerId, 
+                   (c.FirstName + ' ' + c.LastName) AS CustomerName, 
+                   t.EndDate
+            FROM dbo.Transactions t
+            INNER JOIN dbo.Customers c ON t.CustomerId = c.CustomerId
+            WHERE t.TransactionStatus = 'Active'
+              AND t.EndDate < CONVERT(date, sysdatetime())
+              AND t.IsArchived = 0;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var overdue = await connection.QueryAsync(sql);
+
+        foreach (var item in overdue)
+        {
+            await _notificationService.NotifyAsync(
+                "Rental Overdue",
+                $"Transaction {item.TransactionCode} for {item.CustomerName} is overdue (Due: {item.EndDate:MMM dd}).",
+                type: "Danger",
+                entityId: item.TransactionId,
+                module: "Transaction");
+        }
     }
 
     private static void RollbackQuietly(SqlTransaction transaction)

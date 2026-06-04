@@ -17,6 +17,7 @@ public sealed class FleetScheduleService
     private readonly CustomerRepository _customerRepository;
     private readonly TransactionRepository _transactionRepository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService;
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
 
@@ -32,6 +33,7 @@ public sealed class FleetScheduleService
             new CustomerRepository(connectionFactory),
             new TransactionRepository(connectionFactory),
             new ActivityLogService(connectionFactory),
+            new NotificationService(),
             connectionFactory,
             currentUserId)
     {
@@ -43,6 +45,7 @@ public sealed class FleetScheduleService
         CustomerRepository customerRepository,
         TransactionRepository transactionRepository,
         ActivityLogService activityLogService,
+        NotificationService notificationService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
@@ -51,6 +54,7 @@ public sealed class FleetScheduleService
         _customerRepository = customerRepository;
         _transactionRepository = transactionRepository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
     }

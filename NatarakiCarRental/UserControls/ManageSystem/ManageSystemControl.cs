@@ -164,21 +164,18 @@ public sealed class ManageSystemControl : UserControl
             RowCount = 3,
             BackColor = ThemeHelper.ContentBackground
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-        root.Controls.Add(CreateHeaderPanel(), 0, 0);
 
         _tabPanel.Dock = DockStyle.Fill;
         _tabPanel.FlowDirection = FlowDirection.LeftToRight;
         _tabPanel.WrapContents = false;
         _tabPanel.BackColor = ThemeHelper.ContentBackground;
-        root.Controls.Add(_tabPanel, 0, 1);
+        root.Controls.Add(_tabPanel, 0, 0);
 
         _contentPanel.Dock = DockStyle.Fill;
         _contentPanel.BackColor = ThemeHelper.ContentBackground;
-        root.Controls.Add(_contentPanel, 0, 2);
+        root.Controls.Add(_contentPanel, 0, 1);
 
         Controls.Add(root);
 

@@ -30,6 +30,7 @@ public sealed class OffsiteService
     private readonly CarRepository _carRepository;
     private readonly FleetScheduleService _fleetScheduleService;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
 
@@ -44,6 +45,7 @@ public sealed class OffsiteService
             new CarRepository(connectionFactory),
             new FleetScheduleService(currentUserId),
             new ActivityLogService(connectionFactory),
+            new NotificationService(),
             connectionFactory,
             currentUserId)
     {
@@ -54,6 +56,7 @@ public sealed class OffsiteService
         CarRepository carRepository,
         FleetScheduleService fleetScheduleService,
         ActivityLogService activityLogService,
+        NotificationService notificationService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
@@ -61,6 +64,7 @@ public sealed class OffsiteService
         _carRepository = carRepository;
         _fleetScheduleService = fleetScheduleService;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
     }
@@ -167,6 +171,14 @@ public sealed class OffsiteService
                 $"Created {record.OffsiteType} offsite record for car #{record.CarId}.",
                 userId: _currentUserId,
                 entityName: $"OFF-{recordId:D4}",
+                transaction: transaction);
+
+            await _notificationService.NotifyAsync(
+                "Maintenance Started",
+                $"Maintenance ({record.OffsiteType}) started for car #{record.CarId}.",
+                type: "Info",
+                entityId: recordId,
+                module: "OffsiteRecord",
                 transaction: transaction);
 
             transaction.Commit();
@@ -369,6 +381,14 @@ public sealed class OffsiteService
                 BuildCompletionLogMessage(existing, completion),
                 userId: _currentUserId,
                 entityName: $"OFF-{completion.OffsiteRecordId:D4}",
+                transaction: transaction);
+
+            await _notificationService.NotifyAsync(
+                "Maintenance Completed",
+                $"Maintenance ({existing.OffsiteType}) completed for car #{existing.CarId}.",
+                type: "Success",
+                entityId: completion.OffsiteRecordId,
+                module: "OffsiteRecord",
                 transaction: transaction);
 
             transaction.Commit();

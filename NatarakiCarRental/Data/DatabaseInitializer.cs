@@ -1470,6 +1470,27 @@ public static class DatabaseInitializer
                 (N'ReportHeaderName', N'Nataraki Car Rental');
             END;
             """, connection, transaction);
+
+        // 11. Notifications Table
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Notifications', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.Notifications
+                (
+                    NotificationId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    Title nvarchar(200) NOT NULL,
+                    Message nvarchar(1000) NOT NULL,
+                    Type nvarchar(50) NOT NULL DEFAULT 'Info',
+                    IsRead bit NOT NULL DEFAULT 0,
+                    RelatedEntityId int NULL,
+                    RelatedModule nvarchar(100) NULL,
+                    CreatedAt datetime2 NOT NULL DEFAULT sysdatetime()
+                );
+
+                CREATE NONCLUSTERED INDEX IX_Notifications_IsRead
+                ON dbo.Notifications (IsRead, CreatedAt DESC);
+            END;
+            """, connection, transaction);
     }
 
     private static void SeedRoles(SqlConnection connection, SqlTransaction transaction)

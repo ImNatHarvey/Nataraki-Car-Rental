@@ -40,57 +40,22 @@ public sealed class OverviewControl : UserControl
         BackColor = ThemeHelper.ContentBackground;
         Dock = DockStyle.Fill;
         AutoScroll = true;
-        Padding = new Padding(32);
+        Padding = new Padding(32, 8, 32, 32);
 
         TableLayoutPanel mainLayout = new()
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 4
         };
 
-        mainLayout.Controls.Add(CreateHeaderPanel());
         mainLayout.Controls.Add(CreateMetricGrid());
         mainLayout.Controls.Add(CreateRecentGrid());
         mainLayout.Controls.Add(CreateTransactionSummaryPanel());
 
         Controls.Add(mainLayout);
         mainLayout.Margin = new Padding(0, 0, 0, 28);
-    }
-
-    private static Panel CreateHeaderPanel()
-    {
-        Panel panel = new()
-        {
-            Dock = DockStyle.Top,
-            Height = 72,
-            BackColor = ThemeHelper.ContentBackground
-        };
-
-        Label titleLabel = new()
-        {
-            Text = "Overview",
-            AutoSize = false,
-            Location = new Point(0, 0),
-            Size = new Size(260, 34),
-            Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
-        };
-
-        Label subtitleLabel = new()
-        {
-            Text = "Current fleet, customer, and schedule activity.",
-            AutoSize = false,
-            Location = new Point(2, 42),
-            Size = new Size(520, 24),
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        };
-
-        panel.Controls.Add(titleLabel);
-        panel.Controls.Add(subtitleLabel);
-        return panel;
     }
 
     private TableLayoutPanel CreateMetricGrid()

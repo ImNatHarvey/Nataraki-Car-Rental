@@ -8,15 +8,17 @@ public sealed class SystemSettingsService
 {
     private readonly SystemSettingsRepository _repository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
 
-    public SystemSettingsService() : this(new SystemSettingsRepository(), new ActivityLogService())
+    public SystemSettingsService() : this(new SystemSettingsRepository(), new ActivityLogService(), new NotificationService())
     {
     }
 
-    public SystemSettingsService(SystemSettingsRepository repository, ActivityLogService activityLogService)
+    public SystemSettingsService(SystemSettingsRepository repository, ActivityLogService activityLogService, NotificationService notificationService)
     {
         _repository = repository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
     }
 
     public async Task<SystemSettingsModel> GetSettingsAsync()
@@ -94,6 +96,12 @@ public sealed class SystemSettingsService
             entityName: "System Settings",
             oldValue: oldValue,
             newValue: newValue);
+
+        await _notificationService.NotifyAsync(
+            "Settings Updated",
+            "System configuration settings have been updated.",
+            type: "Info",
+            module: "SystemSettings");
     }
 
     public async Task SaveBrandingSettingsAsync(SystemSettingsModel model, int currentUserId)
@@ -127,6 +135,12 @@ public sealed class SystemSettingsService
             entityName: "Branding Settings",
             oldValue: oldValue,
             newValue: newValue);
+
+        await _notificationService.NotifyAsync(
+            "Branding Updated",
+            "System branding and theme settings have been updated.",
+            type: "Info",
+            module: "SystemSettings");
     }
 
     public async Task ResetDefaultsAsync(int currentUserId)
@@ -173,5 +187,11 @@ public sealed class SystemSettingsService
             entityName: "System Settings",
             oldValue: oldValue,
             newValue: newValue);
+
+        await _notificationService.NotifyAsync(
+            "Settings Reset",
+            "System settings have been reset to their default values.",
+            type: "Warning",
+            module: "SystemSettings");
     }
 }

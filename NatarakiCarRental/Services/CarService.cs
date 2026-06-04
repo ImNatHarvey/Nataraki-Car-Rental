@@ -15,6 +15,7 @@ public sealed class CarService
     private readonly CarRepository _carRepository;
     private readonly FleetScheduleRepository _fleetScheduleRepository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
 
@@ -33,13 +34,14 @@ public sealed class CarService
             new CarRepository(connectionFactory),
             new FleetScheduleRepository(connectionFactory),
             new ActivityLogService(connectionFactory),
+            new NotificationService(),
             connectionFactory,
             currentUserId)
     {
     }
 
     public CarService(CarRepository carRepository, ActivityLogService activityLogService)
-        : this(carRepository, new FleetScheduleRepository(), activityLogService, new DbConnectionFactory(), currentUserId: null)
+        : this(carRepository, new FleetScheduleRepository(), activityLogService, new NotificationService(), new DbConnectionFactory(), currentUserId: null)
     {
     }
 
@@ -47,12 +49,14 @@ public sealed class CarService
         CarRepository carRepository,
         FleetScheduleRepository fleetScheduleRepository,
         ActivityLogService activityLogService,
+        NotificationService notificationService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
         _carRepository = carRepository;
         _fleetScheduleRepository = fleetScheduleRepository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
     }
@@ -224,6 +228,14 @@ public sealed class CarService
                 entityName: car != null ? $"{car.Brand} {car.Model} ({car.PlateNumber})" : $"#{carId}",
                 transaction: transaction);
 
+            await _notificationService.NotifyAsync(
+                "Car Archived",
+                $"Car {DescribeCar(car, carId)} has been archived.",
+                type: "Danger",
+                entityId: carId,
+                module: "Car",
+                transaction: transaction);
+
             transaction.Commit();
         }
         catch
@@ -256,6 +268,14 @@ public sealed class CarService
                 $"Restored car {DescribeCar(car, carId)}.",
                 userId: _currentUserId,
                 entityName: car != null ? $"{car.Brand} {car.Model} ({car.PlateNumber})" : $"#{carId}",
+                transaction: transaction);
+
+            await _notificationService.NotifyAsync(
+                "Car Restored",
+                $"Car {DescribeCar(car, carId)} has been restored.",
+                type: "Success",
+                entityId: carId,
+                module: "Car",
                 transaction: transaction);
 
             transaction.Commit();

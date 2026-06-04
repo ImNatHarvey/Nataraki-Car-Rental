@@ -15,6 +15,7 @@ public sealed class CustomerService
     private readonly CustomerRepository _customerRepository;
     private readonly FleetScheduleRepository _fleetScheduleRepository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
     private readonly DbConnectionFactory _connectionFactory;
     private readonly int? _currentUserId;
 
@@ -33,13 +34,14 @@ public sealed class CustomerService
             new CustomerRepository(connectionFactory),
             new FleetScheduleRepository(connectionFactory),
             new ActivityLogService(connectionFactory),
+            new NotificationService(),
             connectionFactory,
             currentUserId)
     {
     }
 
     public CustomerService(CustomerRepository customerRepository, ActivityLogService activityLogService)
-        : this(customerRepository, new FleetScheduleRepository(), activityLogService, new DbConnectionFactory(), currentUserId: null)
+        : this(customerRepository, new FleetScheduleRepository(), activityLogService, new NotificationService(), new DbConnectionFactory(), currentUserId: null)
     {
     }
 
@@ -47,12 +49,14 @@ public sealed class CustomerService
         CustomerRepository customerRepository,
         FleetScheduleRepository fleetScheduleRepository,
         ActivityLogService activityLogService,
+        NotificationService notificationService,
         DbConnectionFactory connectionFactory,
         int? currentUserId = null)
     {
         _customerRepository = customerRepository;
         _fleetScheduleRepository = fleetScheduleRepository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
         _connectionFactory = connectionFactory;
         _currentUserId = currentUserId;
     }
@@ -276,6 +280,14 @@ public sealed class CustomerService
                 entityName: customer != null ? $"{customer.FirstName} {customer.LastName}" : $"#{customerId}",
                 transaction: transaction);
 
+            await _notificationService.NotifyAsync(
+                "Customer Restored",
+                $"Customer {DescribeCustomer(customer, customerId)} has been restored.",
+                type: "Success",
+                entityId: customerId,
+                module: "Customer",
+                transaction: transaction);
+
             transaction.Commit();
         }
         catch
@@ -326,6 +338,16 @@ public sealed class CustomerService
                 description,
                 userId: _currentUserId,
                 entityName: customer != null ? $"{customer.FirstName} {customer.LastName}" : $"#{customerId}",
+                transaction: transaction);
+
+            await _notificationService.NotifyAsync(
+                isBlacklisted ? "Customer Blacklisted" : "Blacklist Removed",
+                isBlacklisted 
+                    ? $"Customer {DescribeCustomer(customer, customerId)} has been blacklisted." 
+                    : $"Blacklist status removed from {DescribeCustomer(customer, customerId)}.",
+                type: isBlacklisted ? "Danger" : "Success",
+                entityId: customerId,
+                module: "Customer",
                 transaction: transaction);
 
             transaction.Commit();

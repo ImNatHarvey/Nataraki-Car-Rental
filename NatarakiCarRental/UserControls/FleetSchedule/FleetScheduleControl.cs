@@ -39,46 +39,20 @@ public sealed class FleetScheduleControl : UserControl
     {
         BackColor = ThemeHelper.ContentBackground;
         Dock = DockStyle.Fill;
-        Padding = new Padding(32);
+        Padding = new Padding(32, 8, 32, 32);
 
         TableLayoutPanel mainLayout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3
+            RowCount = 2
         };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 94F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-        mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
-        mainLayout.Controls.Add(CreateToolbarPanel(), 0, 1);
-        mainLayout.Controls.Add(CreateTimelineHost(), 0, 2);
+        mainLayout.Controls.Add(CreateToolbarPanel(), 0, 0);
+        mainLayout.Controls.Add(CreateTimelineHost(), 0, 1);
         Controls.Add(mainLayout);
-    }
-
-    private static Panel CreateHeaderPanel()
-    {
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        panel.Controls.Add(new Label
-        {
-            Text = "Fleet Schedule",
-            AutoSize = false,
-            Location = new Point(0, 0),
-            Size = new Size(280, 34),
-            Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
-        });
-        panel.Controls.Add(new Label
-        {
-            Text = "Visual monthly planning board for reservations, rentals, and maintenance.",
-            AutoSize = false,
-            Location = new Point(2, 42),
-            Size = new Size(680, 24),
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        });
-        return panel;
     }
 
     private Panel CreateToolbarPanel()

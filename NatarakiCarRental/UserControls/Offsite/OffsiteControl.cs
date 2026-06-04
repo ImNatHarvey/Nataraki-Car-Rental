@@ -145,24 +145,22 @@ public sealed class OffsiteControl : UserControl
     {
         BackColor = ThemeHelper.ContentBackground;
         Dock = DockStyle.Fill;
-        Padding = new Padding(32);
+        Padding = new Padding(32, 8, 32, 32);
 
         TableLayoutPanel mainLayout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3
+            RowCount = 2
         };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         
-        mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
-        mainLayout.Controls.Add(CreateMainTabSwitcher(), 0, 1);
+        mainLayout.Controls.Add(CreateMainTabSwitcher(), 0, 0);
         
         _mainContentPanel.Dock = DockStyle.Fill;
         _mainContentPanel.BackColor = ThemeHelper.ContentBackground;
-        mainLayout.Controls.Add(_mainContentPanel, 0, 2);
+        mainLayout.Controls.Add(_mainContentPanel, 0, 1);
         
         Controls.Add(mainLayout);
         Resize += OffsiteControl_Resize;
@@ -174,30 +172,6 @@ public sealed class OffsiteControl : UserControl
         _demoTimer.Tick += async (_, _) => await InsertDemoLocationAsync();
 
         _recordsSearchTimer.Tick += RecordsSearchTimer_Tick;
-    }
-
-    private Panel CreateHeaderPanel()
-    {
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        panel.Controls.Add(new Label
-        {
-            Text = "Offsite & Tracking",
-            AutoSize = false,
-            Location = new Point(0, 0),
-            Size = new Size(360, 34),
-            Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
-        });
-        panel.Controls.Add(new Label
-        {
-            Text = "Monitor vehicle location and manage off-operational records.",
-            AutoSize = false,
-            Location = new Point(2, 42),
-            Size = new Size(620, 24),
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        });
-        return panel;
     }
 
     private Panel CreateMainTabSwitcher()

@@ -11,16 +11,18 @@ public sealed class RoleService
     private readonly RoleRepository _roleRepository;
     private readonly PermissionRepository _permissionRepository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
 
-    public RoleService() : this(new RoleRepository(), new PermissionRepository(), new ActivityLogService())
+    public RoleService() : this(new RoleRepository(), new PermissionRepository(), new ActivityLogService(), new NotificationService())
     {
     }
 
-    public RoleService(RoleRepository roleRepository, PermissionRepository permissionRepository, ActivityLogService activityLogService)
+    public RoleService(RoleRepository roleRepository, PermissionRepository permissionRepository, ActivityLogService activityLogService, NotificationService notificationService)
     {
         _roleRepository = roleRepository;
         _permissionRepository = permissionRepository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
     }
 
     public Task<IReadOnlyList<RoleListItem>> GetRoleListItemsAsync(bool includeArchived = false)
@@ -136,6 +138,13 @@ public sealed class RoleService
             entityName: existing.RoleName,
             oldValue: oldValue,
             newValue: newValue);
+
+        await _notificationService.NotifyAsync(
+            "Role Updated",
+            $"The permissions for role '{existing.RoleName}' have been updated.",
+            type: "Info",
+            entityId: existing.RoleId,
+            module: "Role");
     }
 
     public async Task ArchiveRoleAsync(int roleId, int currentUserId)

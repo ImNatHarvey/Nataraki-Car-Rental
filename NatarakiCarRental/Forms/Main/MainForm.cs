@@ -10,6 +10,7 @@ using NatarakiCarRental.UserControls.FleetSchedule;
 using NatarakiCarRental.UserControls.ManageSystem;
 using NatarakiCarRental.UserControls.Offsite;
 using NatarakiCarRental.UserControls.Reports;
+using NatarakiCarRental.UserControls.Notifications;
 using NatarakiCarRental.UserControls.Transactions;
 
 namespace NatarakiCarRental.Forms.Main;
@@ -17,6 +18,9 @@ namespace NatarakiCarRental.Forms.Main;
 public sealed class MainForm : Form
 {
     private readonly Panel _contentPanel = new();
+    private readonly Panel _headerPanel = new();
+    private readonly Label _moduleTitleLabel = new();
+    private readonly NotificationBell _notificationBell = new();
     private readonly List<IconButton> _navigationButtons = [];
     private readonly Label _brandLabel = new();
     private readonly Panel _brandIconHost = new();
@@ -24,6 +28,7 @@ public sealed class MainForm : Form
     private readonly Panel _identityPanel = new();
     private readonly PictureBox _identityAvatar = new();
     private readonly Label _identityNameLabel = new();
+    private NotificationPanelControl? _activeNotificationPanel;
 
     public event EventHandler? LoggedOut;
 
@@ -81,7 +86,11 @@ public sealed class MainForm : Form
         _brandLabel.ForeColor = ThemeHelper.TextPrimary;
         _brandLabel.TextAlign = ContentAlignment.MiddleLeft;
 
+        brandPanel.Controls.Add(_brandIconHost);
+        brandPanel.Controls.Add(_brandLabel);
+
         ConfigureIdentityPanel();
+        ConfigureHeaderPanel();
 
         FlowLayoutPanel menuPanel = new()
         {
@@ -119,15 +128,6 @@ public sealed class MainForm : Form
             menuPanel.Controls.Add(button);
         }
 
-        if (firstAvailablePage != null)
-        {
-            Navigate(firstAvailablePage);
-        }
-        else
-        {
-            ShowPlaceholder("No Access");
-        }
-
         Panel logoutHost = new()
         {
             Dock = DockStyle.Bottom,
@@ -140,19 +140,114 @@ public sealed class MainForm : Form
         logoutButton.Click += LogoutButton_Click;
         logoutHost.Controls.Add(logoutButton);
 
-        brandPanel.Controls.Add(_brandIconHost);
-        brandPanel.Controls.Add(_brandLabel);
-
         sidebarPanel.Controls.Add(menuPanel);
-        sidebarPanel.Controls.Add(_identityHost);
         sidebarPanel.Controls.Add(brandPanel);
         sidebarPanel.Controls.Add(logoutHost);
+
+        Panel rightContainer = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemeHelper.ContentBackground
+        };
 
         _contentPanel.Dock = DockStyle.Fill;
         _contentPanel.BackColor = ThemeHelper.ContentBackground;
 
-        Controls.Add(_contentPanel);
+        rightContainer.Controls.Add(_contentPanel);
+        rightContainer.Controls.Add(_headerPanel);
+
+        Controls.Add(rightContainer);
         Controls.Add(sidebarPanel);
+
+        if (firstAvailablePage != null)
+        {
+            Navigate(firstAvailablePage);
+        }
+        else
+        {
+            ShowPlaceholder("No Access");
+        }
+    }
+
+    private void ConfigureHeaderPanel()
+    {
+        _headerPanel.Dock = DockStyle.Top;
+        _headerPanel.Height = 72;
+        _headerPanel.BackColor = ThemeHelper.ContentBackground;
+        _headerPanel.Padding = new Padding(32, 22, 32, 0);
+
+        _moduleTitleLabel.Dock = DockStyle.Left;
+        _moduleTitleLabel.AutoSize = true;
+        _moduleTitleLabel.Font = FontHelper.Title(22F);
+        _moduleTitleLabel.ForeColor = ThemeHelper.TextPrimary;
+        _moduleTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        Panel rightActions = new()
+        {
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        _identityPanel.Location = new Point(0, 0);
+        _identityPanel.Width = 200; // Adjust for header
+        _identityNameLabel.Width = 130;
+
+        _notificationBell.Location = new Point(204, 4);
+        _notificationBell.Click += NotificationBell_Click;
+
+        rightActions.Controls.Add(_notificationBell);
+        rightActions.Controls.Add(_identityPanel);
+
+        _headerPanel.Controls.Add(_moduleTitleLabel);
+        _headerPanel.Controls.Add(rightActions);
+    }
+
+    private async void NotificationBell_Click(object? sender, EventArgs e)
+    {
+        if (_activeNotificationPanel != null)
+        {
+            _activeNotificationPanel.Dispose();
+            _activeNotificationPanel = null;
+            return;
+        }
+
+        _activeNotificationPanel = new NotificationPanelControl();
+        
+        // Position below bell - Use fixed width 340 for reliable positioning
+        const int panelWidth = 340;
+        Point bellPos = _notificationBell.PointToScreen(Point.Empty);
+        Point formPos = PointToScreen(Point.Empty);
+        
+        int x = bellPos.X - formPos.X - panelWidth + _notificationBell.Width + 10;
+        int y = bellPos.Y - formPos.Y + _notificationBell.Height + 5;
+
+        _activeNotificationPanel.Location = new Point(x, y);
+        _activeNotificationPanel.OnViewAllClicked += (s, ev) =>
+        {
+            Navigate("Activity Log");
+            _activeNotificationPanel?.Dispose();
+            _activeNotificationPanel = null;
+        };
+
+        Controls.Add(_activeNotificationPanel);
+        _activeNotificationPanel.BringToFront();
+        
+        // Load data AFTER showing to ensure layout is ready
+        await _activeNotificationPanel.RefreshAsync();
+        
+        _activeNotificationPanel.Focus();
+        _activeNotificationPanel.Leave += (s, ev) =>
+        {
+            _activeNotificationPanel?.Dispose();
+            _activeNotificationPanel = null;
+        };
+    }
+
+    protected override async void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        await new TransactionService().CheckForOverdueRentalsAsync();
     }
 
     private void RenderBrandIcon()
@@ -415,40 +510,30 @@ public sealed class MainForm : Form
         UserControl control = new()
         {
             BackColor = ThemeHelper.ContentBackground,
-            Padding = new Padding(32)
+            Padding = new Padding(32, 8, 32, 32)
         };
 
-        Label titleLabel = new()
-        {
-            Text = pageName,
-            Dock = DockStyle.Top,
-            Height = 48,
-            Font = FontHelper.Title(20F),
-            ForeColor = ThemeHelper.TextPrimary
-        };
-
-        Panel placeholderCard = ControlFactory.CreateCardPanel(new Size(0, 160));
+        Panel placeholderCard = ControlFactory.CreateCardPanel(new Size(0, 120));
         placeholderCard.Dock = DockStyle.Top;
         placeholderCard.Padding = new Padding(28);
 
-        Label placeholderLabel = new()
+        Label messageLabel = new()
         {
-            Text = $"{pageName} module placeholder. This section will be built in a later step.",
+            Text = $"The {pageName} module is currently under development.",
             Dock = DockStyle.Fill,
-            Font = FontHelper.Regular(12F),
+            Font = FontHelper.Regular(10.5F),
             ForeColor = ThemeHelper.TextSecondary,
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        placeholderCard.Controls.Add(placeholderLabel);
+        placeholderCard.Controls.Add(messageLabel);
         control.Controls.Add(placeholderCard);
-        control.Controls.Add(titleLabel);
-
         return control;
     }
 
     private void SetActiveNavigation(string pageName)
     {
+        _moduleTitleLabel.Text = pageName;
         foreach (IconButton button in _navigationButtons)
         {
             bool isActive = button.Text == pageName;

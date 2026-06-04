@@ -68,26 +68,24 @@ public sealed class TransactionControl : UserControl
     {
         BackColor = ThemeHelper.ContentBackground;
         Dock = DockStyle.Fill;
-        Padding = new Padding(32);
+        Padding = new Padding(32, 8, 32, 32);
 
         TableLayoutPanel mainLayout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 5
         };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
-        mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
-        mainLayout.Controls.Add(CreateMetricGrid(), 0, 1);
-        mainLayout.Controls.Add(CreateActionBarPanel(), 0, 2);
-        mainLayout.Controls.Add(CreateSearchPanel(), 0, 3);
-        mainLayout.Controls.Add(CreateTablePanel(), 0, 4);
-        mainLayout.Controls.Add(CreatePaginationPanel(), 0, 5);
+        mainLayout.Controls.Add(CreateMetricGrid(), 0, 0);
+        mainLayout.Controls.Add(CreateActionBarPanel(), 0, 1);
+        mainLayout.Controls.Add(CreateSearchPanel(), 0, 2);
+        mainLayout.Controls.Add(CreateTablePanel(), 0, 3);
+        mainLayout.Controls.Add(CreatePaginationPanel(), 0, 4);
         Controls.Add(mainLayout);
     }
 
@@ -112,7 +110,7 @@ public sealed class TransactionControl : UserControl
 
         _paginationLabel.AutoSize = false;
         _paginationLabel.Location = new Point(180, 8);
-        _paginationLabel.Size = new Size(200, 32);
+        _paginationLabel.Size = new Size(300, 32);
         _paginationLabel.TextAlign = ContentAlignment.MiddleLeft;
         _paginationLabel.Font = FontHelper.Regular(9.5F);
         _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
@@ -120,30 +118,6 @@ public sealed class TransactionControl : UserControl
         panel.Controls.Add(_prevPageButton);
         panel.Controls.Add(_nextPageButton);
         panel.Controls.Add(_paginationLabel);
-        return panel;
-    }
-
-    private static Panel CreateHeaderPanel()
-    {
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        panel.Controls.Add(new Label
-        {
-            Text = "Transactions",
-            AutoSize = false,
-            Location = new Point(0, 0),
-            Size = new Size(260, 34),
-            Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
-        });
-        panel.Controls.Add(new Label
-        {
-            Text = "Manage rental transaction records and operational completion.",
-            AutoSize = false,
-            Location = new Point(2, 42),
-            Size = new Size(620, 24),
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        });
         return panel;
     }
 

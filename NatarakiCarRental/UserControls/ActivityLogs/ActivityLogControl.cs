@@ -128,28 +128,26 @@ public sealed class ActivityLogControl : UserControl
     {
         BackColor = ThemeHelper.ContentBackground;
         Dock = DockStyle.Fill;
-        Padding = new Padding(32);
+        Padding = new Padding(32, 8, 32, 32);
 
         TableLayoutPanel mainLayout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 5
         };
 
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 18F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
 
-        mainLayout.Controls.Add(CreateHeaderPanel(), 0, 0);
-        mainLayout.Controls.Add(CreateMetricGrid(), 0, 1);
-        mainLayout.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground }, 0, 2);
-        mainLayout.Controls.Add(CreateSearchPanel(), 0, 3);
-        mainLayout.Controls.Add(CreateTablePanel(), 0, 4);
-        mainLayout.Controls.Add(CreatePaginationPanel(), 0, 5);
+        mainLayout.Controls.Add(CreateMetricGrid(), 0, 0);
+        mainLayout.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground }, 0, 1);
+        mainLayout.Controls.Add(CreateSearchPanel(), 0, 2);
+        mainLayout.Controls.Add(CreateTablePanel(), 0, 3);
+        mainLayout.Controls.Add(CreatePaginationPanel(), 0, 4);
 
         Controls.Add(mainLayout);
     }

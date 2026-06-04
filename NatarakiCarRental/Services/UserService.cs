@@ -10,15 +10,17 @@ public sealed class UserService
 {
     private readonly UserRepository _userRepository;
     private readonly ActivityLogService _activityLogService;
+    private readonly NotificationService _notificationService = new();
 
-    public UserService() : this(new UserRepository(), new ActivityLogService())
+    public UserService() : this(new UserRepository(), new ActivityLogService(), new NotificationService())
     {
     }
 
-    public UserService(UserRepository userRepository, ActivityLogService activityLogService)
+    public UserService(UserRepository userRepository, ActivityLogService activityLogService, NotificationService notificationService)
     {
         _userRepository = userRepository;
         _activityLogService = activityLogService;
+        _notificationService = notificationService;
     }
 
     public Task<IReadOnlyList<UserListItem>> SearchUsersAsync(string? searchTerm = null, int? roleId = null, bool? isActive = null, bool includeArchived = false)
@@ -106,6 +108,13 @@ public sealed class UserService
             description: $"Created user {user.Username} ({user.FullName}).",
             userId: currentUserId,
             entityName: user.FullName);
+
+        await _notificationService.NotifyAsync(
+            "User Added",
+            $"New user account created: {user.Username} ({user.FullName})",
+            type: "Success",
+            entityId: user.UserId,
+            module: "User");
     }
 
     public async Task UpdateUserAsync(UpdateUserRequest request, int currentUserId)
