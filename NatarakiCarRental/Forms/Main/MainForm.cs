@@ -465,6 +465,14 @@ public sealed class MainForm : Form
             return;
         }
 
+        await new ActivityLogService().LogAsync(
+            action: "Logged Out",
+            module: "Authentication",
+            entityId: CurrentUser.UserId,
+            description: $"User {CurrentUser.Username} ({CurrentUser.FullName}) logged out of the system.",
+            userId: CurrentUser.UserId,
+            entityName: CurrentUser.FullName);
+
         AccessControlService.Logout();
         await AppBrandingManager.LoadSettingsAsync();
         LoggedOut?.Invoke(this, EventArgs.Empty);

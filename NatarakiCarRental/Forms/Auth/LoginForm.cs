@@ -470,7 +470,16 @@ public sealed class LoginForm : Form
     {
         try
         {
-            User? user = await _authService.LoginAsync(_usernameTextBox.Text, _passwordTextBox.Text);
+            string username = _usernameTextBox.Text.Trim();
+            string password = _passwordTextBox.Text;
+
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                MessageBoxHelper.ShowWarning("Please enter both username and password.");
+                return;
+            }
+
+            User? user = await _authService.LoginAsync(username, password);
 
             if (user is null)
             {
@@ -479,6 +488,14 @@ public sealed class LoginForm : Form
                 _passwordTextBox.Focus();
                 return;
             }
+
+            await new ActivityLogService().LogAsync(
+                action: "Logged In",
+                module: "Authentication",
+                entityId: user.UserId,
+                description: $"User {user.Username} ({user.FullName}) logged into the system.",
+                userId: user.UserId,
+                entityName: user.FullName);
 
             OpenMainForm(user);
         }

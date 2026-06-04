@@ -379,6 +379,7 @@ public static class DatabaseInitializer
                     UserFullName nvarchar(255) NULL,
                     Module nvarchar(100) NULL,
                     Action nvarchar(50) NOT NULL,
+                    ActionType nvarchar(50) NOT NULL,
                     EntityName nvarchar(100) NULL,
                     EntityId int NULL,
                     Description nvarchar(500) NOT NULL,
@@ -404,6 +405,14 @@ public static class DatabaseInitializer
                         UserFullName = (SELECT TOP 1 LTRIM(RTRIM(CONCAT(FirstName, '' '', LastName))) FROM dbo.Users WHERE UserId = dbo.ActivityLogs.UserId)');
                     
                     ALTER TABLE dbo.ActivityLogs ALTER COLUMN Action nvarchar(50) NOT NULL;
+                END;
+                
+                -- Ensure ActionType is present (it might have been deleted or missing in some states)
+                IF COL_LENGTH(N'dbo.ActivityLogs', N'ActionType') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.ActivityLogs ADD ActionType nvarchar(50) NULL;
+                    EXEC('UPDATE dbo.ActivityLogs SET ActionType = Action');
+                    ALTER TABLE dbo.ActivityLogs ALTER COLUMN ActionType nvarchar(50) NOT NULL;
                 END;
             END;
             """, connection, transaction);
