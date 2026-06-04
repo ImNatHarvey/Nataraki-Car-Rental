@@ -12,6 +12,7 @@ public static class AppConstants
     public const string CustomersUploadFolder = "Uploads\\Customers";
     public const string PaymentsUploadFolder = "Uploads\\Payments";
     public const string OffsiteUploadFolder = "Uploads\\Offsite";
+    public const string ProfileImagesUploadFolder = "Uploads\\Profiles";
 
     public static string MasterConnectionString => BuildConnectionString(includeDatabase: false);
     public static string DefaultConnectionString => BuildConnectionString(includeDatabase: true);

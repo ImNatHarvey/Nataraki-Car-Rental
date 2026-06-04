@@ -10,6 +10,13 @@ public static class UploadPathHelper
         ".webp"
     };
 
+    private static readonly HashSet<string> ProfileImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".png"
+    };
+
     private static readonly HashSet<string> DocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg",
@@ -44,6 +51,15 @@ public static class UploadPathHelper
             existingPath,
             AppConstants.PaymentsUploadFolder,
             DocumentExtensions);
+    }
+
+    public static string? SaveProfileImageIfSelected(string? sourcePath, string? existingPath)
+    {
+        return SaveUploadedFileIfSelected(
+            sourcePath,
+            existingPath,
+            AppConstants.ProfileImagesUploadFolder,
+            ProfileImageExtensions);
     }
 
     public static async Task<string?> SaveOffsiteProofAsync(string? sourcePath)
@@ -97,6 +113,11 @@ public static class UploadPathHelper
         return ResolveExistingFilePath(storedPath, AppConstants.OffsiteUploadFolder);
     }
 
+    public static string? ResolveProfileImagePath(string? storedPath)
+    {
+        return ResolveExistingFilePath(storedPath, AppConstants.ProfileImagesUploadFolder);
+    }
+
     public static void DeleteNewCarUploadIfSaveFailed(string? storedPath, string? previousPath)
     {
         DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.CarsUploadFolder);
@@ -115,6 +136,11 @@ public static class UploadPathHelper
     public static void DeleteNewOffsiteProofIfSaveFailed(string? storedPath, string? previousPath)
     {
         DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.OffsiteUploadFolder);
+    }
+
+    public static void DeleteNewProfileImageIfSaveFailed(string? storedPath, string? previousPath)
+    {
+        DeleteNewUploadIfSaveFailed(storedPath, previousPath, AppConstants.ProfileImagesUploadFolder);
     }
 
     private static string? SaveUploadedFileIfSelected(

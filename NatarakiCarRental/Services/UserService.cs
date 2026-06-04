@@ -89,6 +89,7 @@ public sealed class UserService
             LastName = request.LastName.Trim(),
             Email = request.Email?.Trim(),
             PhoneNumber = request.PhoneNumber?.Trim(),
+            ProfileImagePath = request.ProfileImagePath,
             RoleId = request.RoleId,
             IsActive = request.IsActive,
             IsOwner = false // Only system can seed owner
@@ -123,6 +124,7 @@ public sealed class UserService
         existing.Email = request.Email?.Trim();
         existing.PhoneNumber = request.PhoneNumber?.Trim();
         existing.Username = username;
+        existing.ProfileImagePath = request.ProfileImagePath ?? existing.ProfileImagePath;
 
         if (existing.IsOwner)
         {
@@ -144,6 +146,7 @@ public sealed class UserService
             AccessControlService.CurrentUser.LastName = existing.LastName;
             AccessControlService.CurrentUser.Email = existing.Email;
             AccessControlService.CurrentUser.PhoneNumber = existing.PhoneNumber;
+            AccessControlService.CurrentUser.ProfileImagePath = existing.ProfileImagePath;
         }
 
         await _activityLogService.LogAsync(
@@ -152,6 +155,49 @@ public sealed class UserService
             existing.UserId,
             $"Updated user {existing.Username} ({existing.FullName}).",
             currentUserId);
+    }
+
+    public async Task<User> UpdateSelfProfileAsync(UpdateSelfProfileRequest request, int currentUserId)
+    {
+        if (request.UserId != currentUserId)
+        {
+            throw new UnauthorizedAccessException("You can only update your own profile.");
+        }
+
+        ValidateSelfProfileRequest(request);
+
+        User? existing = await _userRepository.GetByIdAsync(request.UserId);
+        if (existing == null) throw new InvalidOperationException("User not found.");
+
+        string username = request.Username.Trim();
+        if (await _userRepository.ExistsByUsernameAsync(username, request.UserId))
+        {
+            throw new ValidationException([new ValidationFailure("Username", "Username is already taken.")]);
+        }
+
+        existing.FirstName = request.FirstName.Trim();
+        existing.LastName = request.LastName.Trim();
+        existing.Username = username;
+        existing.ProfileImagePath = string.IsNullOrWhiteSpace(request.ProfileImagePath) ? null : request.ProfileImagePath;
+
+        await _userRepository.UpdateSelfProfileAsync(existing);
+
+        if (AccessControlService.CurrentUser?.UserId == existing.UserId)
+        {
+            AccessControlService.CurrentUser.Username = existing.Username;
+            AccessControlService.CurrentUser.FirstName = existing.FirstName;
+            AccessControlService.CurrentUser.LastName = existing.LastName;
+            AccessControlService.CurrentUser.ProfileImagePath = existing.ProfileImagePath;
+        }
+
+        await _activityLogService.LogAsync(
+            "Update",
+            "User",
+            existing.UserId,
+            $"Updated own profile for user {existing.Username}.",
+            currentUserId);
+
+        return existing;
     }
 
     public async Task ChangePasswordAsync(ChangePasswordRequest request, int currentUserId)
@@ -171,6 +217,37 @@ public sealed class UserService
             "User",
             request.UserId,
             $"Changed password for user {user?.Username ?? request.UserId.ToString()}.",
+            currentUserId);
+    }
+
+    public async Task ChangeOwnPasswordAsync(ChangeOwnPasswordRequest request, int currentUserId)
+    {
+        if (request.UserId != currentUserId)
+        {
+            throw new UnauthorizedAccessException("You can only change your own password.");
+        }
+
+        List<ValidationFailure> failures = [];
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword)) failures.Add(new("CurrentPassword", "Current password is required."));
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8) failures.Add(new("NewPassword", "New password must be at least 8 characters."));
+        if (!string.Equals(request.NewPassword, request.ConfirmPassword, StringComparison.Ordinal)) failures.Add(new("ConfirmPassword", "New password confirmation must match."));
+        if (failures.Count > 0) throw new ValidationException(failures);
+
+        User? user = await _userRepository.GetByIdAsync(request.UserId);
+        if (user is null) throw new InvalidOperationException("User not found.");
+        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+        {
+            throw new InvalidOperationException("Current password is incorrect.");
+        }
+
+        string hash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        await _userRepository.UpdatePasswordAsync(request.UserId, hash);
+
+        await _activityLogService.LogAsync(
+            "Update",
+            "User",
+            request.UserId,
+            $"Changed own password for user {user.Username}.",
             currentUserId);
     }
 
@@ -223,6 +300,15 @@ public sealed class UserService
         if (string.IsNullOrWhiteSpace(request.FirstName)) failures.Add(new("FirstName", "First Name is required."));
         if (string.IsNullOrWhiteSpace(request.LastName)) failures.Add(new("LastName", "Last Name is required."));
         if (request.RoleId <= 0) failures.Add(new("RoleId", "Role is required."));
+        if (failures.Count > 0) throw new ValidationException(failures);
+    }
+
+    private static void ValidateSelfProfileRequest(UpdateSelfProfileRequest request)
+    {
+        List<ValidationFailure> failures = [];
+        if (string.IsNullOrWhiteSpace(request.Username)) failures.Add(new("Username", "Username is required."));
+        if (string.IsNullOrWhiteSpace(request.FirstName)) failures.Add(new("FirstName", "First Name is required."));
+        if (string.IsNullOrWhiteSpace(request.LastName)) failures.Add(new("LastName", "Last Name is required."));
         if (failures.Count > 0) throw new ValidationException(failures);
     }
 }

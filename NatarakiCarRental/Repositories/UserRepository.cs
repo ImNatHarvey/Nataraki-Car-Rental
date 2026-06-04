@@ -31,6 +31,7 @@ public sealed class UserRepository
                 u.LastName,
                 u.Email,
                 u.PhoneNumber,
+                u.ProfileImagePath,
                 u.IsActive,
                 IsOwner = CAST(CASE WHEN u.IsOwner = 1 OR UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 1 ELSE 0 END AS bit),
                 u.IsArchived,
@@ -58,6 +59,7 @@ public sealed class UserRepository
                 u.LastName,
                 u.Email,
                 u.PhoneNumber,
+                u.ProfileImagePath,
                 u.IsActive,
                 IsOwner = CAST(CASE WHEN u.IsOwner = 1 OR UPPER(LTRIM(RTRIM(r.RoleName))) = N'OWNER' THEN 1 ELSE 0 END AS bit),
                 u.IsArchived,
@@ -114,6 +116,7 @@ public sealed class UserRepository
                 u.LastName,
                 u.Email,
                 u.PhoneNumber,
+                u.ProfileImagePath,
                 u.IsActive,
                 IsOwner = CAST(1 AS bit),
                 u.IsArchived,
@@ -196,8 +199,8 @@ public sealed class UserRepository
     public async Task<int> AddAsync(User user, IDbTransaction? transaction = null)
     {
         const string sql = """
-            INSERT INTO dbo.Users (RoleId, Username, PasswordHash, FirstName, LastName, Email, PhoneNumber, IsActive, IsOwner, IsArchived, CreatedAt)
-            VALUES (@RoleId, @Username, @PasswordHash, @FirstName, @LastName, @Email, @PhoneNumber, @IsActive, @IsOwner, 0, sysdatetime());
+            INSERT INTO dbo.Users (RoleId, Username, PasswordHash, FirstName, LastName, Email, PhoneNumber, ProfileImagePath, IsActive, IsOwner, IsArchived, CreatedAt)
+            VALUES (@RoleId, @Username, @PasswordHash, @FirstName, @LastName, @Email, @PhoneNumber, @ProfileImagePath, @IsActive, @IsOwner, 0, sysdatetime());
             SELECT CAST(SCOPE_IDENTITY() as int);
             """;
         using var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
@@ -214,7 +217,23 @@ public sealed class UserRepository
                 LastName = @LastName,
                 Email = @Email,
                 PhoneNumber = @PhoneNumber,
+                ProfileImagePath = @ProfileImagePath,
                 IsActive = @IsActive,
+                UpdatedAt = sysdatetime()
+            WHERE UserId = @UserId;
+            """;
+        using var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(sql, user, transaction);
+    }
+
+    public async Task<int> UpdateSelfProfileAsync(User user, IDbTransaction? transaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.Users
+            SET Username = @Username,
+                FirstName = @FirstName,
+                LastName = @LastName,
+                ProfileImagePath = @ProfileImagePath,
                 UpdatedAt = sysdatetime()
             WHERE UserId = @UserId;
             """;

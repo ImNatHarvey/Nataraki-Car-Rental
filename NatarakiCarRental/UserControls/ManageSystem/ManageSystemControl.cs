@@ -19,6 +19,7 @@ public sealed class ManageSystemControl : UserControl
     private const string NotApplicableProvinceName = "N/A";
 
     private readonly int _currentUserId;
+    private readonly string? _initialTabKey;
     private readonly SystemSettingsService _service = new();
     private readonly UserService _userService = new();
     private readonly RoleService _roleService = new();
@@ -72,6 +73,24 @@ public sealed class ManageSystemControl : UserControl
     private string _selectedThemeName = "Blue";
     private string _selectedThemeHex = "#2563EB";
 
+    private readonly PictureBox _profileAvatarPreview = new() { SizeMode = PictureBoxSizeMode.Zoom, BackColor = ThemeHelper.Background };
+    private readonly Label _profileHeaderNameLabel = new();
+    private readonly Label _profileHeaderUsernameLabel = new();
+    private readonly Label _profileHeaderRoleLabel = new();
+    private readonly TextBox _profileFirstNameInput = ControlFactory.CreateTextBox(320);
+    private readonly TextBox _profileLastNameInput = ControlFactory.CreateTextBox(320);
+    private readonly TextBox _profileUsernameInput = ControlFactory.CreateTextBox(320);
+    private readonly Label _profileRoleValueLabel = CreateReadOnlyValueLabel();
+    private readonly Label _profileStatusValueLabel = CreateReadOnlyValueLabel();
+    private readonly Label _profileImagePathLabel = CreatePathLabel();
+    private readonly TextBox _currentPasswordInput = ControlFactory.CreatePasswordTextBox(320);
+    private readonly TextBox _newPasswordInput = ControlFactory.CreatePasswordTextBox(320);
+    private readonly TextBox _confirmPasswordInput = ControlFactory.CreatePasswordTextBox(320);
+    private User? _loadedProfileUser;
+    private string? _currentProfileImagePath;
+    private string? _selectedProfileImageSourcePath;
+    private bool _profilePhotoRemoved;
+
     private readonly DataGridView _usersGrid = CreateGrid();
     private readonly IconButton _usersTabButton = CreateSubTabButton("Users", IconChar.Users);
     private readonly IconButton _archivedUsersTabButton = CreateSubTabButton("Archived", IconChar.Archive);
@@ -103,9 +122,12 @@ public sealed class ManageSystemControl : UserControl
     
     private readonly System.Windows.Forms.Timer _resizeTimer = new() { Interval = 300 };
 
-    public ManageSystemControl(int currentUserId)
+    public event EventHandler<User>? ProfileUpdated;
+
+    public ManageSystemControl(int currentUserId, string? initialTabKey = null)
     {
         _currentUserId = currentUserId;
+        _initialTabKey = initialTabKey;
         Dock = DockStyle.Fill;
         BackColor = ThemeHelper.ContentBackground;
         Padding = new Padding(32);
@@ -113,7 +135,11 @@ public sealed class ManageSystemControl : UserControl
         InitializeLayout();
         _resizeTimer.Tick += ResizeTimer_Tick;
         Load += ManageSystemControl_Load;
-        Disposed += (s, e) => _resizeTimer.Dispose();
+        Disposed += (_, _) =>
+        {
+            _profileAvatarPreview.Image?.Dispose();
+            _resizeTimer.Dispose();
+        };
     }
 
     private async void ResizeTimer_Tick(object? sender, EventArgs e)
@@ -194,6 +220,7 @@ public sealed class ManageSystemControl : UserControl
         _availableTabs.Clear();
         if (AccessControlService.HasPermission("ManageSystem.Settings"))
             _availableTabs.Add(("Settings", "System Settings", IconChar.Gear, CreateSystemSettingsPanel));
+        _availableTabs.Add(("Profile", "Profile Settings", IconChar.UserGear, CreateProfileSettingsPanel));
         if (AccessControlService.HasPermission("ManageSystem.Branding"))
             _availableTabs.Add(("Branding", "Branding && Theme", IconChar.Palette, CreateBrandingPanel));
         if (AccessControlService.HasPermission("ManageSystem.Users"))
@@ -213,7 +240,11 @@ public sealed class ManageSystemControl : UserControl
             return;
         }
 
-        _activeTabKey = string.IsNullOrWhiteSpace(_activeTabKey) ? _availableTabs[0].Key : _availableTabs[0].Key;
+        _activeTabKey = _availableTabs.Any(tab => tab.Key.Equals(_initialTabKey, StringComparison.OrdinalIgnoreCase))
+            ? _availableTabs.First(tab => tab.Key.Equals(_initialTabKey, StringComparison.OrdinalIgnoreCase)).Key
+            : string.IsNullOrWhiteSpace(_activeTabKey) || !_availableTabs.Any(tab => tab.Key == _activeTabKey)
+                ? _availableTabs[0].Key
+                : _activeTabKey;
         foreach (var tab in _availableTabs)
         {
             IconButton button = new()
@@ -222,7 +253,7 @@ public sealed class ManageSystemControl : UserControl
                 IconChar = tab.Icon,
                 IconSize = 16,
                 TextImageRelation = TextImageRelation.ImageBeforeText,
-                Size = new Size(tab.Key == "Roles" ? 180 : 158, 34),
+                Size = new Size(tab.Key == "Roles" || tab.Key == "Profile" ? 180 : 158, 34),
                 Margin = new Padding(0, 10, 8, 0),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
@@ -403,6 +434,109 @@ public sealed class ManageSystemControl : UserControl
         return viewport;
     }
 
+    private Control CreateProfileSettingsPanel()
+    {
+        Panel viewport = new()
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = ThemeHelper.ContentBackground,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        Panel headerCard = ControlFactory.CreateCardPanel(new Size(0, 204));
+        headerCard.Dock = DockStyle.Top;
+        headerCard.Height = 204;
+        headerCard.Padding = new Padding(24);
+
+        _profileAvatarPreview.Location = new Point(24, 24);
+        _profileAvatarPreview.Size = new Size(112, 112);
+        headerCard.Controls.Add(_profileAvatarPreview);
+
+        _profileHeaderNameLabel.AutoSize = false;
+        _profileHeaderNameLabel.Location = new Point(160, 36);
+        _profileHeaderNameLabel.Size = new Size(520, 34);
+        _profileHeaderNameLabel.Font = FontHelper.Title(18F);
+        _profileHeaderNameLabel.ForeColor = ThemeHelper.TextPrimary;
+        _profileHeaderNameLabel.AutoEllipsis = true;
+        headerCard.Controls.Add(_profileHeaderNameLabel);
+
+        _profileHeaderUsernameLabel.AutoSize = false;
+        _profileHeaderUsernameLabel.Location = new Point(162, 76);
+        _profileHeaderUsernameLabel.Size = new Size(460, 24);
+        _profileHeaderUsernameLabel.Font = FontHelper.Regular(10F);
+        _profileHeaderUsernameLabel.ForeColor = ThemeHelper.TextSecondary;
+        _profileHeaderUsernameLabel.AutoEllipsis = true;
+        headerCard.Controls.Add(_profileHeaderUsernameLabel);
+
+        _profileHeaderRoleLabel.AutoSize = false;
+        _profileHeaderRoleLabel.Location = new Point(162, 106);
+        _profileHeaderRoleLabel.Size = new Size(320, 26);
+        _profileHeaderRoleLabel.Font = FontHelper.SemiBold(9.5F);
+        _profileHeaderRoleLabel.ForeColor = ThemeHelper.Primary;
+        _profileHeaderRoleLabel.AutoEllipsis = true;
+        headerCard.Controls.Add(_profileHeaderRoleLabel);
+
+        Button browseButton = ControlFactory.CreateSecondaryButton("Browse Image", 128, 32);
+        Button removeButton = ControlFactory.CreateSecondaryButton("Remove Photo", 126, 32);
+        browseButton.Location = new Point(160, 142);
+        removeButton.Location = new Point(302, 142);
+        _profileImagePathLabel.Location = new Point(444, 148);
+        _profileImagePathLabel.Size = new Size(360, 22);
+        browseButton.Click += BrowseProfileImageButton_Click;
+        removeButton.Click += RemoveProfileImageButton_Click;
+        headerCard.Controls.Add(browseButton);
+        headerCard.Controls.Add(removeButton);
+        headerCard.Controls.Add(_profileImagePathLabel);
+
+        Panel infoCard = ControlFactory.CreateCardPanel(new Size(0, 214));
+        infoCard.Dock = DockStyle.Top;
+        infoCard.Height = 214;
+        infoCard.Padding = new Padding(24);
+        infoCard.Controls.Add(CreateSectionTitle("Profile Information", new Point(24, 20), 320));
+        AddLabeledInput(infoCard, "First Name *", _profileFirstNameInput, new Point(24, 62), 320);
+        AddLabeledInput(infoCard, "Last Name *", _profileLastNameInput, new Point(378, 62), 320);
+        AddLabeledInput(infoCard, "Username *", _profileUsernameInput, new Point(732, 62), 320);
+        AddReadOnlyValue(infoCard, "Role", _profileRoleValueLabel, new Point(24, 142), 320);
+        AddReadOnlyValue(infoCard, "Account Status", _profileStatusValueLabel, new Point(378, 142), 320);
+        LayoutProfileInfoCard(infoCard);
+        infoCard.Resize += (_, _) => LayoutProfileInfoCard(infoCard);
+
+        Panel securityCard = ControlFactory.CreateCardPanel(new Size(0, 214));
+        securityCard.Dock = DockStyle.Top;
+        securityCard.Height = 214;
+        securityCard.Padding = new Padding(24);
+        securityCard.Controls.Add(CreateSectionTitle("Security", new Point(24, 20), 320));
+        AddLabeledInput(securityCard, "Current Password", _currentPasswordInput, new Point(24, 62), 320);
+        AddLabeledInput(securityCard, "New Password", _newPasswordInput, new Point(378, 62), 320);
+        AddLabeledInput(securityCard, "Confirm Password", _confirmPasswordInput, new Point(732, 62), 320);
+        Button changePasswordButton = ControlFactory.CreateSecondaryButton("Change Password", 154, 34);
+        changePasswordButton.Location = new Point(24, 146);
+        changePasswordButton.Click += async (_, _) => await ChangeOwnPasswordAsync();
+        securityCard.Controls.Add(changePasswordButton);
+        LayoutSecurityCard(securityCard, changePasswordButton);
+        securityCard.Resize += (_, _) => LayoutSecurityCard(securityCard, changePasswordButton);
+
+        Panel footer = new() { Dock = DockStyle.Top, Height = 54, BackColor = ThemeHelper.ContentBackground };
+        Button saveButton = ControlFactory.CreatePrimaryButton("Save Profile", 136, 36);
+        saveButton.Click += async (_, _) => await SaveProfileAsync();
+        footer.Controls.Add(saveButton);
+        footer.Resize += (_, _) => saveButton.Location = new Point(Math.Max(0, footer.ClientSize.Width - saveButton.Width), 8);
+        saveButton.Location = new Point(Math.Max(0, footer.ClientSize.Width - saveButton.Width), 8);
+
+        viewport.Controls.Add(footer);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(securityCard);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(infoCard);
+        viewport.Controls.Add(CreateSpacer());
+        viewport.Controls.Add(headerCard);
+
+        _ = LoadProfileSettingsAsync();
+        return viewport;
+    }
+
+
     private Panel CreateUsersPanel()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Padding = new Padding(0, 12, 0, 0) };
@@ -456,6 +590,169 @@ public sealed class ManageSystemControl : UserControl
         panel.Controls.Add(tabRow);
         _ = LoadUsersAsync();
         return panel;
+    }
+
+    private async Task LoadProfileSettingsAsync()
+    {
+        try
+        {
+            User? user = await _userService.GetUserByIdAsync(_currentUserId);
+            if (user is null)
+            {
+                MessageBoxHelper.ShowWarning("Unable to load your profile.");
+                return;
+            }
+
+            IReadOnlyList<Role> roles = await _roleService.GetAllRolesAsync(includeArchived: true);
+            Role? role = roles.FirstOrDefault(item => item.RoleId == user.RoleId);
+            _loadedProfileUser = user;
+            _currentProfileImagePath = user.ProfileImagePath;
+            _selectedProfileImageSourcePath = null;
+            _profilePhotoRemoved = false;
+
+            _profileFirstNameInput.Text = user.FirstName;
+            _profileLastNameInput.Text = user.LastName;
+            _profileUsernameInput.Text = user.Username;
+            _profileRoleValueLabel.Text = role?.RoleName ?? "Unknown";
+            _profileStatusValueLabel.Text = user.IsArchived ? "Archived" : user.IsActive ? "Active" : "Inactive";
+            RefreshProfileHeader(user, role?.RoleName ?? "Unknown");
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowError($"Unable to load profile settings.\n\n{exception.Message}", "Manage System");
+        }
+    }
+
+    private void RefreshProfileHeader(User user, string roleName)
+    {
+        _profileHeaderNameLabel.Text = string.IsNullOrWhiteSpace(user.FullName) ? user.Username : user.FullName;
+        _profileHeaderUsernameLabel.Text = user.Username;
+        _profileHeaderRoleLabel.Text = roleName;
+        _profileImagePathLabel.Text = string.IsNullOrWhiteSpace(user.ProfileImagePath) ? "No file selected" : Path.GetFileName(user.ProfileImagePath);
+        SetProfilePreviewImage(UserAvatarHelper.CreateAvatar(user, 112));
+    }
+
+    private void SetProfilePreviewImage(Image image)
+    {
+        Image? previousImage = _profileAvatarPreview.Image;
+        _profileAvatarPreview.Image = image;
+        previousImage?.Dispose();
+    }
+
+    private void BrowseProfileImageButton_Click(object? sender, EventArgs e)
+    {
+        using OpenFileDialog dialog = new()
+        {
+            Filter = "Image Files|*.jpg;*.jpeg;*.png",
+            Title = "Select Profile Image"
+        };
+
+        if (dialog.ShowDialog() != DialogResult.OK) return;
+        _selectedProfileImageSourcePath = dialog.FileName;
+        _profilePhotoRemoved = false;
+        _profileImagePathLabel.Text = Path.GetFileName(dialog.FileName);
+
+        User previewUser = BuildProfilePreviewUser(_currentProfileImagePath);
+        SetProfilePreviewImage(UserAvatarHelper.LoadCircularProfileImage(dialog.FileName, 112)
+            ?? UserAvatarHelper.CreateInitialsAvatar(previewUser.FirstName, previewUser.LastName, 112));
+    }
+
+    private void RemoveProfileImageButton_Click(object? sender, EventArgs e)
+    {
+        _selectedProfileImageSourcePath = null;
+        _profilePhotoRemoved = true;
+        _profileImagePathLabel.Text = "No file selected";
+        User previewUser = BuildProfilePreviewUser(null);
+        SetProfilePreviewImage(UserAvatarHelper.CreateInitialsAvatar(previewUser.FirstName, previewUser.LastName, 112));
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        if (_loadedProfileUser is null)
+        {
+            MessageBoxHelper.ShowWarning("Profile details are still loading.");
+            return;
+        }
+
+        if (!ConfirmSaveChanges())
+        {
+            return;
+        }
+
+        string? savedProfilePath = _profilePhotoRemoved ? null : _currentProfileImagePath;
+        try
+        {
+            if (!_profilePhotoRemoved)
+            {
+                savedProfilePath = UploadPathHelper.SaveProfileImageIfSelected(_selectedProfileImageSourcePath, _currentProfileImagePath);
+            }
+
+            User updatedUser = await _userService.UpdateSelfProfileAsync(new UpdateSelfProfileRequest
+            {
+                UserId = _currentUserId,
+                Username = _profileUsernameInput.Text,
+                FirstName = _profileFirstNameInput.Text,
+                LastName = _profileLastNameInput.Text,
+                ProfileImagePath = savedProfilePath
+            }, _currentUserId);
+
+            _loadedProfileUser = updatedUser;
+            _currentProfileImagePath = updatedUser.ProfileImagePath;
+            _selectedProfileImageSourcePath = null;
+            _profilePhotoRemoved = false;
+            RefreshProfileHeader(updatedUser, _profileRoleValueLabel.Text);
+            ProfileUpdated?.Invoke(this, updatedUser);
+            if (_usersGrid.Columns.Count > 0) await LoadUsersAsync();
+            MessageBoxHelper.ShowSuccess("Profile saved successfully.");
+        }
+        catch (Exception exception)
+        {
+            UploadPathHelper.DeleteNewProfileImageIfSaveFailed(savedProfilePath, _currentProfileImagePath);
+            MessageBoxHelper.ShowWarning(exception.Message, "Profile Settings");
+        }
+    }
+
+    private User BuildProfilePreviewUser(string? profileImagePath)
+    {
+        User user = _loadedProfileUser is null
+            ? new User { UserId = _currentUserId }
+            : new User
+            {
+                UserId = _loadedProfileUser.UserId,
+                RoleId = _loadedProfileUser.RoleId,
+                IsActive = _loadedProfileUser.IsActive,
+                IsArchived = _loadedProfileUser.IsArchived,
+                IsOwner = _loadedProfileUser.IsOwner
+            };
+
+        user.FirstName = _profileFirstNameInput.Text;
+        user.LastName = _profileLastNameInput.Text;
+        user.Username = _profileUsernameInput.Text;
+        user.ProfileImagePath = profileImagePath;
+        return user;
+    }
+
+    private async Task ChangeOwnPasswordAsync()
+    {
+        try
+        {
+            await _userService.ChangeOwnPasswordAsync(new ChangeOwnPasswordRequest
+            {
+                UserId = _currentUserId,
+                CurrentPassword = _currentPasswordInput.Text,
+                NewPassword = _newPasswordInput.Text,
+                ConfirmPassword = _confirmPasswordInput.Text
+            }, _currentUserId);
+
+            _currentPasswordInput.Clear();
+            _newPasswordInput.Clear();
+            _confirmPasswordInput.Clear();
+            MessageBoxHelper.ShowSuccess("Password changed successfully.");
+        }
+        catch (Exception exception)
+        {
+            MessageBoxHelper.ShowWarning(exception.Message, "Profile Settings");
+        }
     }
 
     private Panel CreateRolesPanel()
@@ -1027,6 +1324,12 @@ public sealed class ManageSystemControl : UserControl
     private async void UsersGrid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0 || _usersGrid.Rows[e.RowIndex].Tag is not UserListItem user) return;
+        if (user.UserId == _currentUserId)
+        {
+            ShowTab("Profile");
+            return;
+        }
+
         await OpenUserFormAsync(user.UserId);
     }
 
@@ -1317,7 +1620,10 @@ public sealed class ManageSystemControl : UserControl
                 await OpenUserFormAsync(user.UserId, isViewOnly: true);
                 break;
             case "Edit":
-                await OpenUserFormAsync(user.UserId);
+                if (user.UserId == _currentUserId)
+                    ShowTab("Profile");
+                else
+                    await OpenUserFormAsync(user.UserId);
                 break;
             case "Password":
                 break;
@@ -1571,11 +1877,12 @@ public sealed class ManageSystemControl : UserControl
         }
     }
 
-    private static string GetUserActions(UserListItem user)
+    private string GetUserActions(UserListItem user)
     {
-        if (user.IsOwner) return "View | Edit";
+        bool isSelf = user.UserId == _currentUserId;
+        if (user.IsOwner) return isSelf ? "View" : "View | Edit";
         if (user.IsArchived) return "View | Restore";
-        return "View | Edit | Archive";
+        return isSelf ? "View | Archive" : "View | Edit | Archive";
     }
 
     private static string GetRoleActions(RoleListItem role)
@@ -1605,6 +1912,11 @@ public sealed class ManageSystemControl : UserControl
         if (string.IsNullOrWhiteSpace(_businessNameInput.Text))
         {
             MessageBoxHelper.ShowWarning("Business Name is required.");
+            return;
+        }
+
+        if (!ConfirmSaveChanges())
+        {
             return;
         }
 
@@ -1655,6 +1967,11 @@ public sealed class ManageSystemControl : UserControl
             if (!Regex.IsMatch(colorHex, "^#[0-9A-Fa-f]{6}$"))
             {
                 MessageBoxHelper.ShowWarning("Please enter a valid hex color, such as #2563EB.");
+                return;
+            }
+
+            if (!ConfirmSaveChanges())
+            {
                 return;
             }
 
@@ -2055,6 +2372,39 @@ public sealed class ManageSystemControl : UserControl
         resetButton.Location = new Point(Math.Max(24, saveButton.Left - 14 - resetButton.Width), 8);
     }
 
+    private void LayoutProfileInfoCard(Panel card)
+    {
+        const int contentPadding = 24;
+        const int columnGap = 24;
+        int availableWidth = Math.Max(1, card.ClientSize.Width - (contentPadding * 2));
+        int columnWidth = Math.Max(260, (availableWidth - (columnGap * 2)) / 3);
+        int leftX = contentPadding;
+        int middleX = contentPadding + columnWidth + columnGap;
+        int rightX = contentPadding + ((columnWidth + columnGap) * 2);
+
+        MoveLabeledControl(card, "First Name *", _profileFirstNameInput, leftX, 62, columnWidth);
+        MoveLabeledControl(card, "Last Name *", _profileLastNameInput, middleX, 62, columnWidth);
+        MoveLabeledControl(card, "Username *", _profileUsernameInput, rightX, 62, columnWidth);
+        MoveReadOnlyValue(card, "Role", _profileRoleValueLabel, leftX, 142, columnWidth);
+        MoveReadOnlyValue(card, "Account Status", _profileStatusValueLabel, middleX, 142, columnWidth);
+    }
+
+    private void LayoutSecurityCard(Panel card, Button changePasswordButton)
+    {
+        const int contentPadding = 24;
+        const int columnGap = 24;
+        int availableWidth = Math.Max(1, card.ClientSize.Width - (contentPadding * 2));
+        int columnWidth = Math.Max(260, (availableWidth - (columnGap * 2)) / 3);
+        int leftX = contentPadding;
+        int middleX = contentPadding + columnWidth + columnGap;
+        int rightX = contentPadding + ((columnWidth + columnGap) * 2);
+
+        MoveLabeledControl(card, "Current Password", _currentPasswordInput, leftX, 62, columnWidth);
+        MoveLabeledControl(card, "New Password", _newPasswordInput, middleX, 62, columnWidth);
+        MoveLabeledControl(card, "Confirm Password", _confirmPasswordInput, rightX, 62, columnWidth);
+        changePasswordButton.Location = new Point(leftX, 146);
+    }
+
     private static void MoveLabeledControl(Control parent, string labelText, Control input, int x, int y, int width)
     {
         Label? label = parent.Controls.OfType<Label>().FirstOrDefault(item => item.Text == labelText);
@@ -2066,6 +2416,19 @@ public sealed class ManageSystemControl : UserControl
 
         input.Location = new Point(x, y + 24);
         input.Size = new Size(width, input.Height);
+    }
+
+    private static void MoveReadOnlyValue(Control parent, string labelText, Label valueLabel, int x, int y, int width)
+    {
+        Label? label = parent.Controls.OfType<Label>().FirstOrDefault(item => item.Text == labelText);
+        if (label is not null)
+        {
+            label.Location = new Point(x, y);
+            label.Width = width;
+        }
+
+        valueLabel.Location = new Point(x, y + 24);
+        valueLabel.Size = new Size(width, 30);
     }
 
     private static void MoveLabeledCombo(Control parent, string labelText, ComboBox input, Point labelLocation, int width)
@@ -2135,6 +2498,16 @@ public sealed class ManageSystemControl : UserControl
         input.Font = FontHelper.Regular(10F);
         parent.Controls.Add(label);
         parent.Controls.Add(input);
+    }
+
+    private static void AddReadOnlyValue(Control parent, string labelText, Label valueLabel, Point labelLocation, int width)
+    {
+        Label label = ControlFactory.CreateInputLabel(labelText);
+        label.Location = labelLocation;
+        valueLabel.Location = new Point(labelLocation.X, labelLocation.Y + 24);
+        valueLabel.Size = new Size(width, 30);
+        parent.Controls.Add(label);
+        parent.Controls.Add(valueLabel);
     }
 
     private static void AddLabeledCombo(Control parent, string labelText, ComboBox input, Point labelLocation, int width)
@@ -2363,6 +2736,15 @@ public sealed class ManageSystemControl : UserControl
         AutoEllipsis = true
     };
 
+    private static Label CreateReadOnlyValueLabel() => new()
+    {
+        AutoSize = false,
+        Font = FontHelper.SemiBold(10F),
+        ForeColor = ThemeHelper.TextPrimary,
+        TextAlign = ContentAlignment.MiddleLeft,
+        AutoEllipsis = true
+    };
+
     private static string GetDisplayPath(string path) => string.IsNullOrWhiteSpace(path) ? "No file selected" : Path.GetFileName(path);
 
     private static Panel CreateSpacer() => new() { Dock = DockStyle.Top, Height = 16, BackColor = ThemeHelper.ContentBackground };
@@ -2376,6 +2758,11 @@ public sealed class ManageSystemControl : UserControl
     private static void ShowAccessDenied()
     {
         MessageBoxHelper.ShowWarning("You do not have permission to perform this action.", "Permission Denied");
+    }
+
+    private static bool ConfirmSaveChanges()
+    {
+        return MessageBoxHelper.ShowConfirmWarning("Are you sure you want to save these changes?", "Confirm Save");
     }
 
     private sealed record AddressOption(string Code, string Name)

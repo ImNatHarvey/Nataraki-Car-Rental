@@ -53,6 +53,7 @@ public sealed class UserDetailsForm : Form
     {
         Text = _isViewOnly ? "View User" : _isEdit ? "Edit User" : "Add User";
         ThemeHelper.ApplyCompactDialogFormSettings(this);
+        ShowIcon = false;
         ClientSize = new Size(760, _isViewOnly ? 410 : 520);
 
         Panel root = new()

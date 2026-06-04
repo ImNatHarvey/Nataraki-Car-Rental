@@ -51,6 +51,7 @@ public sealed class RoleDetailsForm : Form
     {
         Text = _isViewOnly ? "View Role" : _isEdit ? "Edit Role / Permissions" : "Add Role";
         ThemeHelper.ApplyCompactDialogFormSettings(this);
+        ShowIcon = false;
         ClientSize = new Size(740, _isViewOnly ? 500 : 520);
 
         Panel root = new()

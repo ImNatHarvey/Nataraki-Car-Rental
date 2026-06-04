@@ -148,6 +148,7 @@ public static class DatabaseInitializer
                     LastName nvarchar(100) NOT NULL,
                     Email nvarchar(150) NULL,
                     PhoneNumber nvarchar(30) NULL,
+                    ProfileImagePath nvarchar(500) NULL,
                     SecurityQuestion nvarchar(300) NULL,
                     SecurityAnswer nvarchar(300) NULL,
                     IsActive bit NOT NULL DEFAULT 1,
@@ -180,6 +181,10 @@ public static class DatabaseInitializer
                 IF COL_LENGTH(N'dbo.Users', N'LastLoginAt') IS NULL
                 BEGIN
                     ALTER TABLE dbo.Users ADD LastLoginAt datetime2 NULL;
+                END;
+                IF COL_LENGTH(N'dbo.Users', N'ProfileImagePath') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Users ADD ProfileImagePath nvarchar(500) NULL;
                 END;
             END;
             """, connection, transaction);

@@ -20,6 +20,10 @@ public sealed class MainForm : Form
     private readonly List<IconButton> _navigationButtons = [];
     private readonly Label _brandLabel = new();
     private readonly Panel _brandIconHost = new();
+    private readonly Panel _identityHost = new();
+    private readonly Panel _identityPanel = new();
+    private readonly PictureBox _identityAvatar = new();
+    private readonly Label _identityNameLabel = new();
 
     public event EventHandler? LoggedOut;
 
@@ -28,6 +32,7 @@ public sealed class MainForm : Form
         CurrentUser = currentUser;
         InitializeMainForm();
         ShowOverview();
+        FormClosed += (_, _) => _identityAvatar.Image?.Dispose();
         
         AppBrandingManager.SettingsUpdated += (_, _) => UpdateBranding();
     }
@@ -76,15 +81,7 @@ public sealed class MainForm : Form
         _brandLabel.ForeColor = ThemeHelper.TextPrimary;
         _brandLabel.TextAlign = ContentAlignment.MiddleLeft;
 
-        Label userLabel = new()
-        {
-            Text = $"Signed in: {CurrentUser.FirstName}",
-            AutoSize = false,
-            Height = 34,
-            Dock = DockStyle.Top,
-            ForeColor = ThemeHelper.TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
+        ConfigureIdentityPanel();
 
         FlowLayoutPanel menuPanel = new()
         {
@@ -131,18 +128,25 @@ public sealed class MainForm : Form
             ShowPlaceholder("No Access");
         }
 
+        Panel logoutHost = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = 50,
+            BackColor = ThemeHelper.Surface
+        };
+
         IconButton logoutButton = ControlFactory.CreateSidebarButton("Log Out", IconChar.RightFromBracket, isDanger: true);
-        logoutButton.Dock = DockStyle.Bottom;
-        logoutButton.Width = 228;
+        logoutButton.Location = new Point(0, 0);
         logoutButton.Click += LogoutButton_Click;
+        logoutHost.Controls.Add(logoutButton);
 
         brandPanel.Controls.Add(_brandIconHost);
         brandPanel.Controls.Add(_brandLabel);
 
         sidebarPanel.Controls.Add(menuPanel);
-        sidebarPanel.Controls.Add(userLabel);
+        sidebarPanel.Controls.Add(_identityHost);
         sidebarPanel.Controls.Add(brandPanel);
-        sidebarPanel.Controls.Add(logoutButton);
+        sidebarPanel.Controls.Add(logoutHost);
 
         _contentPanel.Dock = DockStyle.Fill;
         _contentPanel.BackColor = ThemeHelper.ContentBackground;
@@ -180,6 +184,74 @@ public sealed class MainForm : Form
             IconSize = 30,
             BackColor = ThemeHelper.Surface
         });
+    }
+
+    private void ConfigureIdentityPanel()
+    {
+        _identityHost.Dock = DockStyle.Top;
+        _identityHost.Height = 50;
+        _identityHost.BackColor = ThemeHelper.Surface;
+
+        _identityPanel.Size = new Size(228, 42);
+        _identityPanel.Location = new Point(0, 0);
+        _identityPanel.Padding = new Padding(14, 0, 0, 0);
+        _identityPanel.BackColor = Color.Transparent;
+        _identityPanel.Cursor = Cursors.Hand;
+        _identityPanel.Click += (_, _) => ShowManageSystem("Profile");
+        _identityPanel.MouseEnter += IdentitySurface_MouseEnter;
+        _identityPanel.MouseLeave += IdentitySurface_MouseLeave;
+
+        _identityAvatar.Location = new Point(14, 6);
+        _identityAvatar.Size = new Size(30, 30);
+        _identityAvatar.SizeMode = PictureBoxSizeMode.Zoom;
+        _identityAvatar.BackColor = Color.Transparent;
+        _identityAvatar.Cursor = Cursors.Hand;
+        _identityAvatar.Click += (_, _) => ShowManageSystem("Profile");
+        _identityAvatar.MouseEnter += IdentitySurface_MouseEnter;
+        _identityAvatar.MouseLeave += IdentitySurface_MouseLeave;
+
+        _identityNameLabel.AutoSize = false;
+        _identityNameLabel.Location = new Point(54, 1);
+        _identityNameLabel.Size = new Size(158, 40);
+        _identityNameLabel.Font = FontHelper.SemiBold(9.5F);
+        _identityNameLabel.ForeColor = ThemeHelper.TextPrimary;
+        _identityNameLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _identityNameLabel.AutoEllipsis = true;
+        _identityNameLabel.BackColor = Color.Transparent;
+        _identityNameLabel.Cursor = Cursors.Hand;
+        _identityNameLabel.Click += (_, _) => ShowManageSystem("Profile");
+        _identityNameLabel.MouseEnter += IdentitySurface_MouseEnter;
+        _identityNameLabel.MouseLeave += IdentitySurface_MouseLeave;
+
+        _identityPanel.Controls.Add(_identityAvatar);
+        _identityPanel.Controls.Add(_identityNameLabel);
+        _identityHost.Controls.Add(_identityPanel);
+        RenderIdentity();
+    }
+
+    private void IdentitySurface_MouseEnter(object? sender, EventArgs e)
+    {
+        _identityPanel.BackColor = ThemeHelper.Secondary;
+    }
+
+    private void IdentitySurface_MouseLeave(object? sender, EventArgs e)
+    {
+        Point cursorLocation = _identityPanel.PointToClient(Cursor.Position);
+        if (!_identityPanel.ClientRectangle.Contains(cursorLocation))
+        {
+            _identityPanel.BackColor = Color.Transparent;
+        }
+    }
+
+    private void RenderIdentity()
+    {
+        _identityNameLabel.Text = string.IsNullOrWhiteSpace(CurrentUser.FullName)
+            ? CurrentUser.Username
+            : CurrentUser.FullName;
+
+        Image? previousImage = _identityAvatar.Image;
+        _identityAvatar.Image = UserAvatarHelper.CreateAvatar(CurrentUser, 30);
+        previousImage?.Dispose();
     }
 
     private void ApplyWindowIcon()
@@ -260,7 +332,21 @@ public sealed class MainForm : Form
 
     private void ShowManageSystem()
     {
-        LoadContent(new ManageSystemControl(CurrentUser.UserId));
+        ShowManageSystem(null);
+    }
+
+    private void ShowManageSystem(string? initialTabKey)
+    {
+        ManageSystemControl control = new(CurrentUser.UserId, initialTabKey);
+        control.ProfileUpdated += (_, updatedUser) =>
+        {
+            CurrentUser.Username = updatedUser.Username;
+            CurrentUser.FirstName = updatedUser.FirstName;
+            CurrentUser.LastName = updatedUser.LastName;
+            CurrentUser.ProfileImagePath = updatedUser.ProfileImagePath;
+            RenderIdentity();
+        };
+        LoadContent(control);
         SetActiveNavigation("Manage System");
     }
 

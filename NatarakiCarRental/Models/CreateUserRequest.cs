@@ -8,6 +8,7 @@ public sealed class CreateUserRequest
     public string LastName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ProfileImagePath { get; set; }
     public int RoleId { get; set; }
     public bool IsActive { get; set; } = true;
 }
@@ -20,14 +21,32 @@ public sealed class UpdateUserRequest
     public string LastName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ProfileImagePath { get; set; }
     public int RoleId { get; set; }
     public bool IsActive { get; set; }
+}
+
+public sealed class UpdateSelfProfileRequest
+{
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? ProfileImagePath { get; set; }
 }
 
 public sealed class ChangePasswordRequest
 {
     public int UserId { get; set; }
     public string NewPassword { get; set; } = string.Empty;
+}
+
+public sealed class ChangeOwnPasswordRequest
+{
+    public int UserId { get; set; }
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
 }
 
 public sealed class RoleWithPermissions
