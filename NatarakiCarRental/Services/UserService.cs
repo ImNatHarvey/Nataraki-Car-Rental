@@ -1,5 +1,6 @@
 using FluentValidation;
 using FluentValidation.Results;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Repositories;
 
@@ -126,6 +127,21 @@ public sealed class UserService
             throw new ValidationException([new ValidationFailure("Username", "Username is already taken.")]);
         }
 
+        User oldUser = new User
+        {
+            UserId = existing.UserId,
+            RoleId = existing.RoleId,
+            Username = existing.Username,
+            FirstName = existing.FirstName,
+            LastName = existing.LastName,
+            Email = existing.Email,
+            PhoneNumber = existing.PhoneNumber,
+            ProfileImagePath = existing.ProfileImagePath,
+            IsActive = existing.IsActive,
+            IsOwner = existing.IsOwner,
+            IsArchived = existing.IsArchived
+        };
+
         existing.FirstName = request.FirstName.Trim();
         existing.LastName = request.LastName.Trim();
         existing.Email = request.Email?.Trim();
@@ -142,6 +158,9 @@ public sealed class UserService
             existing.RoleId = request.RoleId;
             existing.IsActive = request.IsActive;
         }
+
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldUser, existing);
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
 
         await _userRepository.UpdateAsync(existing);
 
@@ -162,7 +181,9 @@ public sealed class UserService
             entityId: existing.UserId,
             description: $"Updated user {existing.Username} ({existing.FullName}).",
             userId: currentUserId,
-            entityName: existing.FullName);
+            entityName: existing.FullName,
+            oldValue: oldValue,
+            newValue: newValue);
     }
 
     public async Task<User> UpdateSelfProfileAsync(UpdateSelfProfileRequest request, int currentUserId)
@@ -183,10 +204,28 @@ public sealed class UserService
             throw new ValidationException([new ValidationFailure("Username", "Username is already taken.")]);
         }
 
+        User oldUser = new User
+        {
+            UserId = existing.UserId,
+            RoleId = existing.RoleId,
+            Username = existing.Username,
+            FirstName = existing.FirstName,
+            LastName = existing.LastName,
+            Email = existing.Email,
+            PhoneNumber = existing.PhoneNumber,
+            ProfileImagePath = existing.ProfileImagePath,
+            IsActive = existing.IsActive,
+            IsOwner = existing.IsOwner,
+            IsArchived = existing.IsArchived
+        };
+
         existing.FirstName = request.FirstName.Trim();
         existing.LastName = request.LastName.Trim();
         existing.Username = username;
         existing.ProfileImagePath = string.IsNullOrWhiteSpace(request.ProfileImagePath) ? null : request.ProfileImagePath;
+
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldUser, existing);
+        if (oldValue == null) return existing; // Only log and update if ACTUAL changes occurred
 
         await _userRepository.UpdateSelfProfileAsync(existing);
 
@@ -204,7 +243,9 @@ public sealed class UserService
             entityId: existing.UserId,
             description: $"Updated own profile for user {existing.Username}.",
             userId: currentUserId,
-            entityName: existing.FullName);
+            entityName: existing.FullName,
+            oldValue: oldValue,
+            newValue: newValue);
 
         return existing;
     }

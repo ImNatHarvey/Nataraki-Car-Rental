@@ -1,5 +1,6 @@
 using FluentValidation;
 using FluentValidation.Results;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Repositories;
 
@@ -96,16 +97,25 @@ public sealed class RoleService
         AccessControlService.EnforcePermission("ManageSystem.Roles");
         Role? existing = await _roleRepository.GetByIdAsync(request.RoleId);
         if (existing == null) throw new InvalidOperationException("Role not found.");
+
+        var oldKeys = await _permissionRepository.GetKeysByRoleIdAsync(request.RoleId);
+        var oldRoleWithPerms = new RoleWithPermissions
+        {
+            RoleId = existing.RoleId,
+            RoleName = existing.RoleName,
+            Description = existing.Description,
+            IsActive = existing.IsActive,
+            PermissionKeys = oldKeys.ToList()
+        };
+
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldRoleWithPerms, request);
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
+
         if (await _roleRepository.ExistsByNameAsync(request.RoleName, request.RoleId))
         {
             throw new ValidationException([new ValidationFailure("RoleName", "Role name is already in use.")]);
         }
-        if (existing.IsSystemRole && !existing.RoleName.Equals("Owner", StringComparison.OrdinalIgnoreCase))
-        {
-             // System roles (except Owner) can have description/status updated but not name if we want to be strict.
-             // But the user prompt says system roles cannot be renamed/deleted.
-        }
-
+        
         existing.RoleName = request.RoleName.Trim();
         existing.Description = null;
 
@@ -123,7 +133,9 @@ public sealed class RoleService
             existing.RoleId,
             $"Updated role permissions: {existing.RoleName}.",
             userId: currentUserId,
-            entityName: existing.RoleName);
+            entityName: existing.RoleName,
+            oldValue: oldValue,
+            newValue: newValue);
     }
 
     public async Task ArchiveRoleAsync(int roleId, int currentUserId)

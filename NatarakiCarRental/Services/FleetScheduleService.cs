@@ -132,7 +132,13 @@ public sealed class FleetScheduleService
     {
         AccessControlService.EnforcePermission("FleetSchedule.Edit");
         await ValidateTransactionLifecycleLockAsync(schedule);
+
+        FleetSchedule? oldSchedule = await _scheduleRepository.GetByIdAsync(schedule.ScheduleId);
+        
         await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId);
+
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldSchedule, schedule);
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
@@ -153,6 +159,8 @@ public sealed class FleetScheduleService
                 $"Updated schedule '{schedule.Title}' for car #{schedule.CarId}.",
                 userId: _currentUserId,
                 entityName: schedule.Title,
+                oldValue: oldValue,
+                newValue: newValue,
                 transaction: transaction);
             transaction.Commit();
         }

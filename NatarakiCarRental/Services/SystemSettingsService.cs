@@ -1,3 +1,4 @@
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Repositories;
 
@@ -57,6 +58,12 @@ public sealed class SystemSettingsService
     public async Task SaveSystemSettingsAsync(SystemSettingsModel model, int currentUserId)
     {
         AccessControlService.EnforcePermission("ManageSystem.Settings");
+        
+        var oldSettings = await GetSettingsAsync();
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldSettings, model);
+
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
+
         var dict = new Dictionary<string, string?>
         {
             { "BusinessName", model.BusinessName.Trim() },
@@ -84,12 +91,20 @@ public sealed class SystemSettingsService
             entityId: null,
             description: "Updated system settings.",
             userId: currentUserId,
-            entityName: "System Settings");
+            entityName: "System Settings",
+            oldValue: oldValue,
+            newValue: newValue);
     }
 
     public async Task SaveBrandingSettingsAsync(SystemSettingsModel model, int currentUserId)
     {
         AccessControlService.EnforcePermission("ManageSystem.Branding");
+
+        var oldSettings = await GetSettingsAsync();
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldSettings, model);
+
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
+
         var dict = new Dictionary<string, string?>
         {
             { "ThemeColor", model.ThemeColor },
@@ -109,12 +124,19 @@ public sealed class SystemSettingsService
             entityId: null,
             description: "Updated branding and theme settings.",
             userId: currentUserId,
-            entityName: "Branding Settings");
+            entityName: "Branding Settings",
+            oldValue: oldValue,
+            newValue: newValue);
     }
 
     public async Task ResetDefaultsAsync(int currentUserId)
     {
         AccessControlService.EnforcePermission("ManageSystem.Settings");
+
+        var oldSettings = await GetSettingsAsync();
+        var defaultModel = new SystemSettingsModel();
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldSettings, defaultModel);
+
         var dict = new Dictionary<string, string?>
         {
             { "BusinessName", "Nataraki Car Rental" },
@@ -148,6 +170,8 @@ public sealed class SystemSettingsService
             entityId: null,
             description: "Reset system settings to defaults.",
             userId: currentUserId,
-            entityName: "System Settings");
+            entityName: "System Settings",
+            oldValue: oldValue,
+            newValue: newValue);
     }
 }

@@ -22,7 +22,7 @@ public sealed class ActivityLogControl : UserControl
     private readonly MetricCardControl _carActionsCard = new();
     private readonly MetricCardControl _customerActionsCard = new();
     private readonly TextBox _searchTextBox = new();
-    private readonly ComboBox _actionTypeComboBox = new();
+    private readonly ComboBox _actionComboBox = new();
     private readonly ComboBox _entityTypeComboBox = new();
     private readonly DateTimePicker _dateFromPicker = CreateDatePicker();
     private readonly DateTimePicker _dateToPicker = CreateDatePicker();
@@ -302,8 +302,8 @@ public sealed class ActivityLogControl : UserControl
         ConfigureFilterComboBox(_entityTypeComboBox, new Point(searchWidth + 12, 8));
         _entityTypeComboBox.Width = comboWidth;
 
-        ConfigureFilterComboBox(_actionTypeComboBox, new Point(searchWidth + comboWidth + 24, 8));
-        _actionTypeComboBox.Width = comboWidth;
+        ConfigureFilterComboBox(_actionComboBox, new Point(searchWidth + comboWidth + 24, 8));
+        _actionComboBox.Width = comboWidth;
 
         int nextX = searchWidth + (comboWidth * 2) + 36;
 
@@ -325,7 +325,7 @@ public sealed class ActivityLogControl : UserControl
             }
         };
 
-        _actionTypeComboBox.SelectedIndexChanged += async (_, _) =>
+        _actionComboBox.SelectedIndexChanged += async (_, _) =>
         {
             if (!_isInitializingFilters)
             {
@@ -352,7 +352,7 @@ public sealed class ActivityLogControl : UserControl
 
         panel.Controls.Add(searchContainer);
         panel.Controls.Add(_entityTypeComboBox);
-        panel.Controls.Add(_actionTypeComboBox);
+        panel.Controls.Add(_actionComboBox);
         panel.Controls.Add(fromLabel);
         panel.Controls.Add(_dateFromPicker);
         panel.Controls.Add(toLabel);
@@ -380,8 +380,8 @@ public sealed class ActivityLogControl : UserControl
             }
 
             var actionOptions = actions.Select(a => new LookupOption(a, a));
-            SetFilterItems(_actionTypeComboBox, "All Actions", actionOptions);
-            _actionTypeComboBox.SelectedIndex = 0;
+            SetFilterItems(_actionComboBox, "All Actions", actionOptions);
+            _actionComboBox.SelectedIndex = 0;
         }
         catch (Exception exception)
         {
@@ -462,12 +462,12 @@ public sealed class ActivityLogControl : UserControl
             var actionOptions = actionTypes.Select(name => new LookupOption(name, name));
 
             SetFilterItems(_entityTypeComboBox, "All Modules", moduleOptions);
-            SetFilterItems(_actionTypeComboBox, "All Actions", actionOptions);
+            SetFilterItems(_actionComboBox, "All Actions", actionOptions);
         }
         catch (Exception exception)
         {
             MessageBoxHelper.ShowWarning($"Unable to load activity log filters.\n\n{exception.Message}", "Activity Log");
-            SetFilterItems(_actionTypeComboBox, "All Actions", []);
+            SetFilterItems(_actionComboBox, "All Actions", []);
             SetFilterItems(_entityTypeComboBox, "All Modules", []);
         }
         finally
@@ -497,7 +497,7 @@ public sealed class ActivityLogControl : UserControl
 
             IReadOnlyList<ActivityLog> logs = await _activityLogService.SearchLogsAsync(
                 _searchTextBox.Text,
-                GetSelectedFilter(_actionTypeComboBox),
+                GetSelectedFilter(_actionComboBox),
                 GetSelectedFilter(_entityTypeComboBox),
                 dateFrom,
                 dateTo,
@@ -566,10 +566,13 @@ public sealed class ActivityLogControl : UserControl
 
     private Control CreateTimelineItem(ActivityLog log)
     {
+        var changes = DiffHelper.ParseChanges(log.OldValue, log.NewValue);
+        bool hasChanges = changes.Count > 0;
+
         BorderedPanel row = new BorderedPanel
         {
             Width = Math.Max(100, _timelinePanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 24),
-            Height = 64,
+            Height = hasChanges ? 84 + (changes.Count * 42) : 64,
             Margin = new Padding(16, 0, 0, 8),
             BackColor = ThemeHelper.Surface
         };
@@ -628,6 +631,45 @@ public sealed class ActivityLogControl : UserControl
             Location = new Point(130, 34)
         };
         row.Controls.Add(descLabel);
+
+        if (hasChanges)
+        {
+            Label changesHeader = new Label
+            {
+                Text = "Changes:",
+                Font = FontHelper.SemiBold(8.5F),
+                ForeColor = ThemeHelper.TextPrimary,
+                AutoSize = true,
+                Location = new Point(130, 60)
+            };
+            row.Controls.Add(changesHeader);
+
+            int currentY = 82;
+            foreach (var change in changes)
+            {
+                Label fieldLabel = new Label
+                {
+                    Text = $"• {change.Field}",
+                    Font = FontHelper.SemiBold(8.5F),
+                    ForeColor = ThemeHelper.TextSecondary,
+                    AutoSize = true,
+                    Location = new Point(140, currentY)
+                };
+                row.Controls.Add(fieldLabel);
+
+                Label valuesLabel = new Label
+                {
+                    Text = $"From: {change.From}   To: {change.To}",
+                    Font = FontHelper.Regular(8.5F),
+                    ForeColor = ThemeHelper.TextSecondary,
+                    AutoSize = true,
+                    Location = new Point(152, currentY + 18)
+                };
+                row.Controls.Add(valuesLabel);
+
+                currentY += 42;
+            }
+        }
 
         return row;
     }

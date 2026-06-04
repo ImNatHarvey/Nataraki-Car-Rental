@@ -147,6 +147,11 @@ public sealed class CarService
             throw new ValidationException("Plate number already exists.");
         }
 
+        Car? oldCar = await _carRepository.GetCarByIdAsync(car.CarId, DateTime.Today);
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldCar, car);
+
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
@@ -166,6 +171,8 @@ public sealed class CarService
                 $"Updated car {car.CarName} ({car.PlateNumber}).",
                 userId: _currentUserId,
                 entityName: $"{car.Brand} {car.Model} ({car.PlateNumber})",
+                oldValue: oldValue,
+                newValue: newValue,
                 transaction: transaction);
 
             transaction.Commit();

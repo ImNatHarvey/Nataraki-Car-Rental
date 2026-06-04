@@ -3,6 +3,7 @@ using FluentValidation.Results;
 using Microsoft.Data.SqlClient;
 using NatarakiCarRental.Data;
 using NatarakiCarRental.Exceptions;
+using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Repositories;
 using NatarakiCarRental.Validators;
@@ -152,6 +153,11 @@ public sealed class CustomerService
             throw CreateDuplicatePhoneValidationException();
         }
 
+        Customer? oldCustomer = await _customerRepository.GetCustomerByIdAsync(customer.CustomerId);
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldCustomer, customer);
+
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
@@ -171,6 +177,8 @@ public sealed class CustomerService
                 $"Updated customer {customer.FirstName} {customer.LastName} ({customer.PhoneNumber}).",
                 userId: _currentUserId,
                 entityName: $"{customer.FirstName} {customer.LastName}",
+                oldValue: oldValue,
+                newValue: newValue,
                 transaction: transaction);
 
             transaction.Commit();

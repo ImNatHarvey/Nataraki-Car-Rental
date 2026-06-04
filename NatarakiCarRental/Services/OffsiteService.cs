@@ -188,6 +188,50 @@ public sealed class OffsiteService
 
         await ValidateUpdateRequestAsync(request, existing);
 
+        OffsiteRecord oldRecord = new OffsiteRecord
+        {
+            OffsiteRecordId = existing.OffsiteRecordId,
+            CarId = existing.CarId,
+            FleetScheduleId = existing.FleetScheduleId,
+            OffsiteType = existing.OffsiteType,
+            Status = existing.Status,
+            LocationName = existing.LocationName,
+            ContactPerson = existing.ContactPerson,
+            ContactNumber = existing.ContactNumber,
+            StartDate = existing.StartDate,
+            ExpectedReturnDate = existing.ExpectedReturnDate,
+            CompletedDate = existing.CompletedDate,
+            EstimatedCost = existing.EstimatedCost,
+            ActualCost = existing.ActualCost,
+            Notes = existing.Notes,
+            ProofFilePath = existing.ProofFilePath,
+            IsArchived = existing.IsArchived
+        };
+
+        // Create a temporary object with updated values for comparison
+        OffsiteRecord updatedRecord = new OffsiteRecord
+        {
+            OffsiteRecordId = existing.OffsiteRecordId,
+            CarId = existing.CarId,
+            FleetScheduleId = existing.FleetScheduleId,
+            OffsiteType = request.OffsiteType,
+            Status = existing.Status,
+            LocationName = request.LocationName,
+            ContactPerson = request.ContactPerson,
+            ContactNumber = request.ContactNumber,
+            StartDate = request.StartDate,
+            ExpectedReturnDate = request.ExpectedReturnDate,
+            CompletedDate = existing.CompletedDate,
+            EstimatedCost = existing.EstimatedCost,
+            ActualCost = request.AmountPaid,
+            Notes = existing.Notes,
+            ProofFilePath = string.IsNullOrWhiteSpace(request.ProofFilePath) ? existing.ProofFilePath : request.ProofFilePath,
+            IsArchived = existing.IsArchived
+        };
+
+        var (oldValue, newValue) = DiffHelper.GetJsonDiff(oldRecord, updatedRecord);
+        if (oldValue == null) return; // Only log and update if ACTUAL changes occurred
+
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
@@ -236,6 +280,8 @@ public sealed class OffsiteService
                 $"Updated {existing.OffsiteType} offsite record for car #{existing.CarId}.",
                 userId: _currentUserId,
                 entityName: $"OFF-{existing.OffsiteRecordId:D4}",
+                oldValue: oldValue,
+                newValue: newValue,
                 transaction: transaction);
 
             transaction.Commit();

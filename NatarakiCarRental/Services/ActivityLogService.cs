@@ -21,13 +21,13 @@ public sealed class ActivityLogService
 
     public Task<IReadOnlyList<ActivityLog>> SearchLogsAsync(
         string searchText,
-        string? actionType = null,
+        string? action = null,
         string? entityName = null,
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
         int maxRows = 500)
     {
-        return _activityLogRepository.SearchLogsAsync(searchText, actionType, entityName, dateFrom, dateTo, maxRows);
+        return _activityLogRepository.SearchLogsAsync(searchText, action, entityName, dateFrom, dateTo, maxRows);
     }
 
     public Task<ActivityLogMetrics> GetMetricsAsync()
@@ -79,7 +79,6 @@ public sealed class ActivityLogService
                 UserFullName = userFullName ?? "System",
                 Module = string.IsNullOrWhiteSpace(module) ? "System" : module.Trim(),
                 Action = action.Trim(),
-                ActionType = action.Trim(),
                 EntityName = string.IsNullOrWhiteSpace(entityName) ? null : entityName.Trim(),
                 EntityId = entityId,
                 Description = description.Trim(),
