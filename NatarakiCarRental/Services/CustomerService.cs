@@ -307,13 +307,12 @@ public sealed class CustomerService
                 throw new RecordNotFoundException($"Customer record #{customerId} was not found or is archived.");
             }
 
-            string action = isBlacklisted ? "Blacklisted" : "Removed from Blacklist";
             string description = isBlacklisted
                 ? $"Blacklisted customer {DescribeCustomer(customer, customerId)}. Reason: {reason}"
                 : $"Removed blacklist flag from customer {DescribeCustomer(customer, customerId)}.";
 
             await _activityLogService.LogAsync(
-                action,
+                "Updated",
                 "Customer",
                 customerId,
                 description,

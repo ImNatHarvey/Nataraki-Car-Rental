@@ -481,7 +481,7 @@ public sealed class TransactionService
             TransactionConstants.Status.Active,
             FleetScheduleConstants.Type.Rental,
             FleetScheduleConstants.Status.Rented,
-            action: "Started",
+            action: "Updated",
             description: $"Started rental for {transaction.TransactionCode}.");
     }
 
@@ -644,7 +644,7 @@ public sealed class TransactionService
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
 
             await _activityLogService.LogAsync(
-                action: "Extended",
+                action: "Updated",
                 module: "Transaction",
                 entityId: transactionId,
                 description: $"Extended rental for {transaction.TransactionCode} until {newEndDate:yyyy-MM-dd}. Extension charge: ₱{extensionCharge:N2}.",
@@ -762,7 +762,7 @@ public sealed class TransactionService
             await SyncReservationTransactionPaymentStatusAsync(transaction, dbTransaction);
 
             await _activityLogService.LogAsync(
-                action: "Added",
+                action: "Updated",
                 module: "Transaction",
                 entityId: request.TransactionId,
                 description: $"Added payment of ₱{request.Amount:N2} for {transaction.TransactionCode} via {request.ModeOfPayment}.",

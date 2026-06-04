@@ -59,7 +59,7 @@ public sealed class UserService
         await _userRepository.UpdatePasswordAsync(user.UserId, hash);
 
         await _activityLogService.LogAsync(
-            action: "Reset Password",
+            action: "Updated",
             module: "User",
             entityId: user.UserId,
             description: $"Password reset via last name verification for user {user.Username}.",
@@ -228,7 +228,7 @@ public sealed class UserService
         await _userRepository.UpdatePasswordAsync(request.UserId, hash);
 
         await _activityLogService.LogAsync(
-            action: "Changed Password",
+            action: "Updated",
             module: "User",
             entityId: request.UserId,
             description: $"Changed password for user {user?.Username ?? request.UserId.ToString()}.",
@@ -260,7 +260,7 @@ public sealed class UserService
         await _userRepository.UpdatePasswordAsync(request.UserId, hash);
 
         await _activityLogService.LogAsync(
-            action: "Changed Password",
+            action: "Updated",
             module: "User",
             entityId: request.UserId,
             description: $"Changed own password for user {userToUpdate.Username}.",

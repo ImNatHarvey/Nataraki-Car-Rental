@@ -654,7 +654,7 @@ public sealed class ActivityLogControl : UserControl
         string actionLower = action.ToLowerInvariant();
 
         // 1. Handle Auth/System Special Cases
-        if (actionLower is "login" or "logout" or "logged in" or "logged out")
+        if (actionLower is "login" or "logout")
         {
             return $"{user} {actionLower}";
         }
@@ -695,23 +695,23 @@ public sealed class ActivityLogControl : UserControl
     {
         string lowerText = action.ToLowerInvariant();
 
-        // GREEN: Success / Positive Flow
-        if (lowerText is "added" or "created" or "restored" or "completed" or "approved" or "removed from blacklist" or "started" or "reserved")
+        // GREEN
+        if (lowerText is "added" or "created" or "restored" or "completed" or "approved" or "removed from blacklist")
             return ThemeHelper.Success;
 
-        // BLUE: Information / Neutral Updates
+        // BLUE
         if (lowerText is "updated" or "edited" or "changed" or "modified" or "saved")
             return ThemeHelper.Primary;
 
-        // ORANGE: Warnings / Extensions / Resets
+        // ORANGE
         if (lowerText is "cancelled" or "extended" or "warning" or "expiring" or "reset password")
             return ThemeHelper.Warning;
 
-        // RED: Destructive / Restrictive Actions
+        // RED
         if (lowerText is "archived" or "deleted" or "blacklisted" or "deactivated" or "removed")
             return ThemeHelper.Danger;
 
-        // GRAY: System / Auth
+        // GRAY
         return ThemeHelper.GrayIcon;
     }
 

@@ -109,7 +109,7 @@ public sealed class SystemSettingsService
             entityId: null,
             description: "Updated branding and theme settings.",
             userId: currentUserId,
-            entityName: "Branding Theme");
+            entityName: "Branding Settings");
     }
 
     public async Task ResetDefaultsAsync(int currentUserId)
