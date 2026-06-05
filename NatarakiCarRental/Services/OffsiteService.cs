@@ -4,6 +4,7 @@ using NatarakiCarRental.Exceptions;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Repositories;
+using NatarakiCarRental.Validators;
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -32,12 +33,14 @@ public sealed class OffsiteService
     private readonly ActivityLogService _activityLogService;
     private readonly NotificationService _notificationService = new();
     private readonly DbConnectionFactory _connectionFactory;
+    private readonly OffsiteRecordValidator _validator = new();
     private readonly int? _currentUserId;
 
-    public OffsiteService(int? currentUserId)
+    public OffsiteService(int? currentUserId = null)
         : this(new DbConnectionFactory(), currentUserId)
     {
     }
+
 
     private OffsiteService(DbConnectionFactory connectionFactory, int? currentUserId)
         : this(
@@ -595,15 +598,11 @@ public sealed class OffsiteService
 
     private async Task ValidateCreateRequestAsync(CreateOffsiteRecordRequest request)
     {
-        List<ValidationFailure> failures = [];
+        var result = await _validator.ValidateAsync(request);
+        if (!result.IsValid) throw new ValidationException(result.Errors);
 
-        if (request.CarId <= 0) failures.Add(new ValidationFailure("CarId", "Car is required."));
-        if (string.IsNullOrWhiteSpace(request.OffsiteType)) failures.Add(new ValidationFailure("OffsiteType", "Offsite type is required."));
-        if (request.AmountPaid < 0) failures.Add(new ValidationFailure("AmountPaid", "Amount paid cannot be negative."));
         if (request.ExpectedReturnDate.HasValue && request.ExpectedReturnDate.Value.Date < request.StartDate.Date)
-            failures.Add(new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date."));
-
-        if (failures.Count > 0) throw new ValidationException(failures);
+            throw new ValidationException([new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date.")]);
 
         Car? car = await _carRepository.GetCarByIdAsync(request.CarId, DateTime.Today);
         if (car == null || car.IsArchived)
@@ -616,13 +615,15 @@ public sealed class OffsiteService
 
     private async Task ValidateUpdateRequestAsync(UpdateOffsiteRecordRequest request, OffsiteRecord existing)
     {
-        List<ValidationFailure> failures = [];
+        var result = await _validator.ValidateAsync(new CreateOffsiteRecordRequest 
+        { 
+            CarId = existing.CarId,
+            OffsiteType = request.OffsiteType,
+            ContactNumber = request.ContactNumber
+        });
+        if (!result.IsValid) throw new ValidationException(result.Errors);
 
-        if (string.IsNullOrWhiteSpace(request.OffsiteType)) failures.Add(new ValidationFailure("OffsiteType", "Offsite type is required."));
-        if (request.AmountPaid < 0) failures.Add(new ValidationFailure("AmountPaid", "Amount paid cannot be negative."));
         if (request.ExpectedReturnDate.HasValue && request.ExpectedReturnDate.Value.Date < request.StartDate.Date)
-            failures.Add(new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date."));
-
-        if (failures.Count > 0) throw new ValidationException(failures);
+            throw new ValidationException([new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date.")]);
     }
 }

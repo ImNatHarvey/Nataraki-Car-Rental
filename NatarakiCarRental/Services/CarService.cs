@@ -63,12 +63,12 @@ public sealed class CarService
 
     public async Task<IReadOnlyList<Car>> GetActiveCarsAsync()
     {
-        return await _carRepository.GetActiveCarsAsync(DateTime.Today);
+        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: false, DateTime.Today);
     }
 
     public async Task<IReadOnlyList<Car>> GetArchivedCarsAsync()
     {
-        return await _carRepository.GetArchivedCarsAsync(DateTime.Today);
+        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: true, DateTime.Today);
     }
 
     public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived)

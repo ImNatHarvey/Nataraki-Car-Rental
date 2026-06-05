@@ -114,27 +114,4 @@ public sealed class TransactionPaymentRepository
             }
         }
     }
-
-    public async Task<int> ArchiveAsync(int transactionPaymentId, IDbTransaction? transaction = null)
-    {
-        const string sql = """
-            UPDATE dbo.TransactionPayments
-            SET IsArchived = 1
-            WHERE TransactionPaymentId = @TransactionPaymentId;
-            """;
-
-        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
-
-        try
-        {
-            return await connection.ExecuteAsync(sql, new { TransactionPaymentId = transactionPaymentId }, transaction);
-        }
-        finally
-        {
-            if (transaction is null)
-            {
-                connection.Dispose();
-            }
-        }
-    }
 }

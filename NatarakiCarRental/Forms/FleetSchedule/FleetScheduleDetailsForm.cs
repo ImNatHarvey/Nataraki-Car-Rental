@@ -329,7 +329,11 @@ public sealed class FleetScheduleDetailsForm : Form
             _scheduleTypeComboBox.SelectedIndex = 0;
         }
 
-        _scheduleTypeComboBox.SelectedIndexChanged += async (_, _) => await UpdateStatusTextAsync();
+        _scheduleTypeComboBox.SelectedIndexChanged += async (_, _) => 
+        {
+            await UpdateStatusTextAsync();
+            UpdateCustomerVisibility();
+        };
         _carComboBox.SelectedIndexChanged += (_, _) => UpdateCodingDayIndicator();
         _startDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
         _endDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
@@ -790,6 +794,16 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         _statusLabel.Text = status;
         _statusLabel.ForeColor = ThemeHelper.TextPrimary;
+    }
+
+    private void UpdateCustomerVisibility()
+    {
+        bool isMaintenance = _scheduleTypeComboBox.SelectedItem?.ToString() == FleetScheduleConstants.Type.Maintenance;
+        _customerComboBox.Enabled = !isMaintenance;
+        if (isMaintenance)
+        {
+            _customerComboBox.SelectedIndex = 0; // "No customer"
+        }
     }
 
     private void UpdateCodingDayIndicator()

@@ -425,7 +425,12 @@ public sealed class TransactionService
                 null,
                 actualAdditionalCharge,
                 dbTransaction);
-            
+
+            if (request.ReturnCondition == "Late Return" && request.DaysLate > 0)
+            {
+                schedule.EndDate = schedule.EndDate.AddDays(request.DaysLate.Value);
+            }
+
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
 
             string description = $"Completed transaction {transaction.TransactionCode}. Condition: {request.ReturnCondition}";
@@ -1219,14 +1224,21 @@ public sealed class TransactionService
     public async Task CheckForOverdueRentalsAsync()
     {
         const string sql = """
-            SELECT t.TransactionId, t.TransactionCode, t.CustomerId, 
-                   (c.FirstName + ' ' + c.LastName) AS CustomerName, 
+            SELECT t.TransactionId, t.TransactionCode, t.CustomerId,
+                   (c.FirstName + ' ' + c.LastName) AS CustomerName,
                    t.EndDate
             FROM dbo.Transactions t
             INNER JOIN dbo.Customers c ON t.CustomerId = c.CustomerId
             WHERE t.TransactionStatus = 'Active'
               AND t.EndDate < CONVERT(date, sysdatetime())
-              AND t.IsArchived = 0;
+              AND t.IsArchived = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM dbo.Notifications n
+                  WHERE n.RelatedEntityId = t.TransactionId
+                    AND n.RelatedModule = 'Transaction'
+                    AND n.Title = 'Rental Overdue'
+                    AND n.IsRead = 0
+              );
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -1234,19 +1246,6 @@ public sealed class TransactionService
 
         foreach (var item in overdue)
         {
-            // Prevent duplicate unread notifications for the same transaction
-            const string sqlCheckDuplicate = """
-                SELECT COUNT(1) 
-                FROM dbo.Notifications 
-                WHERE RelatedEntityId = @EntityId 
-                  AND RelatedModule = 'Transaction' 
-                  AND Title = 'Rental Overdue'
-                  AND IsRead = 0;
-                """;
-            
-            int existingCount = await connection.ExecuteScalarAsync<int>(sqlCheckDuplicate, new { EntityId = item.TransactionId });
-            if (existingCount > 0) continue;
-
             await _notificationService.NotifyAsync(
                 "Rental Overdue",
                 $"Transaction {item.TransactionCode} for {item.CustomerName} is overdue (Due: {item.EndDate:MMM dd}).",
@@ -1255,7 +1254,6 @@ public sealed class TransactionService
                 module: "Transaction");
         }
     }
-
     private static void RollbackQuietly(SqlTransaction transaction)
     {
         try

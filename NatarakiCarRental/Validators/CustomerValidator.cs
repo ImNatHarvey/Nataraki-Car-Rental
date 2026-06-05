@@ -15,16 +15,12 @@ public sealed class CustomerValidator : AbstractValidator<Customer>
             .NotEmpty()
             .WithMessage("Last name is required.");
 
-        RuleFor(customer => customer.PhoneNumber)
-            .NotEmpty()
-            .WithMessage("Phone number is required.")
-            .Matches(@"^(09\d{9}|\+639\d{9})$")
-            .WithMessage("Phone number must be 11 digits starting with 09 or use +639XXXXXXXXX format.");
+        ApplyPhoneNumberRules(RuleFor(customer => customer.PhoneNumber));
 
         RuleFor(customer => customer.Email)
             .EmailAddress()
             .When(customer => !string.IsNullOrWhiteSpace(customer.Email))
-            .WithMessage("Email address is invalid.");
+            .WithMessage("Email address is not valid.");
 
         When(HasAnyAddressValue, () =>
         {
@@ -44,6 +40,15 @@ public sealed class CustomerValidator : AbstractValidator<Customer>
                 .NotEmpty()
                 .WithMessage("Barangay is required when entering an address.");
         });
+    }
+
+    public static void ApplyPhoneNumberRules<T>(IRuleBuilder<T, string?> ruleBuilder)
+    {
+        ruleBuilder
+            .NotEmpty()
+            .WithMessage("Phone number is required.")
+            .Matches(@"^09\d{9}$")
+            .WithMessage("Phone number must be exactly 11 digits and start with 09 (e.g., 09123456789).");
     }
 
     private static bool HasAnyAddressValue(Customer customer)

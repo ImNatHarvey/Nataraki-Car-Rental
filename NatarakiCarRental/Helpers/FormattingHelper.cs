@@ -4,7 +4,7 @@ namespace NatarakiCarRental.Helpers;
 
 public static class FormattingHelper
 {
-    public static string FormatPeso(decimal amount) => $"PHP {amount:N2}";
+    public static string FormatPeso(decimal amount) => $"₱{amount:N2}";
 
     public static string FormatPercent(decimal value) => $"{value:N1}%";
 

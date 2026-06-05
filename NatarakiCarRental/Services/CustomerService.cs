@@ -40,11 +40,6 @@ public sealed class CustomerService
     {
     }
 
-    public CustomerService(CustomerRepository customerRepository, ActivityLogService activityLogService)
-        : this(customerRepository, new FleetScheduleRepository(), activityLogService, new NotificationService(), new DbConnectionFactory(), currentUserId: null)
-    {
-    }
-
     public CustomerService(
         CustomerRepository customerRepository,
         FleetScheduleRepository fleetScheduleRepository,

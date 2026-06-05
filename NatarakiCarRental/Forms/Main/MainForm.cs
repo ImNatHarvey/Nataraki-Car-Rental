@@ -224,14 +224,15 @@ public sealed class MainForm : Form
 
         _activeNotificationPanel = new NotificationPanelControl();
         
-        // Position below bell - Use fixed width 340 for reliable positioning
-        const int panelWidth = 340;
+        // Position below bell - Use fixed width 460 for better content layout
+        const int panelWidth = 460;
         Point bellPos = _notificationBell.PointToScreen(Point.Empty);
         Point formPos = PointToScreen(Point.Empty);
         
         int x = bellPos.X - formPos.X - panelWidth + _notificationBell.Width + 10;
         int y = bellPos.Y - formPos.Y + _notificationBell.Height + 5;
 
+        _activeNotificationPanel.Size = new Size(panelWidth, 500);
         _activeNotificationPanel.Location = new Point(x, y);
         _activeNotificationPanel.OnViewAllClicked += (s, ev) =>
         {

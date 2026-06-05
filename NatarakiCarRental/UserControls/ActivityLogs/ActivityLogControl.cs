@@ -54,9 +54,17 @@ public sealed class ActivityLogControl : UserControl
         Load += ActivityLogControl_Load;
         Disposed += (s, e) => 
         {
+            Load -= ActivityLogControl_Load;
+            Resize -= ActivityLogControl_Resize;
             _searchTimer.Dispose();
             _resizeTimer.Dispose();
         };
+    }
+
+    private void ActivityLogControl_Resize(object? sender, EventArgs e)
+    {
+        _resizeTimer.Stop();
+        _resizeTimer.Start();
     }
 
     private async void ResizeTimer_Tick(object? sender, EventArgs e)
@@ -456,11 +464,11 @@ public sealed class ActivityLogControl : UserControl
             IReadOnlyList<string> actionTypes = await _activityLogService.GetActionTypesAsync();
             IReadOnlyList<string> entityNames = await _activityLogService.GetEntityNamesAsync();
 
-            var moduleOptions = entityNames.Select(name => new LookupOption(name, FormatModuleName(name)));
             var actionOptions = actionTypes.Select(name => new LookupOption(name, name));
+            var moduleOptions = entityNames.Select(name => new LookupOption(name, FormatModuleName(name)));
 
-            SetFilterItems(_entityTypeComboBox, "All Modules", moduleOptions);
             SetFilterItems(_actionComboBox, "All Actions", actionOptions);
+            SetFilterItems(_entityTypeComboBox, "All Modules", moduleOptions);
         }
         catch (Exception exception)
         {

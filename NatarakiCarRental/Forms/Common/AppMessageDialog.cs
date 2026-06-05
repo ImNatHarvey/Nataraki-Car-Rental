@@ -104,6 +104,11 @@ public sealed class AppMessageDialog : Form
         }
 
         AcceptButton = primaryButton;
+
+        if (logoControl is PictureBox pb)
+        {
+            FormClosed += (_, _) => pb.Image?.Dispose();
+        }
     }
 
     private static Control CreateBrandingLogoControl(Color accentColor)

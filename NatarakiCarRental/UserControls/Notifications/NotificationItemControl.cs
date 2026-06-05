@@ -9,18 +9,19 @@ public sealed class NotificationItemControl : UserControl
 {
     private readonly Notification _notification;
     private readonly NotificationService _notificationService = new();
-    private readonly Action _onChanged;
+    private readonly Action<NotificationItemControl, bool> _onAction;
     private readonly IconButton _actionButton = new();
 
-    public NotificationItemControl(Notification notification, Action onChanged)
+    public NotificationItemControl(Notification notification, Action<NotificationItemControl, bool> onAction)
     {
         _notification = notification;
-        _onChanged = onChanged;
+        _onAction = onAction;
         InitializeControl();
     }
 
     private void InitializeControl()
     {
+        DoubleBuffered = true;
         Dock = DockStyle.Top;
         Height = 72;
         MinimumSize = new Size(0, 72);
@@ -61,11 +62,11 @@ public sealed class NotificationItemControl : UserControl
             Font = FontHelper.Regular(8.5F),
             ForeColor = ThemeHelper.TextSecondary,
             AutoSize = false,
-            Size = new Size(240, 18), // Reduced to make room for action button
             Location = new Point(16, 32),
             AutoEllipsis = true,
             BackColor = Color.Transparent,
-            UseMnemonic = false
+            UseMnemonic = false,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
 
         Label timeLabel = new()
@@ -80,12 +81,12 @@ public sealed class NotificationItemControl : UserControl
         };
 
         _actionButton.Size = new Size(32, 32);
-        _actionButton.Location = new Point(290, 20);
         _actionButton.FlatStyle = FlatStyle.Flat;
         _actionButton.FlatAppearance.BorderSize = 0;
         _actionButton.BackColor = Color.Transparent;
         _actionButton.Cursor = Cursors.Hand;
         _actionButton.IconSize = 18;
+        _actionButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         
         UpdateActionButtonState();
 
@@ -105,6 +106,12 @@ public sealed class NotificationItemControl : UserControl
         Controls.Add(_actionButton);
         Controls.Add(bottomBorder);
 
+        // Apply dynamic sizes based on starting width
+        int initialWidth = 450; // Expected width from container, to avoid initial layout jump
+        Width = initialWidth;
+        messageLabel.Size = new Size(initialWidth - 64, 18);
+        _actionButton.Location = new Point(initialWidth - 48, 20);
+
         // Ensure sub-controls don't block clicks, except the action button
         foreach (Control c in Controls)
         {
@@ -118,6 +125,16 @@ public sealed class NotificationItemControl : UserControl
         Click += async (s, e) => await HandleItemClick();
         MouseEnter += NotificationItem_MouseEnter;
         MouseLeave += NotificationItem_MouseLeave;
+    }
+
+    public void MarkAsReadUI()
+    {
+        if (!_notification.IsRead)
+        {
+            _notification.IsRead = true;
+            BackColor = ThemeHelper.Surface;
+            UpdateActionButtonState();
+        }
     }
 
     private void UpdateActionButtonState()
@@ -143,12 +160,14 @@ public sealed class NotificationItemControl : UserControl
         if (!_notification.IsRead)
         {
             await _notificationService.MarkAsReadAsync(_notification.NotificationId);
+            MarkAsReadUI();
+            _onAction(this, false); // false = not deleted
         }
         else
         {
             await _notificationService.DeleteAsync(_notification.NotificationId);
+            _onAction(this, true); // true = deleted
         }
-        _onChanged();
     }
 
     private async Task HandleItemClick()
@@ -156,7 +175,8 @@ public sealed class NotificationItemControl : UserControl
         if (!_notification.IsRead)
         {
             await _notificationService.MarkAsReadAsync(_notification.NotificationId);
-            _onChanged();
+            MarkAsReadUI();
+            _onAction(this, false);
         }
     }
 

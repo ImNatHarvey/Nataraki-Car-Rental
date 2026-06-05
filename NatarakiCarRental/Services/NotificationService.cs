@@ -57,6 +57,11 @@ public sealed class NotificationService
         NotificationsChanged?.Invoke(null, EventArgs.Empty);
     }
 
+    public static void NotifyNotificationsChanged()
+    {
+        NotificationsChanged?.Invoke(null, EventArgs.Empty);
+    }
+
     public async Task DeleteAsync(int notificationId)
     {
         await _repository.DeleteAsync(notificationId);

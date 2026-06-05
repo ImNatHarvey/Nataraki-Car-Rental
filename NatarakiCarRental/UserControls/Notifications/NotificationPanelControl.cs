@@ -1,3 +1,4 @@
+using System.Reflection;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
@@ -26,6 +27,12 @@ public sealed class NotificationPanelControl : UserControl
 
     public NotificationPanelControl()
     {
+        // Enable double buffering for the panel to reduce flicker
+        typeof(Panel).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(_listPanel, true);
+        
+        DoubleBuffered = true;
+        
         InitializeControl();
     }
 
@@ -73,7 +80,18 @@ public sealed class NotificationPanelControl : UserControl
         markAllRead.FlatAppearance.BorderSize = 0;
         markAllRead.Click += async (s, e) => {
             await _notificationService.MarkAllAsReadAsync();
-            await RefreshAsync();
+            
+            // Partial update instead of full rebuild
+            _listPanel.SuspendLayout();
+            foreach (Control control in _listPanel.Controls)
+            {
+                if (control is NotificationItemControl item)
+                {
+                    item.MarkAsReadUI();
+                }
+            }
+            _listPanel.ResumeLayout(true);
+            NotificationService.NotifyNotificationsChanged();
         };
 
         header.Controls.Add(titleLabel);
@@ -120,12 +138,39 @@ public sealed class NotificationPanelControl : UserControl
 
     public event EventHandler? OnViewAllClicked;
 
+    private void HandleNotificationAction(NotificationItemControl item, bool isDeleted)
+    {
+        if (isDeleted)
+        {
+            _listPanel.SuspendLayout();
+            _listPanel.Controls.Remove(item);
+            item.Dispose();
+            
+            if (_listPanel.Controls.Count == 0)
+            {
+                _emptyLabel.Visible = true;
+                _listPanel.Visible = false;
+                _emptyLabel.BringToFront();
+            }
+            _listPanel.ResumeLayout(true);
+        }
+        
+        NotificationService.NotifyNotificationsChanged();
+    }
+
     public async Task RefreshAsync()
     {
         try
         {
             _listPanel.SuspendLayout();
-            _listPanel.Controls.Clear();
+            
+            // Dispose existing controls properly
+            while (_listPanel.Controls.Count > 0)
+            {
+                var c = _listPanel.Controls[0];
+                _listPanel.Controls.Remove(c);
+                c.Dispose();
+            }
 
             var notifications = await _notificationService.GetRecentNotificationsAsync(30);
             
@@ -141,17 +186,11 @@ public sealed class NotificationPanelControl : UserControl
                 _listPanel.Visible = true;
                 _listPanel.BringToFront();
 
-                // To have newest at the top with Dock = Top, we add oldest first, then newer on top
-                // OR add in order and use SendToBack/BringToFront.
-                // Most reliable newest-first with Dock=Top: Add oldest first.
                 for (int i = notifications.Count - 1; i >= 0; i--)
                 {
                     var n = notifications[i];
-                    var item = new NotificationItemControl(n, async () => {
-                        await RefreshAsync();
-                    });
+                    var item = new NotificationItemControl(n, HandleNotificationAction);
                     item.Dock = DockStyle.Top;
-                    item.Width = 330; // Reliable width for 340 container
                     _listPanel.Controls.Add(item);
                 }
             }
@@ -163,7 +202,6 @@ public sealed class NotificationPanelControl : UserControl
         finally
         {
             _listPanel.ResumeLayout(true);
-            _listPanel.PerformLayout();
         }
     }
 }

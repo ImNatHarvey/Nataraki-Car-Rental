@@ -137,9 +137,17 @@ public sealed class ManageSystemControl : UserControl
         Load += ManageSystemControl_Load;
         Disposed += (_, _) =>
         {
+            Load -= ManageSystemControl_Load;
+            Resize -= ManageSystemControl_Resize;
             _profileAvatarPreview.Image?.Dispose();
             _resizeTimer.Dispose();
         };
+    }
+
+    private void ManageSystemControl_Resize(object? sender, EventArgs e)
+    {
+        _resizeTimer.Stop();
+        _resizeTimer.Start();
     }
 
     private async void ResizeTimer_Tick(object? sender, EventArgs e)

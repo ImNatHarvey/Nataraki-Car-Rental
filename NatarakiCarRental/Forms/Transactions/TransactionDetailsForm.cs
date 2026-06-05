@@ -684,6 +684,7 @@ public sealed class TransactionDetailsForm : Form
             FleetScheduleConstants.Type.Rental
         });
         _walkInTransactionTypeComboBox.SelectedItem = FleetScheduleConstants.Type.Reservation;
+        _walkInTransactionTypeComboBox.Enabled = false;
     }
 
     private void UpdateReservationSummary()

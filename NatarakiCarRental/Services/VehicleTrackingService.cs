@@ -33,7 +33,7 @@ public sealed class VehicleTrackingService
 
     public Task<IReadOnlyList<Car>> GetTrackableCarsAsync()
     {
-        return _carRepository.GetActiveCarsAsync(DateTime.Today);
+        return _carRepository.SearchCarsAsync(string.Empty, includeArchived: false, DateTime.Today);
     }
 
     public async Task<int> AddLocationAsync(VehicleLocation location)
