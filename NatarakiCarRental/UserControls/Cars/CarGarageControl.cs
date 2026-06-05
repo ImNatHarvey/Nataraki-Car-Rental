@@ -351,7 +351,7 @@ public sealed class CarGarageControl : UserControl
         _carsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
         _carsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
 
-        _carsGrid.CellContentClick += CarsGrid_CellContentClick;
+        _carsGrid.CellMouseClick += CarsGrid_CellMouseClick;
         _carsGrid.CellMouseMove += CarsGrid_CellMouseMove;
         _carsGrid.CellMouseLeave += (_, _) => _carsGrid.Cursor = Cursors.Default;
         _carsGrid.CellPainting += CarsGrid_CellPainting;
@@ -381,73 +381,32 @@ public sealed class CarGarageControl : UserControl
         _carsGrid.Columns.Add("CodingDay", "Coding");
         _carsGrid.Columns.Add("Status", "Status");
 
-        AddActionColumn("ViewAction", "Actions", "View");
-
-        if (_showArchived)
+        DataGridViewTextBoxColumn actionsColumn = new()
         {
-            AddActionColumn("RestoreAction", "", "Restore");
-        }
-        else
-        {
-            AddActionColumn("EditAction", "", "Edit");
-            AddActionColumn("ArchiveAction", "", "Archive");
-        }
+            Name = "Actions",
+            HeaderText = "Actions",
+            ReadOnly = true
+        };
+        _carsGrid.Columns.Add(actionsColumn);
 
         if (_carsGrid.Columns["CarId"] is DataGridViewColumn carIdColumn)
         {
             carIdColumn.Visible = false;
         }
 
-        if (_carsGrid.Columns["RatePerDay"] is DataGridViewColumn rateColumn)
+        SetFillWeight("CarName", 120);
+        SetFillWeight("Model", 100);
+        SetFillWeight("PlateNumber", 90);
+        SetFillWeight("RatePerDay", 80);
+        SetFillWeight("CodingDay", 80);
+        SetFillWeight("Status", 100);
+        
+        if (_carsGrid.Columns["Actions"] is DataGridViewColumn actionsCol)
         {
-            rateColumn.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+            actionsCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            actionsCol.Width = 240;
+            actionsCol.MinimumWidth = 240;
         }
-
-        // REDUCED weights on the left side to give more room to the buttons on the right
-        SetFillWeight("CarName", 85);
-        SetFillWeight("Model", 80);
-        SetFillWeight("PlateNumber", 80);
-        SetFillWeight("RatePerDay", 70);
-        SetFillWeight("CodingDay", 65);
-        SetFillWeight("Status", 95);
-
-        // INCREASED weights for the action buttons so they are all equally breathable
-        if (_carsGrid.Columns["ViewAction"] is DataGridViewColumn viewColumn)
-        {
-            viewColumn.FillWeight = 60;
-        }
-
-        if (_carsGrid.Columns["EditAction"] is DataGridViewColumn editColumn)
-        {
-            editColumn.FillWeight = 60;
-        }
-
-        if (_carsGrid.Columns["ArchiveAction"] is DataGridViewColumn archiveColumn)
-        {
-            archiveColumn.FillWeight = 60;
-        }
-
-        if (_carsGrid.Columns["RestoreAction"] is DataGridViewColumn restoreColumn)
-        {
-            restoreColumn.FillWeight = 60;
-        }
-    }
-
-    private void AddActionColumn(string name, string headerText, string buttonText)
-    {
-        DataGridViewButtonColumn column = new()
-        {
-            Name = name,
-            HeaderText = headerText,
-            Text = buttonText,
-            UseColumnTextForButtonValue = true,
-            FlatStyle = FlatStyle.Flat
-        };
-
-        column.DefaultCellStyle.BackColor = ThemeHelper.Surface;
-        column.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-
-        _carsGrid.Columns.Add(column);
     }
 
     private void SetFillWeight(string columnName, float weight)
@@ -530,6 +489,16 @@ public sealed class CarGarageControl : UserControl
             string codingDayDisplay = string.IsNullOrWhiteSpace(car.CodingDay) ? "-" :
                 (car.CodingDay.StartsWith("None", StringComparison.OrdinalIgnoreCase) ? "None" : car.CodingDay);
 
+            string actions = "View";
+            if (!_showArchived)
+            {
+                actions += "|Edit|Archive";
+            }
+            else
+            {
+                actions += "|Restore";
+            }
+
             _carsGrid.Rows.Add(
                 car.CarId,
                 car.CarName,
@@ -537,7 +506,8 @@ public sealed class CarGarageControl : UserControl
                 car.PlateNumber,
                 FormatPeso(car.RatePerDay),
                 codingDayDisplay,
-                car.Status);
+                car.Status,
+                actions);
         }
 
         _emptyStateLabel.Text = _showArchived ? "No archived car records found." : "No active car records found.";
@@ -565,93 +535,57 @@ public sealed class CarGarageControl : UserControl
 
         string columnName = _carsGrid.Columns[e.ColumnIndex].Name;
         bool isStatus = columnName == "Status";
-        bool isAction = columnName is "ViewAction" or "EditAction" or "ArchiveAction" or "RestoreAction";
+        bool isAction = columnName == "Actions";
 
-        if (isStatus || isAction)
+        if (!isStatus && !isAction) return;
+
+        e.PaintBackground(e.CellBounds, true);
+        string text = e.Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrEmpty(text) || e.Graphics is null) return;
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
+
+        if (isAction)
         {
-            e.PaintBackground(e.CellBounds, true);
+            string[] actions = text.Split('|');
+            var layout = GetCarActionButtonBounds(e.CellBounds, actions);
 
-            string text = isAction ? (e.FormattedValue?.ToString() ?? string.Empty) : (e.Value?.ToString() ?? string.Empty);
-            if (string.IsNullOrEmpty(text)) return;
-
-            Color backColor = ThemeHelper.Surface;
-            Color foreColor = Color.White;
-
-            if (isStatus)
+            for (int i = 0; i < layout.Count; i++)
             {
-                switch (text)
+                var entry = layout[i];
+                Color color = GetPillColor(entry.Action);
+                using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
+                using SolidBrush background = new(color);
+                using SolidBrush foreground = new(Color.White);
+
+                e.Graphics.FillPath(background, path);
+
+                using StringFormat format = new()
                 {
-                    case "Available":
-                        backColor = ThemeHelper.Success;
-                        break;
-                    case "Rented":
-                        backColor = ThemeHelper.Success;
-                        break;
-                    case "Maintenance":
-                        backColor = ThemeHelper.Danger;
-                        break;
-                    case "Reserved":
-                        backColor = ThemeHelper.Primary;
-                        break;
-                    default:
-                        backColor = ThemeHelper.GrayIcon;
-                        break;
-                }
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    FormatFlags = StringFormatFlags.NoWrap,
+                    Trimming = StringTrimming.EllipsisCharacter
+                };
+                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
             }
-            else if (isAction)
-            {
-                switch (columnName)
-                {
-                    case "ViewAction":
-                        backColor = ThemeHelper.Primary;
-                        break;
-                    case "EditAction":
-                        backColor = ThemeHelper.Success;
-                        break;
-                    case "ArchiveAction":
-                        backColor = ThemeHelper.Danger;
-                        break;
-                    case "RestoreAction":
-                        backColor = ThemeHelper.Warning;
-                        break;
-                }
-            }
-
-            if (e.Graphics is null)
-            {
-                return;
-            }
-
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-            Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
+        }
+        else
+        {
+            Color color = GetPillColor(text);
+            float height = 26;
             SizeF textSize = e.Graphics.MeasureString(text, font);
-            float pillHeight = 26;
-            float pillWidth;
+            float width = textSize.Width + 24;
+            if (width > e.CellBounds.Width - 4) width = e.CellBounds.Width - 4;
 
-            if (isAction)
-            {
-                pillWidth = e.CellBounds.Width - 12;
-            }
-            else
-            {
-                pillWidth = textSize.Width + 24;
-            }
+            float x = e.CellBounds.X + 8;
+            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
+            RectangleF rect = new(x, y, width, height);
 
-            if (pillWidth > e.CellBounds.Width - 4) pillWidth = e.CellBounds.Width - 4;
-
-            float x = isStatus
-                ? e.CellBounds.X + 8
-                : e.CellBounds.X + (e.CellBounds.Width - pillWidth) / 2;
-
-            float y = e.CellBounds.Y + (e.CellBounds.Height - pillHeight) / 2;
-
-            RectangleF rect = new RectangleF(x, y, pillWidth, pillHeight);
-
-            using GraphicsPath path = GetRoundedRect(rect, pillHeight / 2);
-            using SolidBrush backBrush = new(backColor);
-            using SolidBrush foreBrush = new(foreColor);
-
+            using GraphicsPath path = GetRoundedRect(rect, height / 2);
+            using SolidBrush backBrush = new(color);
+            using SolidBrush foreBrush = new(Color.White);
             e.Graphics.FillPath(backBrush, path);
 
             using StringFormat format = new()
@@ -662,78 +596,105 @@ public sealed class CarGarageControl : UserControl
                 Trimming = StringTrimming.EllipsisCharacter
             };
             e.Graphics.DrawString(text, font, foreBrush, rect, format);
-
-            e.Handled = true;
         }
+
+        e.Handled = true;
     }
 
-    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
+    private static Color GetPillColor(string text)
     {
-        GraphicsPath path = new();
-        float diameter = radius * 2;
-        Size size = new Size((int)diameter, (int)diameter);
-        RectangleF arc = new RectangleF(rect.Location, size);
-
-        if (radius == 0)
+        return text switch
         {
-            path.AddRectangle(rect);
-            return path;
-        }
-
-        path.AddArc(arc, 180, 90);
-        arc.X = rect.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = rect.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = rect.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
+            "Available" or "Rented" => ThemeHelper.Success,
+            "Maintenance" => ThemeHelper.Danger,
+            "Reserved" => ThemeHelper.Primary,
+            "View" => ThemeHelper.Primary,
+            "Edit" => ThemeHelper.Success,
+            "Archive" => ThemeHelper.Danger,
+            "Restore" => ThemeHelper.Warning,
+            _ => ThemeHelper.GrayIcon
+        };
     }
 
-    private async void CarsGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+    private List<(string Action, RectangleF Bounds)> GetCarActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        List<(string Action, RectangleF Bounds)> result = [];
+        if (actions.Count == 0) return result;
+
+        using Graphics g = CreateGraphics();
+        Font font = FontHelper.SemiBold(9F);
+        float currentX = cellBounds.X + 4;
+        float height = 26;
+        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
+
+        foreach (string action in actions)
         {
-            return;
+            float width = g.MeasureString(action, font).Width + 22F;
+            result.Add((action, new RectangleF(currentX, y, width, height)));
+            currentX += width + 6;
         }
+
+        return result;
+    }
+
+    private async void CarsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
 
         string columnName = _carsGrid.Columns[e.ColumnIndex].Name;
-
-        if (columnName is not "ViewAction" and not "EditAction" and not "ArchiveAction" and not "RestoreAction")
-        {
-            return;
-        }
+        if (columnName != "Actions") return;
 
         int carId = Convert.ToInt32(_carsGrid.Rows[e.RowIndex].Cells["CarId"].Value);
+        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
 
-        if (columnName == "ViewAction")
+        if (clickedAction is null) return;
+
+        switch (clickedAction)
         {
-            await ViewCarAsync(carId);
-            return;
+            case "View":
+                await ViewCarAsync(carId);
+                break;
+            case "Edit":
+                await EditCarAsync(carId);
+                break;
+            case "Archive":
+                await ArchiveCarAsync(carId);
+                break;
+            case "Restore":
+                await RestoreCarAsync(carId);
+                break;
+        }
+    }
+
+    private string? GetActionAt(int rowIndex, int columnIndex, int x, int y)
+    {
+        if (rowIndex < 0 || columnIndex < 0 || _carsGrid.Columns[columnIndex].Name != "Actions") return null;
+
+        string text = _carsGrid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        using Graphics graphics = _carsGrid.CreateGraphics();
+        Font font = _carsGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
+        float currentX = 4F;
+        float yOffset = (_carsGrid.Rows[rowIndex].Height - 26) / 2F;
+
+        foreach (string action in text.Split('|'))
+        {
+            float width = graphics.MeasureString(action, font).Width + 22F;
+            RectangleF rect = new(currentX, yOffset, width, 26);
+            if (rect.Contains(x, y)) return action;
+
+            currentX += width + 6F;
         }
 
-        if (columnName == "EditAction")
-        {
-            await EditCarAsync(carId);
-            return;
-        }
-
-        if (columnName == "ArchiveAction")
-        {
-            await ArchiveCarAsync(carId);
-            return;
-        }
-
-        if (columnName == "RestoreAction")
-        {
-            await RestoreCarAsync(carId);
-        }
+        return null;
     }
 
     private void CarsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        _carsGrid.Cursor = IsActionColumn(e.ColumnIndex) ? Cursors.Hand : Cursors.Default;
+        _carsGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is not null
+            ? Cursors.Hand
+            : Cursors.Default;
     }
 
     private bool IsActionColumn(int columnIndex)
@@ -874,5 +835,29 @@ public sealed class CarGarageControl : UserControl
 
         await _carService.RestoreCarAsync(carId);
         await LoadCarsAsync();
+    }
+
+    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
+    {
+        GraphicsPath path = new();
+        float diameter = radius * 2;
+        SizeF size = new(diameter, diameter);
+        RectangleF arc = new(rect.Location, size);
+
+        if (radius <= 0)
+        {
+            path.AddRectangle(rect);
+            return path;
+        }
+
+        path.AddArc(arc, 180, 90);
+        arc.X = rect.Right - diameter;
+        path.AddArc(arc, 270, 90);
+        arc.Y = rect.Bottom - diameter;
+        path.AddArc(arc, 0, 90);
+        arc.X = rect.Left;
+        path.AddArc(arc, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }

@@ -531,24 +531,16 @@ public sealed class TransactionControl : UserControl
         if (isAction)
         {
             string[] actions = text.Split('|');
-            float currentX = e.CellBounds.X + 4;
-            float height = StatusPillHeight;
-            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
+            var layout = GetTransactionActionButtonBounds(e.CellBounds, actions);
 
-            using Pen linePen = new(ThemeHelper.TableGridLine);
-
-            for (int i = 0; i < actions.Length; i++)
+            for (int i = 0; i < layout.Count; i++)
             {
-                string action = actions[i];
-                float width = GetActionPillWidth(e.Graphics, font, action);
-                RectangleF rect = new(currentX, y, width, height);
-
-                Color color = GetPillColor(action);
-                using GraphicsPath path = CreateRoundedRect(rect, height / 2);
+                var entry = layout[i];
+                Color color = GetPillColor(entry.Action);
+                using GraphicsPath path = CreateRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
                 using SolidBrush background = new(color);
                 using SolidBrush foreground = new(Color.White);
 
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 e.Graphics.FillPath(background, path);
 
                 using StringFormat format = new()
@@ -558,15 +550,7 @@ public sealed class TransactionControl : UserControl
                     FormatFlags = StringFormatFlags.NoWrap,
                     Trimming = StringTrimming.EllipsisCharacter
                 };
-                e.Graphics.DrawString(action, font, foreground, rect, format);
-
-                currentX += width + 6;
-
-                if (i < actions.Length - 1)
-                {
-                    float lineX = currentX - 3.5F;
-                    e.Graphics.DrawLine(linePen, lineX, e.CellBounds.Top, lineX, e.CellBounds.Bottom);
-                }
+                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
             }
         }
         else
@@ -779,18 +763,30 @@ public sealed class TransactionControl : UserControl
         return null;
     }
 
+    private List<(string Action, RectangleF Bounds)> GetTransactionActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
+    {
+        List<(string Action, RectangleF Bounds)> result = [];
+        if (actions.Count == 0) return result;
+
+        using Graphics g = CreateGraphics();
+        Font font = FontHelper.SemiBold(9F);
+        float currentX = cellBounds.X + 4;
+        float height = StatusPillHeight;
+        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
+
+        foreach (string action in actions)
+        {
+            float width = GetActionPillWidth(g, font, action);
+            result.Add((action, new RectangleF(currentX, y, width, height)));
+            currentX += width + 6;
+        }
+
+        return result;
+    }
+
     private static float GetActionPillWidth(Graphics graphics, Font font, string action)
     {
-        float measuredWidth = graphics.MeasureString(action, font).Width + 22F;
-        float minimumWidth = action switch
-        {
-            "Start Rental" => 126F,
-            "Payment" or "Extend" or "Complete" or "Restore" => 92F,
-            "View" or "Edit" or "Archive" or "Cancel" => 74F,
-            _ => 74F
-        };
-
-        return Math.Max(measuredWidth, minimumWidth);
+        return graphics.MeasureString(action, font).Width + 22F;
     }
 
     private async Task ViewTransactionAsync(int transactionId)

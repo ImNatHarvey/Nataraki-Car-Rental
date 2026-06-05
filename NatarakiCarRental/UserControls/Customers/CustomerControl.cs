@@ -321,7 +321,7 @@ public sealed class CustomerControl : UserControl
         _customersGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
         _customersGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
         _customersGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-        _customersGrid.CellContentClick += CustomersGrid_CellContentClick;
+        _customersGrid.CellMouseClick += CustomersGrid_CellMouseClick;
         _customersGrid.CellMouseMove += CustomersGrid_CellMouseMove;
         _customersGrid.CellMouseLeave += (_, _) => _customersGrid.Cursor = Cursors.Default;
         _customersGrid.CellPainting += CustomersGrid_CellPainting;
@@ -350,23 +350,13 @@ public sealed class CustomerControl : UserControl
         _customersGrid.Columns.Add("Status", "Status");
         _customersGrid.Columns.Add("BlacklistReason", "Blacklist Reason");
 
-        AddActionColumn("ViewAction", "Actions", "View");
-
-        if (_filter == CustomerListFilter.Active)
+        DataGridViewTextBoxColumn actionsColumn = new()
         {
-            AddActionColumn("EditAction", "", "Edit");
-            AddActionColumn("BlacklistAction", "", "Blacklist");
-            AddActionColumn("ArchiveAction", "", "Archive");
-        }
-        else if (_filter == CustomerListFilter.Blacklisted)
-        {
-            AddActionColumn("EditAction", "", "Edit");
-            AddActionColumn("RemoveBlacklistAction", "", "Remove Blacklist");
-        }
-        else
-        {
-            AddActionColumn("RestoreAction", "", "Restore");
-        }
+            Name = "Actions",
+            HeaderText = "Actions",
+            ReadOnly = true
+        };
+        _customersGrid.Columns.Add(actionsColumn);
 
         if (_customersGrid.Columns["CustomerId"] is DataGridViewColumn idColumn)
         {
@@ -378,18 +368,19 @@ public sealed class CustomerControl : UserControl
             reasonColumn.Visible = _filter == CustomerListFilter.Blacklisted;
         }
 
-        SetFillWeight("FullName", 95);
-        SetFillWeight("PhoneNumber", 80);
-        SetFillWeight("Email", 95);
-        SetFillWeight("Address", 120);
-        SetFillWeight("Status", 75);
-        SetFillWeight("BlacklistReason", 110);
-        SetFillWeight("ViewAction", 58);
-        SetFillWeight("EditAction", 58);
-        SetFillWeight("BlacklistAction", 74);
-        SetFillWeight("RemoveBlacklistAction", 120);
-        SetFillWeight("ArchiveAction", 62);
-        SetFillWeight("RestoreAction", 68);
+        SetFillWeight("FullName", 100);
+        SetFillWeight("PhoneNumber", 85);
+        SetFillWeight("Email", 100);
+        SetFillWeight("Address", 130);
+        SetFillWeight("Status", 80);
+        SetFillWeight("BlacklistReason", 120);
+        
+        if (_customersGrid.Columns["Actions"] is DataGridViewColumn actionsCol)
+        {
+            actionsCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            actionsCol.Width = 320;
+            actionsCol.MinimumWidth = 320;
+        }
     }
 
     private void SetFillWeight(string columnName, float weight)
@@ -482,6 +473,20 @@ public sealed class CustomerControl : UserControl
 
         foreach (Customer customer in pagedCustomers)
         {
+            string actions = "View";
+            if (_filter == CustomerListFilter.Active)
+            {
+                actions += "|Edit|Blacklist|Archive";
+            }
+            else if (_filter == CustomerListFilter.Blacklisted)
+            {
+                actions += "|Edit|Remove Blacklist";
+            }
+            else
+            {
+                actions += "|Restore";
+            }
+
             _customersGrid.Rows.Add(
                 customer.CustomerId,
                 $"{customer.FirstName} {customer.LastName}".Trim(),
@@ -489,7 +494,8 @@ public sealed class CustomerControl : UserControl
                 string.IsNullOrWhiteSpace(customer.Email) ? "-" : customer.Email,
                 FormatAddress(customer),
                 GetStatusText(customer),
-                customer.BlacklistReason ?? "-");
+                customer.BlacklistReason ?? "-",
+                actions);
         }
 
         _emptyStateLabel.Text = _filter switch
@@ -549,7 +555,7 @@ public sealed class CustomerControl : UserControl
 
         string columnName = _customersGrid.Columns[e.ColumnIndex].Name;
         bool isStatus = columnName == "Status";
-        bool isAction = columnName.EndsWith("Action", StringComparison.Ordinal);
+        bool isAction = columnName == "Actions";
 
         if (!isStatus && !isAction)
         {
@@ -557,7 +563,7 @@ public sealed class CustomerControl : UserControl
         }
 
         e.PaintBackground(e.CellBounds, true);
-        string text = isAction ? e.FormattedValue?.ToString() ?? string.Empty : e.Value?.ToString() ?? string.Empty;
+        string text = e.Value?.ToString() ?? string.Empty;
 
         if (string.IsNullOrEmpty(text))
         {
@@ -569,38 +575,61 @@ public sealed class CustomerControl : UserControl
             return;
         }
 
-        Color backColor = GetPillBackColor(columnName, text);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
         Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
-        SizeF textSize = e.Graphics.MeasureString(text, font);
-        float pillHeight = 26;
-        float pillWidth = isAction ? e.CellBounds.Width - 10 : textSize.Width + 24;
 
-        if (pillWidth > e.CellBounds.Width - 4)
+        if (isAction)
         {
-            pillWidth = e.CellBounds.Width - 4;
+            string[] actions = text.Split('|');
+            var layout = GetCustomerActionButtonBounds(e.CellBounds, actions);
+
+            for (int i = 0; i < layout.Count; i++)
+            {
+                var entry = layout[i];
+                Color color = GetPillBackColor(columnName, entry.Action);
+                using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
+                using SolidBrush background = new(color);
+                using SolidBrush foreground = new(Color.White);
+
+                e.Graphics.FillPath(background, path);
+
+                using StringFormat format = new()
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    FormatFlags = StringFormatFlags.NoWrap,
+                    Trimming = StringTrimming.EllipsisCharacter
+                };
+                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
+            }
+        }
+        else
+        {
+            Color color = GetPillBackColor(columnName, text);
+            float height = 26;
+            SizeF textSize = e.Graphics.MeasureString(text, font);
+            float width = textSize.Width + 24;
+            if (width > e.CellBounds.Width - 4) width = e.CellBounds.Width - 4;
+            
+            float x = e.CellBounds.X + 8;
+            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
+            RectangleF rect = new(x, y, width, height);
+
+            using GraphicsPath path = GetRoundedRect(rect, height / 2);
+            using SolidBrush backBrush = new(color);
+            using SolidBrush foreBrush = new(Color.White);
+            e.Graphics.FillPath(backBrush, path);
+
+            using StringFormat format = new()
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                FormatFlags = StringFormatFlags.NoWrap,
+                Trimming = StringTrimming.EllipsisCharacter
+            };
+            e.Graphics.DrawString(text, font, foreBrush, rect, format);
         }
 
-        float x = isStatus
-            ? e.CellBounds.X + 8
-            : e.CellBounds.X + (e.CellBounds.Width - pillWidth) / 2;
-        float y = e.CellBounds.Y + (e.CellBounds.Height - pillHeight) / 2;
-        RectangleF rect = new(x, y, pillWidth, pillHeight);
-
-        using GraphicsPath path = GetRoundedRect(rect, pillHeight / 2);
-        using SolidBrush backBrush = new(backColor);
-        using SolidBrush foreBrush = new(Color.White);
-        e.Graphics.FillPath(backBrush, path);
-
-        using StringFormat format = new()
-        {
-            Alignment = StringAlignment.Center,
-            LineAlignment = StringAlignment.Center,
-            FormatFlags = StringFormatFlags.NoWrap,
-            Trimming = StringTrimming.EllipsisCharacter
-        };
-        e.Graphics.DrawString(text, font, foreBrush, rect, format);
         e.Handled = true;
     }
 
@@ -617,90 +646,121 @@ public sealed class CustomerControl : UserControl
             };
         }
 
-        return columnName switch
+        return text switch
         {
-            "ViewAction" => ThemeHelper.Primary,
-            "EditAction" => ThemeHelper.Success,
-            "BlacklistAction" => ThemeHelper.Danger,
-            "RemoveBlacklistAction" => ThemeHelper.Warning,
-            "ArchiveAction" => ThemeHelper.Danger,
-            "RestoreAction" => ThemeHelper.Warning,
+            "View" => ThemeHelper.Primary,
+            "Edit" => ThemeHelper.Success,
+            "Blacklist" => ThemeHelper.Danger,
+            "Remove Blacklist" => ThemeHelper.Warning,
+            "Archive" => ThemeHelper.Danger,
+            "Restore" => ThemeHelper.Warning,
             _ => ThemeHelper.Primary
         };
     }
 
-    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
+    private List<(string Action, RectangleF Bounds)> GetCustomerActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
     {
-        GraphicsPath path = new();
-        float diameter = radius * 2;
-        Size size = new((int)diameter, (int)diameter);
-        RectangleF arc = new(rect.Location, size);
+        List<(string Action, RectangleF Bounds)> result = [];
+        if (actions.Count == 0) return result;
 
-        if (radius == 0)
+        using Graphics g = CreateGraphics();
+        Font font = FontHelper.SemiBold(9F);
+        float currentX = cellBounds.X + 4;
+        float height = 26;
+        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
+
+        foreach (string action in actions)
         {
-            path.AddRectangle(rect);
-            return path;
+            float width = g.MeasureString(action, font).Width + 22F;
+            result.Add((action, new RectangleF(currentX, y, width, height)));
+            currentX += width + 6;
         }
 
-        path.AddArc(arc, 180, 90);
-        arc.X = rect.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = rect.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = rect.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
+        return result;
     }
 
-    private async void CustomersGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+    private async void CustomersGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left)
         {
             return;
         }
 
         string columnName = _customersGrid.Columns[e.ColumnIndex].Name;
-
-        if (!columnName.EndsWith("Action", StringComparison.Ordinal))
+        if (columnName != "Actions")
         {
             return;
         }
 
         int customerId = Convert.ToInt32(_customersGrid.Rows[e.RowIndex].Cells["CustomerId"].Value);
+        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
 
-        switch (columnName)
+        if (clickedAction is null)
         {
-            case "ViewAction":
+            return;
+        }
+
+        switch (clickedAction)
+        {
+            case "View":
                 await ViewCustomerAsync(customerId);
                 break;
-            case "EditAction":
+            case "Edit":
                 await EditCustomerAsync(customerId);
                 break;
-            case "BlacklistAction":
+            case "Blacklist":
                 await BlacklistCustomerAsync(customerId);
                 break;
-            case "RemoveBlacklistAction":
+            case "Remove Blacklist":
                 await RemoveBlacklistAsync(customerId);
                 break;
-            case "ArchiveAction":
+            case "Archive":
                 await ArchiveCustomerAsync(customerId);
                 break;
-            case "RestoreAction":
+            case "Restore":
                 await RestoreCustomerAsync(customerId);
                 break;
         }
     }
 
-    private void CustomersGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
+    private string? GetActionAt(int rowIndex, int columnIndex, int x, int y)
     {
-        _customersGrid.Cursor = IsActionColumn(e.ColumnIndex) ? Cursors.Hand : Cursors.Default;
+        if (rowIndex < 0 || columnIndex < 0 || _customersGrid.Columns[columnIndex].Name != "Actions")
+        {
+            return null;
+        }
+
+        string text = _customersGrid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        using Graphics graphics = _customersGrid.CreateGraphics();
+        Font font = _customersGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
+        float currentX = 4F;
+        float yOffset = (_customersGrid.Rows[rowIndex].Height - 26) / 2F;
+
+        foreach (string action in text.Split('|'))
+        {
+            float width = graphics.MeasureString(action, font).Width + 22F;
+            RectangleF rect = new(currentX, yOffset, width, 26);
+            if (rect.Contains(x, y))
+            {
+                return action;
+            }
+
+            currentX += width + 6F;
+        }
+
+        return null;
     }
 
-    private bool IsActionColumn(int columnIndex)
+    private void CustomersGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        return columnIndex >= 0
-            && _customersGrid.Columns[columnIndex].Name.EndsWith("Action", StringComparison.Ordinal);
+        _customersGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is not null
+            ? Cursors.Hand
+            : Cursors.Default;
     }
 
     private async void AddCustomerButton_Click(object? sender, EventArgs e)
@@ -898,5 +958,29 @@ public sealed class CustomerControl : UserControl
         }
 
         return customer;
+    }
+
+    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
+    {
+        GraphicsPath path = new();
+        float diameter = radius * 2;
+        SizeF size = new(diameter, diameter);
+        RectangleF arc = new(rect.Location, size);
+
+        if (radius <= 0)
+        {
+            path.AddRectangle(rect);
+            return path;
+        }
+
+        path.AddArc(arc, 180, 90);
+        arc.X = rect.Right - diameter;
+        path.AddArc(arc, 270, 90);
+        arc.Y = rect.Bottom - diameter;
+        path.AddArc(arc, 0, 90);
+        arc.X = rect.Left;
+        path.AddArc(arc, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }

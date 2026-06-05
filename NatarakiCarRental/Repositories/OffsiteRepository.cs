@@ -299,4 +299,35 @@ public sealed class OffsiteRepository
         using var connection = _connectionFactory.CreateConnection();
         return await connection.ExecuteScalarAsync<int>(sql, new { CarId = carId, ExcludeId = excludeId }) > 0;
     }
+
+    public async Task<OffsiteMetrics> GetMetricsAsync(DateTime referenceDate)
+    {
+        const string sql = """
+            SELECT
+                TotalOffsiteRecords = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
+                MaintenanceCars = COUNT(DISTINCT CASE WHEN Status = @OngoingStatus AND IsArchived = 0 THEN CarId END),
+                UpcomingMaintenance = (
+                    SELECT COUNT(1)
+                    FROM dbo.FleetSchedules
+                    WHERE ScheduleType = @MaintenanceType
+                      AND Status = @PendingStatus
+                      AND StartDate > @ReferenceDate
+                      AND IsArchived = 0
+                ),
+                CompletedRecords = COUNT(CASE WHEN Status = @CompletedStatus AND IsArchived = 0 THEN 1 END)
+            FROM dbo.OffsiteRecords;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var metrics = await connection.QuerySingleOrDefaultAsync<OffsiteMetrics>(sql, new
+        {
+            ReferenceDate = referenceDate.Date,
+            OngoingStatus = OffsiteConstants.Status.Ongoing,
+            CompletedStatus = OffsiteConstants.Status.Completed,
+            MaintenanceType = FleetScheduleConstants.Type.Maintenance,
+            PendingStatus = FleetScheduleConstants.Status.Pending
+        });
+
+        return metrics ?? new OffsiteMetrics();
+    }
 }

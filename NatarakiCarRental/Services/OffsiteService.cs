@@ -79,6 +79,11 @@ public sealed class OffsiteService
         return _offsiteRepository.CountAsync(search, status, type, includeArchived);
     }
 
+    public Task<OffsiteMetrics> GetMetricsAsync(DateTime referenceDate)
+    {
+        return _offsiteRepository.GetMetricsAsync(referenceDate);
+    }
+
     public Task<OffsiteRecord?> GetByIdAsync(int offsiteRecordId)
     {
         return _offsiteRepository.GetByIdAsync(offsiteRecordId);
@@ -606,7 +611,7 @@ public sealed class OffsiteService
 
         bool hasActive = await _offsiteRepository.HasActiveOffsiteForCarAsync(request.CarId);
         if (hasActive)
-            throw new ValidationException([new ValidationFailure("CarId", "This car already has an ongoing offsite record.")]);
+            throw new ValidationException([new ValidationFailure("CarId", "This vehicle already has an active offsite maintenance record. Future maintenance planning should be scheduled through Fleet Schedule.")]);
     }
 
     private async Task ValidateUpdateRequestAsync(UpdateOffsiteRecordRequest request, OffsiteRecord existing)

@@ -64,10 +64,10 @@ public sealed class OffsiteControl : UserControl
     private readonly Button _prevPageButton = CreatePaginationButton("Previous");
     private readonly Button _nextPageButton = CreatePaginationButton("Next");
     
-    private readonly MetricCardControl _currentlyOffsiteCard = new();
-    private readonly MetricCardControl _maintenanceCard = new();
-    private readonly MetricCardControl _repairsCard = new();
-    private readonly MetricCardControl _completedMonthCard = new();
+    private readonly MetricCardControl _offsiteRecordsCard = new();
+    private readonly MetricCardControl _maintenanceCarsCard = new();
+    private readonly MetricCardControl _upcomingMaintenanceCard = new();
+    private readonly MetricCardControl _completedRecordsCard = new();
 
     private bool _mapReady;
     private bool _isRefreshing;
@@ -339,15 +339,15 @@ public sealed class OffsiteControl : UserControl
         TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 12, 0, 8) };
         for (int i = 0; i < 4; i++) metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
         
-        _currentlyOffsiteCard.SetMetric(IconChar.LocationDot, "Currently Offsite", "0", "Cars", ThemeHelper.Primary);
-        _maintenanceCard.SetMetric(IconChar.Gears, "Maintenance", "0", "Active", ThemeHelper.Warning);
-        _repairsCard.SetMetric(IconChar.Wrench, "Repairs", "0", "Active", ThemeHelper.Danger);
-        _completedMonthCard.SetMetric(IconChar.CheckCircle, "Completed (Month)", "0", "Records", ThemeHelper.Success);
+        _offsiteRecordsCard.SetMetric(IconChar.ClipboardList, "Offsite Records", "0", "Total", ThemeHelper.Primary);
+        _maintenanceCarsCard.SetMetric(IconChar.Gears, "Maintenance Cars", "0", "Distinct", ThemeHelper.Warning);
+        _upcomingMaintenanceCard.SetMetric(IconChar.CalendarAlt, "Upcoming Maintenance", "0", "Scheduled", ThemeHelper.Danger);
+        _completedRecordsCard.SetMetric(IconChar.CheckCircle, "Completed Records", "0", "Total", ThemeHelper.Success);
 
-        AddMetricCard(metricsGrid, _currentlyOffsiteCard, 0);
-        AddMetricCard(metricsGrid, _maintenanceCard, 1);
-        AddMetricCard(metricsGrid, _repairsCard, 2);
-        AddMetricCard(metricsGrid, _completedMonthCard, 3);
+        AddMetricCard(metricsGrid, _offsiteRecordsCard, 0);
+        AddMetricCard(metricsGrid, _maintenanceCarsCard, 1);
+        AddMetricCard(metricsGrid, _upcomingMaintenanceCard, 2);
+        AddMetricCard(metricsGrid, _completedRecordsCard, 3);
         layout.Controls.Add(metricsGrid, 0, 0);
 
         // Search Row (no border)
@@ -735,12 +735,6 @@ public sealed class OffsiteControl : UserControl
                     Trimming = StringTrimming.EllipsisCharacter
                 };
                 e.Graphics.DrawString(entry.Action, font, foreBrush, entry.Bounds, format);
-
-                if (i < layout.Count - 1)
-                {
-                    float lineX = entry.Bounds.Right + 3F;
-                    e.Graphics.DrawLine(linePen, lineX, e.CellBounds.Top, lineX, e.CellBounds.Bottom);
-                }
             }
         }
         else
@@ -857,17 +851,18 @@ public sealed class OffsiteControl : UserControl
         List<(string Action, RectangleF Bounds)> result = [];
         if (actions.Count == 0) return result;
 
-        float totalGap = (actions.Count - 1) * 6F;
-        float availableWidth = cellBounds.Width - 12; // 6px padding each side
-        float buttonWidth = (availableWidth - totalGap) / actions.Count;
+        using Graphics g = CreateGraphics();
+        Font font = FontHelper.SemiBold(8.5F);
+        
+        float currentX = cellBounds.X + 6;
         float height = ActionPillHeight;
         float y = cellBounds.Y + (cellBounds.Height - height) / 2;
-        float currentX = cellBounds.X + 6;
 
         foreach (string action in actions)
         {
-            result.Add((action, new RectangleF(currentX, y, buttonWidth, height)));
-            currentX += buttonWidth + 6;
+            float width = GetActionPillWidth(g, font, action);
+            result.Add((action, new RectangleF(currentX, y, width, height)));
+            currentX += width + 6;
         }
 
         return result;
@@ -993,7 +988,7 @@ public sealed class OffsiteControl : UserControl
             _emptyStateLabel.Visible = !items.Any();
             UpdateRecordsGridColumnLayout();
             UpdatePagination(totalPages);
-            UpdateMetrics();
+            await UpdateMetrics();
         }
         catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load records: {ex.Message}"); }
     }
@@ -1010,7 +1005,18 @@ public sealed class OffsiteControl : UserControl
         _nextPageButton.Enabled = _currentPage < totalPages;
     }
 
-    private void UpdateMetrics() => _currentlyOffsiteCard.SetMetric(IconChar.LocationDot, "Currently Offsite", _totalItems.ToString(), "Cars", ThemeHelper.Primary);
+    private async Task UpdateMetrics()
+    {
+        try
+        {
+            OffsiteMetrics metrics = await _offsiteService.GetMetricsAsync(DateTime.Today);
+            _offsiteRecordsCard.SetMetric(IconChar.ClipboardList, "Offsite Records", metrics.TotalOffsiteRecords.ToString(), "Total", ThemeHelper.Primary);
+            _maintenanceCarsCard.SetMetric(IconChar.Gears, "Maintenance Cars", metrics.MaintenanceCars.ToString(), "Distinct", ThemeHelper.Warning);
+            _upcomingMaintenanceCard.SetMetric(IconChar.CalendarAlt, "Upcoming Maintenance", metrics.UpcomingMaintenance.ToString(), "Scheduled", ThemeHelper.Danger);
+            _completedRecordsCard.SetMetric(IconChar.CheckCircle, "Completed Records", metrics.CompletedRecords.ToString(), "Total", ThemeHelper.Success);
+        }
+        catch { /* Ignore metric load errors */ }
+    }
 
     private static IconButton CreateToolbarIconButton(IconChar icon, string text, int width)
     {

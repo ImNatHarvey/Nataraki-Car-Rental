@@ -1461,20 +1461,13 @@ public sealed class ManageSystemControl : UserControl
         if (actions.Count == 0) return results;
 
         Font font = FontHelper.SemiBold(8.4F);
-        int x = cellBounds.Left + 12;
+        int x = cellBounds.Left + 6;
         int y = cellBounds.Top + (cellBounds.Height - 24) / 2;
-        const int gap = 8;
+        const int gap = 6;
 
         foreach (string action in actions)
         {
-            // Apply precise pill dimensions for consistency with other modules
-            int width = action switch
-            {
-                "View" or "Edit" => 72,
-                "Archive" or "Restore" => 92,
-                _ => Math.Max(54, (int)Math.Ceiling(g.MeasureString(action, font).Width) + 20)
-            };
-
+            int width = (int)Math.Ceiling(g.MeasureString(action, font).Width) + 22;
             results.Add((action, new Rectangle(x, y, width, 24)));
             x += width + gap;
         }
@@ -1487,19 +1480,11 @@ public sealed class ManageSystemControl : UserControl
         string[] actions = actionsText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         var boundsList = CalculateActionButtonBounds(graphics, cellBounds, actions);
         Font font = FontHelper.SemiBold(8.4F);
-        using Pen linePen = new(ThemeHelper.TableGridLine);
 
         for (int i = 0; i < boundsList.Count; i++)
         {
             var item = boundsList[i];
             DrawRoundedPill(graphics, item.Bounds, item.Action, font, GetActionPillBackColor(item.Action), Color.White);
-
-            if (i < boundsList.Count - 1)
-            {
-                var nextItem = boundsList[i + 1];
-                float lineX = (item.Bounds.Right + nextItem.Bounds.Left) / 2F;
-                graphics.DrawLine(linePen, lineX, cellBounds.Top, lineX, cellBounds.Bottom);
-            }
         }
     }
 
