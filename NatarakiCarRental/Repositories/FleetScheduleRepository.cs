@@ -363,6 +363,31 @@ public sealed class FleetScheduleRepository
         }
     }
 
+    public async Task<int> UpdateStatusAsync(int scheduleId, string status, IDbTransaction? transaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.FleetSchedules
+            SET Status = @Status,
+                UpdatedAt = sysdatetime()
+            WHERE ScheduleId = @ScheduleId
+              AND IsArchived = 0;
+            """;
+
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.ExecuteAsync(sql, new { ScheduleId = scheduleId, Status = status.Trim() }, transaction);
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
     public Task<bool> HasConflictExcludingAsync(
         int carId,
         DateTime startDate,

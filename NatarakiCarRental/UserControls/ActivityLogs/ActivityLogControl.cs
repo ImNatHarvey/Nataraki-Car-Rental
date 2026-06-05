@@ -519,7 +519,14 @@ public sealed class ActivityLogControl : UserControl
     private void PopulateGrid(IReadOnlyList<ActivityLog> allLogs)
     {
         _timelinePanel.SuspendLayout();
-        _timelinePanel.Controls.Clear();
+
+        // Properly dispose old controls to prevent GDI leaks
+        while (_timelinePanel.Controls.Count > 0)
+        {
+            var control = _timelinePanel.Controls[0];
+            _timelinePanel.Controls.RemoveAt(0);
+            control.Dispose();
+        }
 
         int totalItems = allLogs.Count;
         int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));

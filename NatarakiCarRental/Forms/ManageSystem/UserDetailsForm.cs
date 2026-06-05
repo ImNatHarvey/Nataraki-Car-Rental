@@ -46,7 +46,12 @@ public sealed class UserDetailsForm : Form
         _isViewOnly = isViewOnly;
 
         InitializeComponent();
-        LoadRolesAndUserData();
+    }
+
+    protected override async void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        await LoadRolesAndUserDataAsync();
     }
 
     private void InitializeComponent()
@@ -302,7 +307,7 @@ public sealed class UserDetailsForm : Form
         cancelButton.Location = new Point(Math.Max(0, right - cancelButton.Width), y);
     }
 
-    private async void LoadRolesAndUserData()
+    private async Task LoadRolesAndUserDataAsync()
     {
         try
         {

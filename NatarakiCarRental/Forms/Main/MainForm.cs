@@ -37,9 +37,19 @@ public sealed class MainForm : Form
         CurrentUser = currentUser;
         InitializeMainForm();
         ShowOverview();
-        FormClosed += (_, _) => _identityAvatar.Image?.Dispose();
         
-        AppBrandingManager.SettingsUpdated += (_, _) => UpdateBranding();
+        FormClosed += (s, e) =>
+        {
+            _identityAvatar.Image?.Dispose();
+            AppBrandingManager.SettingsUpdated -= AppBrandingManager_SettingsUpdated;
+        };
+        
+        AppBrandingManager.SettingsUpdated += AppBrandingManager_SettingsUpdated;
+    }
+
+    private void AppBrandingManager_SettingsUpdated(object? sender, EventArgs e)
+    {
+        UpdateBranding();
     }
 
     private User CurrentUser { get; }

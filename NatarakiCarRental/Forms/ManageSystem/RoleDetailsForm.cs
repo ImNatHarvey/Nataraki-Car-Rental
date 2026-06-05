@@ -44,7 +44,12 @@ public sealed class RoleDetailsForm : Form
         _isViewOnly = isViewOnly;
 
         InitializeComponent();
-        LoadPermissionsAndRoleData();
+    }
+
+    protected override async void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        await LoadPermissionsAndRoleDataAsync();
     }
 
     private void InitializeComponent()
@@ -202,7 +207,7 @@ public sealed class RoleDetailsForm : Form
         cancelButton.Location = new Point(Math.Max(0, right - cancelButton.Width), y);
     }
 
-    private async void LoadPermissionsAndRoleData()
+    private async Task LoadPermissionsAndRoleDataAsync()
     {
         try
         {

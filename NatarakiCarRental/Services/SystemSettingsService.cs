@@ -86,6 +86,7 @@ public sealed class SystemSettingsService
         };
 
         await _repository.SetManyAsync(dict, currentUserId);
+        await AppBrandingManager.LoadSettingsAsync();
         
         await _activityLogService.LogAsync(
             "Updated",
@@ -125,6 +126,7 @@ public sealed class SystemSettingsService
         };
 
         await _repository.SetManyAsync(dict, currentUserId);
+        await AppBrandingManager.LoadSettingsAsync();
 
         await _activityLogService.LogAsync(
             "Updated",
@@ -177,6 +179,7 @@ public sealed class SystemSettingsService
         };
 
         await _repository.SetManyAsync(dict, currentUserId);
+        await AppBrandingManager.LoadSettingsAsync();
 
         await _activityLogService.LogAsync(
             "Updated",

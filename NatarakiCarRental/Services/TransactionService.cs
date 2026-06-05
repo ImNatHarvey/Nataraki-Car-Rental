@@ -1234,6 +1234,19 @@ public sealed class TransactionService
 
         foreach (var item in overdue)
         {
+            // Prevent duplicate unread notifications for the same transaction
+            const string sqlCheckDuplicate = """
+                SELECT COUNT(1) 
+                FROM dbo.Notifications 
+                WHERE RelatedEntityId = @EntityId 
+                  AND RelatedModule = 'Transaction' 
+                  AND Title = 'Rental Overdue'
+                  AND IsRead = 0;
+                """;
+            
+            int existingCount = await connection.ExecuteScalarAsync<int>(sqlCheckDuplicate, new { EntityId = item.TransactionId });
+            if (existingCount > 0) continue;
+
             await _notificationService.NotifyAsync(
                 "Rental Overdue",
                 $"Transaction {item.TransactionCode} for {item.CustomerName} is overdue (Due: {item.EndDate:MMM dd}).",

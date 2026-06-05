@@ -122,6 +122,14 @@ public sealed class FleetScheduleService
                 userId: _currentUserId,
                 entityName: schedule.Title,
                 transaction: transaction);
+
+            await _notificationService.NotifyAsync(
+                "Schedule Created",
+                $"A new {schedule.ScheduleType.ToLowerInvariant()} has been scheduled: {schedule.Title}",
+                type: "Success",
+                entityId: scheduleId,
+                module: "FleetSchedule",
+                transaction: transaction);
             transaction.Commit();
             return scheduleId;
         }
@@ -245,6 +253,55 @@ public sealed class FleetScheduleService
                 [new ValidationFailure(
                     nameof(FleetSchedule.Status),
                     "This schedule is linked to a transaction. Use the Transaction module to start, complete, cancel, or archive the rental.")]);
+        }
+    }
+
+    public async Task CancelAsync(int scheduleId)
+    {
+        AccessControlService.EnforcePermission("FleetSchedule.Cancel");
+        FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(scheduleId);
+        if (schedule == null) throw new RecordNotFoundException("Schedule not found.");
+
+        if (schedule.Status == "Completed" || schedule.Status == "Cancelled")
+        {
+            throw new ValidationException([new ValidationFailure("Status", $"Cannot cancel a {schedule.Status.ToLowerInvariant()} schedule.")]);
+        }
+
+        if (await IsLinkedToActiveTransactionAsync(scheduleId))
+        {
+            throw new ValidationException([new ValidationFailure("ScheduleId", "Cannot cancel a schedule linked to an active transaction.")]);
+        }
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction transaction = connection.BeginTransaction();
+
+        try
+        {
+            await _scheduleRepository.UpdateStatusAsync(scheduleId, "Cancelled", transaction);
+            
+            await _activityLogService.LogAsync(
+                "Cancelled",
+                "FleetSchedule",
+                scheduleId,
+                $"Cancelled schedule '{schedule.Title}' for car #{schedule.CarId}.",
+                userId: _currentUserId,
+                entityName: schedule.Title,
+                transaction: transaction);
+
+            await _notificationService.NotifyAsync(
+                "Schedule Cancelled",
+                $"The schedule '{schedule.Title}' has been cancelled.",
+                type: "Danger",
+                entityId: scheduleId,
+                module: "FleetSchedule",
+                transaction: transaction);
+
+            transaction.Commit();
+        }
+        catch
+        {
+            RollbackQuietly(transaction);
+            throw;
         }
     }
 

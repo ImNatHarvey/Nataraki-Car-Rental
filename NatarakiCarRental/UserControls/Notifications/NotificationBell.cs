@@ -14,8 +14,14 @@ public sealed class NotificationBell : UserControl
     public NotificationBell()
     {
         InitializeControl();
-        NotificationService.NotificationsChanged += async (s, e) => await UpdateBadgeAsync();
+        NotificationService.NotificationsChanged += NotificationService_NotificationsChanged;
         Load += async (s, e) => await UpdateBadgeAsync();
+        Disposed += (s, e) => NotificationService.NotificationsChanged -= NotificationService_NotificationsChanged;
+    }
+
+    private async void NotificationService_NotificationsChanged(object? sender, EventArgs e)
+    {
+        await UpdateBadgeAsync();
     }
 
     private void InitializeControl()

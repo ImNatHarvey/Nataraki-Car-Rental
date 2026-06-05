@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -8,6 +9,8 @@ public static class DiffHelper
 {
     public sealed record ChangeEntry(string Field, string From, string To);
 
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> _propertyCache = new();
+
     public static (string? OldValue, string? NewValue) GetJsonDiff<T>(T? oldEntity, T? newEntity) where T : class
     {
         if (oldEntity == null || newEntity == null) return (null, null);
@@ -15,7 +18,8 @@ public static class DiffHelper
         var oldDict = new Dictionary<string, object?>();
         var newDict = new Dictionary<string, object?>();
 
-        var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var properties = _propertyCache.GetOrAdd(typeof(T), t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance));
+        
         foreach (var prop in properties)
         {
             if (ShouldIgnore(prop.Name)) continue;
@@ -103,7 +107,23 @@ public static class DiffHelper
             { "IsBlacklisted", "Blacklisted" },
             { "BlacklistReason", "Blacklist Reason" },
             { "IsWalkIn", "Walk-In" },
-            { "IsArchived", "Archived" }
+            { "IsArchived", "Archived" },
+            { "OffsiteType", "Offsite Type" },
+            { "LocationName", "Location" },
+            { "ContactPerson", "Contact Person" },
+            { "ActualCost", "Actual Cost" },
+            { "EstimatedCost", "Estimated Cost" },
+            { "TransactionCode", "Transaction Code" },
+            { "DailyRate", "Daily Rate" },
+            { "TotalAmount", "Total Amount" },
+            { "AmountPaid", "Amount Paid" },
+            { "BalanceAmount", "Remaining Balance" },
+            { "ModeOfPayment", "Payment Mode" },
+            { "TransactionStatus", "Transaction Status" },
+            { "PaymentStatus", "Payment Status" },
+            { "RoleName", "Role Name" },
+            { "IsActive", "Active Status" },
+            { "PermissionKeys", "Permissions" }
         };
 
         if (overrides.TryGetValue(propertyName, out var friendlyName))
