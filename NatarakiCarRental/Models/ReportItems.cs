@@ -251,3 +251,24 @@ public sealed class VehicleCostProfitabilityItem
     public decimal RevenueGenerated { get; set; }
     public decimal NetAfterCost { get; set; }
 }
+
+public sealed class ActivityLogReportItem
+{
+    public DateTime CreatedAt { get; set; }
+    public string UserFullName { get; set; } = string.Empty;
+    public string Module { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public string EntityName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
+
+public sealed class AuditSummaryMetrics
+{
+    public int TotalLogs { get; set; }
+    public int CriticalActions { get; set; } // Delete, Archive, Blacklist
+    public int UserManagementActions { get; set; }
+    public int FinancialActions { get; set; }
+    public int DistinctUsers { get; set; }
+}

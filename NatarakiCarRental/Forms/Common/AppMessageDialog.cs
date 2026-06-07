@@ -42,7 +42,7 @@ public sealed class AppMessageDialog : Form
             BackColor = accentColor
         };
 
-        Control logoControl = CreateBrandingLogoControl(accentColor);
+        Control iconControl = CreateDialogIconControl(icon, accentColor);
 
         Label titleLabel = new()
         {
@@ -64,10 +64,11 @@ public sealed class AppMessageDialog : Form
             ForeColor = ThemeHelper.TextSecondary
         };
 
-        // Primary Button ("Yes" or "OK") is now always on the right
+        // Primary Button ("Yes" or "OK")
         Button primaryButton = ControlFactory.CreatePrimaryButton(isConfirmation ? "Yes" : "OK", 92, 34);
         primaryButton.BackColor = accentColor;
-        primaryButton.FlatAppearance.MouseOverBackColor = accentColor;
+        primaryButton.ForeColor = ThemeHelper.GetContrastTextColor(accentColor);
+        primaryButton.FlatAppearance.MouseOverBackColor = ThemeHelper.GetHoverColor(accentColor);
         primaryButton.Location = new Point(306, dialogHeight - 52);
         primaryButton.DialogResult = isConfirmation ? DialogResult.Yes : DialogResult.OK;
 
@@ -75,7 +76,7 @@ public sealed class AppMessageDialog : Form
 
         if (isConfirmation)
         {
-            // Secondary Button ("No") is now on the left
+            // Secondary Button ("No")
             secondaryButton = new Button
             {
                 Text = "No",
@@ -92,7 +93,7 @@ public sealed class AppMessageDialog : Form
         }
 
         Controls.Add(accentPanel);
-        Controls.Add(logoControl);
+        Controls.Add(iconControl);
         Controls.Add(titleLabel);
         Controls.Add(messageLabel);
         Controls.Add(primaryButton);
@@ -104,34 +105,14 @@ public sealed class AppMessageDialog : Form
         }
 
         AcceptButton = primaryButton;
-
-        if (logoControl is PictureBox pb)
-        {
-            FormClosed += (_, _) => pb.Image?.Dispose();
-        }
     }
 
-    private static Control CreateBrandingLogoControl(Color accentColor)
+    private static Control CreateDialogIconControl(IconChar icon, Color accentColor)
     {
-        Image? logoImage = BrandingHelper.LoadCurrentLogoImage();
-        if (logoImage is not null)
-        {
-            return new PictureBox
-            {
-                Image = logoImage,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = ThemeHelper.Surface,
-                Location = new Point(28, 30),
-                Size = new Size(40, 40)
-            };
-        }
-
         return new IconPictureBox
         {
-            IconChar = BrandingHelper.ResolveCurrentBuiltInLogoIcon(),
-            IconColor = string.Equals(AppBrandingManager.CurrentSettings.SystemLogoMode, "BuiltIn", StringComparison.OrdinalIgnoreCase)
-                ? ThemeHelper.Primary
-                : accentColor,
+            IconChar = icon,
+            IconColor = accentColor,
             IconSize = 34,
             BackColor = ThemeHelper.Surface,
             Location = new Point(28, 30),

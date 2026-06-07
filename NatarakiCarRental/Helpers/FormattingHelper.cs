@@ -27,4 +27,17 @@ public static class FormattingHelper
     }
 
     public static string CarPlate(string carName, string plateNumber) => $"{carName} ({plateNumber})";
+
+    public static string SplitCamelCase(string str)
+    {
+        if (string.IsNullOrEmpty(str)) return str;
+        return System.Text.RegularExpressions.Regex.Replace(str, "([a-z])([A-Z])", "$1 $2");
+    }
+
+    public static string FormatCompactNumber(decimal value)
+    {
+        if (value >= 1000000) return $"{(value / 1000000M):N1}M";
+        if (value >= 1000) return $"{(value / 1000M):N1}K";
+        return value.ToString("N0");
+    }
 }

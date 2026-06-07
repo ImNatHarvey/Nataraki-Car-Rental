@@ -8,22 +8,22 @@ public static class MessageBoxHelper
 {
     public static void ShowSuccess(string message, string title = "Success")
     {
-        ShowDialog(message, title, IconChar.CircleCheck, ThemeHelper.Success);
+        ShowDialog(message, title, IconChar.CircleCheck, ThemeHelper.GetDialogAccentColor("success"));
     }
 
     public static void ShowWarning(string message, string title = "Warning")
     {
-        ShowDialog(message, title, IconChar.TriangleExclamation, ThemeHelper.Warning);
+        ShowDialog(message, title, IconChar.TriangleExclamation, ThemeHelper.GetDialogAccentColor("warning"));
     }
 
     public static void ShowInfo(string message, string title = "Information")
     {
-        ShowDialog(message, title, IconChar.CircleInfo, ThemeHelper.Primary);
+        ShowDialog(message, title, IconChar.CircleInfo, ThemeHelper.GetDialogAccentColor("info"));
     }
 
     public static void ShowError(string message, string title = "Error")
     {
-        ShowDialog(message, title, IconChar.CircleXmark, ThemeHelper.Error);
+        ShowDialog(message, title, IconChar.CircleXmark, ThemeHelper.GetDialogAccentColor("error"));
     }
 
     public static void ShowDatabaseError(Exception exception)
@@ -33,7 +33,8 @@ public static class MessageBoxHelper
 
     public static bool Confirm(string message, string? title = null)
     {
-        return ShowConfirmDanger(message, title ?? AppBrandingManager.CurrentSettings.BusinessName);
+        // General confirmations now use the active branding color
+        return ShowConfirmation(message, title ?? "Confirm Action", IconChar.CircleQuestion, ThemeHelper.Primary);
     }
 
     public static bool ShowConfirmWarning(string message, string title = "Warning")
@@ -41,7 +42,7 @@ public static class MessageBoxHelper
         return ShowConfirmation(message, title, IconChar.TriangleExclamation, ThemeHelper.Warning);
     }
 
-    public static bool ShowConfirmDanger(string message, string title = "Confirm Action")
+    public static bool ShowConfirmDanger(string message, string title = "Confirm Danger")
     {
         return ShowConfirmation(message, title, IconChar.TriangleExclamation, ThemeHelper.Danger);
     }

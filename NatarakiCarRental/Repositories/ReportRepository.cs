@@ -1189,4 +1189,99 @@ public sealed class ReportRepository
         var results = await connection.QueryAsync<VehicleCostProfitabilityItem>(sql, new { From = from, To = to });
         return results.ToList();
     }
+
+    public async Task<AuditSummaryMetrics> GetAuditSummaryMetricsAsync(DateTime from, DateTime to)
+    {
+        const string sql = """
+            SELECT
+                TotalLogs = COUNT(1),
+                CriticalActions = COUNT(CASE WHEN Action IN (N'Deleted', N'Archived', N'Blacklisted') THEN 1 END),
+                UserManagementActions = COUNT(CASE WHEN Module IN (N'User', N'Role', N'Permission') THEN 1 END),
+                FinancialActions = COUNT(CASE WHEN Module IN (N'TransactionPayment') OR Description LIKE '%payment%' OR Description LIKE '%₱%' THEN 1 END),
+                DistinctUsers = COUNT(DISTINCT UserId)
+            FROM dbo.ActivityLogs
+            WHERE CreatedAt >= @From AND CreatedAt <= @To;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<AuditSummaryMetrics>(sql, new { From = from, To = to })
+            ?? new AuditSummaryMetrics();
+    }
+
+    public async Task<IReadOnlyList<ActivityLogReportItem>> GetActivityLogReportAsync(DateTime from, DateTime to, string? module = null, string? action = null)
+    {
+        const string sql = """
+            SELECT
+                CreatedAt,
+                UserFullName,
+                Module,
+                Action,
+                EntityName,
+                Description,
+                OldValue,
+                NewValue
+            FROM dbo.ActivityLogs
+            WHERE CreatedAt >= @From AND CreatedAt <= @To
+              AND (@Module IS NULL OR Module = @Module)
+              AND (@Action IS NULL OR Action = @Action)
+            ORDER BY CreatedAt DESC;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<ActivityLogReportItem>(sql, new
+        {
+            From = from,
+            To = to,
+            Module = string.IsNullOrWhiteSpace(module) ? null : module,
+            Action = string.IsNullOrWhiteSpace(action) ? null : action
+        });
+        return results.ToList();
+    }
+
+    public async Task<IReadOnlyList<TransactionListItem>> GetTransactionReportAsync(
+        DateTime from, 
+        DateTime to, 
+        string? status = null, 
+        string? paymentStatus = null,
+        int? carId = null,
+        int? customerId = null)
+    {
+        string sql = """
+            SELECT 
+                t.TransactionId,
+                t.TransactionCode,
+                CustomerName = LTRIM(RTRIM(CONCAT(cu.FirstName, N' ', cu.LastName))),
+                CarName = c.CarName,
+                c.PlateNumber,
+                t.StartDate,
+                t.EndDate,
+                t.TotalAmount,
+                t.AmountPaid,
+                t.BalanceAmount,
+                t.PaymentStatus,
+                t.TransactionStatus
+            FROM dbo.Transactions t
+            JOIN dbo.Customers cu ON cu.CustomerId = t.CustomerId
+            JOIN dbo.Cars c ON c.CarId = t.CarId
+            WHERE t.IsArchived = 0 
+              AND t.CreatedAt >= @From AND t.CreatedAt <= @To
+              AND (@Status IS NULL OR t.TransactionStatus = @Status)
+              AND (@PaymentStatus IS NULL OR t.PaymentStatus = @PaymentStatus)
+              AND (@CarId IS NULL OR t.CarId = @CarId)
+              AND (@CustomerId IS NULL OR t.CustomerId = @CustomerId)
+            ORDER BY t.CreatedAt DESC;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var results = await connection.QueryAsync<TransactionListItem>(sql, new 
+        { 
+            From = from, 
+            To = to,
+            Status = string.IsNullOrWhiteSpace(status) ? null : status,
+            PaymentStatus = string.IsNullOrWhiteSpace(paymentStatus) ? null : paymentStatus,
+            CarId = carId,
+            CustomerId = customerId
+        });
+        return results.ToList();
+    }
 }

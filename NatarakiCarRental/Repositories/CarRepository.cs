@@ -111,7 +111,7 @@ public sealed class CarRepository
         return cars.ToList();
     }
 
-    public async Task<int> CountCarsAsync(string searchText, bool includeArchived, string? status = null)
+    public async Task<int> CountCarsAsync(string searchText, bool includeArchived, DateTime referenceDate, string? status = null)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
 
@@ -138,6 +138,7 @@ public sealed class CarRepository
                 Status = string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
+                ReferenceDate = referenceDate.Date,
                 MaintenanceTypes = OffsiteConstants.Type.MaintenanceCategory,
                 ActiveRentalStatuses = new[] { FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Status.Rented },
                 ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending }

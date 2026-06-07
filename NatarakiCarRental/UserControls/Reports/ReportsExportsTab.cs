@@ -7,7 +7,7 @@ namespace NatarakiCarRental.UserControls.Reports;
 
 public sealed class ReportsExportsTab : UserControl, IReportTab
 {
-    private readonly ReportExportService _reportExportService = new();
+    private readonly EnterpriseReportExportService _reportExportService = new();
     private readonly FlowLayoutPanel _layout = new();
     private DateTime _from;
     private DateTime _to;
@@ -39,39 +39,49 @@ public sealed class ReportsExportsTab : UserControl, IReportTab
         _layout.BackColor = ThemeHelper.ContentBackground;
 
         _layout.Controls.Add(CreateExportSection(
-            "Export Full Reports Bundle",
-            "Combined printable summary PDF or one Excel workbook with the main report sheets.",
             "Full Reports Bundle",
+            "Combined printable summary PDF or one Excel workbook with the main report sheets (Financial, Fleet, Operations, Customers).",
+            "Full_Bundle",
             _reportExportService.ExportFullPdfAsync,
             _reportExportService.ExportFullExcelAsync));
 
         _layout.Controls.Add(CreateExportSection(
-            "Export Financial Reports",
-            "Financial summary, payment breakdowns, outstanding transactions, and revenue tables.",
-            "Financial Report",
+            "Financial Reports",
+            "Comprehensive financial summary, revenue breakdowns by category and payment method, and vehicle profitability analysis.",
+            "Financial",
             _reportExportService.ExportFinancialPdfAsync,
             _reportExportService.ExportFinancialExcelAsync));
 
         _layout.Controls.Add(CreateExportSection(
-            "Export Fleet Performance Reports",
-            "Fleet revenue, utilization, top cars, least used cars, and maintenance visibility.",
-            "Fleet Performance Report",
+            "Fleet Performance",
+            "Vehicle utilization metrics, revenue per car, maintenance history, and availability analytics.",
+            "Fleet",
             _reportExportService.ExportFleetPdfAsync,
             _reportExportService.ExportFleetExcelAsync));
 
         _layout.Controls.Add(CreateExportSection(
-            "Export Operations Reports",
-            "Upcoming returns, late returns, active rentals, reservations, maintenance, and available cars.",
-            "Operations Report",
+            "Operations Reports",
+            "Daily operational data including upcoming/late returns, active rentals, and pending reservations.",
+            "Operations",
             _reportExportService.ExportOperationsPdfAsync,
             _reportExportService.ExportOperationsExcelAsync));
 
         _layout.Controls.Add(CreateExportSection(
-            "Export Customer Reports",
-            "Customer summaries, top customers, balances, late returns, damage fees, and blacklist records.",
-            "Customer Report",
+            "Customer Analytics",
+            "Detailed customer rental history, outstanding balances, frequent renters, and blacklist reports.",
+            "Customer",
             _reportExportService.ExportCustomerPdfAsync,
             _reportExportService.ExportCustomerExcelAsync));
+
+        if (AccessControlService.HasPermission("ManageSystem.ActivityLogs"))
+        {
+            _layout.Controls.Add(CreateExportSection(
+                "System Audit Log",
+                "Compliance-ready activity log detailing user actions, security changes, and data modifications.",
+                "Audit_Log",
+                _reportExportService.ExportAuditPdfAsync,
+                _reportExportService.ExportAuditExcelAsync));
+        }
 
         Controls.Add(_layout);
         ResizeCards();

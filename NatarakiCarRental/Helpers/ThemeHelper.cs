@@ -14,19 +14,63 @@ public static class ThemeHelper
     public static Color Primary { get; private set; } = Color.FromArgb(37, 99, 235);
     public static Color PrimaryHover { get; private set; } = Color.FromArgb(29, 78, 216);
 
+    public static Color Success { get; private set; } = Color.FromArgb(22, 163, 74);
+    public static Color Warning { get; private set; } = Color.FromArgb(217, 119, 6);
+    public static Color Danger { get; private set; } = Color.FromArgb(220, 38, 38);
+    public static Color Error => Danger;
+
     public static void SetPrimaryColor(Color color)
     {
         Primary = color;
-        // Simple hover color calculation: darker shade
-        PrimaryHover = Color.FromArgb(
-            Math.Max(0, color.R - 20),
-            Math.Max(0, color.G - 20),
-            Math.Max(0, color.B - 20)
+        PrimaryHover = GetHoverColor(color);
+
+        // Harmonize semantic colors with the branding theme
+        Success = HarmonizeColor(Color.FromArgb(22, 163, 74), color);
+        Warning = HarmonizeColor(Color.FromArgb(217, 119, 6), color);
+        Danger = HarmonizeColor(Color.FromArgb(220, 38, 38), color);
+    }
+
+    public static Color GetHoverColor(Color color)
+    {
+        return Color.FromArgb(
+            Math.Max(0, color.R - 30),
+            Math.Max(0, color.G - 30),
+            Math.Max(0, color.B - 30)
         );
     }
+
+    public static Color GetContrastTextColor(Color bgColor)
+    {
+        // Calculate relative luminance
+        double luminance = (0.299 * bgColor.R + 0.587 * bgColor.G + 0.114 * bgColor.B) / 255;
+        return luminance > 0.6 ? TextPrimary : Color.White;
+    }
+
+    private static Color HarmonizeColor(Color semantic, Color primary)
+    {
+        // Blend semantic with primary to harmonize (85% semantic, 15% primary)
+        // This ensures the semantic meaning is clear but it "belongs" to the same palette
+        return Color.FromArgb(
+            (int)(semantic.R * 0.85 + primary.R * 0.15),
+            (int)(semantic.G * 0.85 + primary.G * 0.15),
+            (int)(semantic.B * 0.85 + primary.B * 0.15)
+        );
+    }
+
+    // Centralized Dialog Color Helpers
+    public static Color GetDialogAccentColor(string type) => type.ToLower() switch
+    {
+        "success" => Success,
+        "warning" => Warning,
+        "error" or "danger" => Danger,
+        "confirm" or "info" => Primary,
+        _ => Primary
+    };
+
+    public static Color GetDialogButtonColor(string type) => GetDialogAccentColor(type);
+    public static Color GetDialogIconColor(string type) => GetDialogAccentColor(type);
+
     public static readonly Color Secondary = Color.FromArgb(219, 234, 254);
-    public static readonly Color Success = Color.FromArgb(22, 163, 74);
-    public static readonly Color Warning = Color.FromArgb(217, 119, 6);
     public static readonly Color Purple = Color.FromArgb(124, 58, 237);
     public static readonly Color GrayIcon = Color.FromArgb(100, 116, 139);
     public static readonly Color TextPrimary = Color.FromArgb(30, 41, 59);
@@ -34,14 +78,6 @@ public static class ThemeHelper
     public static readonly Color Border = Color.FromArgb(203, 213, 225);
     public static readonly Color TableGridLine = Color.FromArgb(148, 163, 184);
     public static readonly Color TableGridLineStrong = Color.FromArgb(71, 85, 105);
-    public static readonly Color Danger = Color.FromArgb(220, 38, 38);
-    public static readonly Color Error = Danger;
-
-    public static readonly Color AppBackground = Background;
-    public static readonly Color SidebarBackground = Surface;
-    public static readonly Color Accent = Secondary;
-    public static readonly Color HeaderText = TextPrimary;
-    public static readonly Color MutedText = TextSecondary;
 
     public static void ApplyFormDefaults(Form form)
     {

@@ -137,6 +137,38 @@ public static class ReportLayoutHelper
         grid.Rows.Add(cells);
     }
 
+    public static Panel CreateSectionHeader(string title)
+    {
+        Panel panel = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 44,
+            Padding = new Padding(0, 16, 0, 0)
+        };
+
+        Label label = new()
+        {
+            Text = title.ToUpperInvariant(),
+            Dock = DockStyle.Fill,
+            Font = FontHelper.SemiBold(10F),
+            ForeColor = ThemeHelper.Primary,
+            TextAlign = ContentAlignment.BottomLeft,
+            Padding = new Padding(4, 0, 0, 4)
+        };
+
+        panel.Controls.Add(label);
+
+        Panel underline = new()
+        {
+            Height = 2,
+            BackColor = Color.FromArgb(40, ThemeHelper.Primary),
+            Dock = DockStyle.Bottom
+        };
+        panel.Controls.Add(underline);
+
+        return panel;
+    }
+
     public static string FormatPeso(decimal amount) => $"₱{amount:N2}";
 
     public static string FormatPercent(decimal value) => $"{value:N1}%";

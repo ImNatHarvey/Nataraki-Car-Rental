@@ -80,7 +80,7 @@ public sealed class CarService
     public Task<int> CountCarsAsync(string searchText, bool includeArchived, string? status = null)
     {
         AccessControlService.EnforcePermission("CarGarage.View");
-        return _carRepository.CountCarsAsync(searchText, includeArchived, status);
+        return _carRepository.CountCarsAsync(searchText, includeArchived, DateTime.Today, status);
     }
 
     public Task<CarCounts> GetCarCountsAsync()
