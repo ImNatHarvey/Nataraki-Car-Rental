@@ -1,9 +1,7 @@
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using System.Globalization;
-using System.Text;
-using FontAwesome.Sharp;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 
@@ -20,26 +18,55 @@ public sealed class TransactionDocumentExportService
 {
     private readonly TransactionService _transactionService;
 
-    public TransactionDocumentExportService()
-        : this(new TransactionService())
+    static TransactionDocumentExportService()
     {
+        QuestPDF.Settings.License = LicenseType.Community;
     }
+
+    public TransactionDocumentExportService() : this(new TransactionService()) { }
 
     public TransactionDocumentExportService(TransactionService transactionService)
     {
         _transactionService = transactionService;
     }
 
+    // Theme Color Helpers
+    private static QuestPDF.Infrastructure.Color ThemePrimary => QuestPDF.Infrastructure.Color.FromRGB(ThemeHelper.Primary.R, ThemeHelper.Primary.G, ThemeHelper.Primary.B);
+    private static QuestPDF.Infrastructure.Color ThemePrimaryDark => QuestPDF.Infrastructure.Color.FromRGB(ThemeHelper.PrimaryHover.R, ThemeHelper.PrimaryHover.G, ThemeHelper.PrimaryHover.B);
+    private static QuestPDF.Infrastructure.Color ThemeContrastText => GetContrastTextColor(ThemeHelper.Primary);
+
+    private static QuestPDF.Infrastructure.Color ToQuestColor(System.Drawing.Color color) => QuestPDF.Infrastructure.Color.FromRGB(color.R, color.G, color.B);
+
+    private static QuestPDF.Infrastructure.Color GetContrastTextColor(System.Drawing.Color bgColor)
+    {
+        double luminance = (0.299 * bgColor.R + 0.587 * bgColor.G + 0.114 * bgColor.B) / 255;
+        return luminance > 0.6 ? Colors.Black : Colors.White;
+    }
+
     public async Task ExportReceiptAsync(int transactionId, string path, TransactionDocumentFormat format, string generatedBy)
     {
-        TransactionDocumentData data = await LoadDataAsync(transactionId, generatedBy);
-        WritePdf(path, BuildPages(data, format, TransactionDocumentKind.Receipt), format);
+        var data = await LoadDataAsync(transactionId, generatedBy);
+        if (format == TransactionDocumentFormat.StandardA4)
+        {
+            await ExportToPdfAsync(path, data);
+        }
+        else
+        {
+            await ExportToThermalPdfAsync(path, format, data);
+        }
     }
 
     public async Task ExportInvoiceAsync(int transactionId, string path, TransactionDocumentFormat format, string generatedBy)
     {
-        TransactionDocumentData data = await LoadDataAsync(transactionId, generatedBy);
-        WritePdf(path, BuildPages(data, format, TransactionDocumentKind.Invoice), format);
+        var data = await LoadDataAsync(transactionId, generatedBy);
+        if (format == TransactionDocumentFormat.StandardA4)
+        {
+            await ExportToPdfAsync(path, data);
+        }
+        else
+        {
+            await ExportToThermalPdfAsync(path, format, data);
+        }
     }
 
     private async Task<TransactionDocumentData> LoadDataAsync(int transactionId, string generatedBy)
@@ -47,470 +74,371 @@ public sealed class TransactionDocumentExportService
         AccessControlService.EnforcePermission("Transactions.View");
 
         Transaction? transaction = await _transactionService.GetByIdAsync(transactionId);
-        if (transaction is null)
-        {
-            throw new InvalidOperationException("Transaction record was not found.");
-        }
+        if (transaction is null) throw new InvalidOperationException("Transaction record was not found.");
 
         IReadOnlyList<TransactionPaymentListItem> payments = await _transactionService.GetPaymentsAsync(transactionId);
         SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
-        return new TransactionDocumentData(transaction, payments, settings, CreateBusinessAddress(settings), generatedBy);
-    }
 
-    private static IReadOnlyList<string> BuildPages(TransactionDocumentData data, TransactionDocumentFormat format, TransactionDocumentKind kind)
-    {
-        return format == TransactionDocumentFormat.StandardA4
-            ? BuildA4Pages(data, format, kind)
-            : [BuildThermalPage(data, format, kind)];
-    }
-
-    private static IReadOnlyList<string> BuildA4Pages(TransactionDocumentData data, TransactionDocumentFormat format, TransactionDocumentKind kind)
-    {
-        List<string> pages = [];
-        LogoData? logo = LoadLogoJpeg();
-        A4Page page = new(logo);
-
-        AddA4Header(page, data, logo is not null);
-        page.CenterText(kind == TransactionDocumentKind.Receipt ? "RECEIPT" : "INVOICE", 16, bold: true);
-        page.Move(24);
-
-        Transaction transaction = data.Transaction;
-        page.Section("Transaction Information");
-        page.KeyValue("Transaction No", transaction.TransactionCode);
-        page.KeyValue("Customer", FormattingHelper.ValueOrDash(transaction.CustomerName));
-        page.KeyValue("Vehicle", FormattingHelper.ValueOrDash(transaction.CarName));
-        page.KeyValue("Plate No", FormattingHelper.ValueOrDash(transaction.PlateNumber));
-        page.KeyValue("Rental Period", $"{transaction.StartDate:yyyy-MM-dd} to {transaction.EndDate:yyyy-MM-dd}");
-        page.KeyValue("Transaction Status", FormattingHelper.ValueOrDash(transaction.TransactionStatus));
-        page.KeyValue("Payment Status", FormattingHelper.ValueOrDash(transaction.PaymentStatus));
-        page.KeyValue("Mode of Payment", FormattingHelper.ValueOrDash(transaction.ModeOfPayment));
-        page.KeyValue("Created Date", transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
-        page.KeyValue("Processed By", FormattingHelper.ValueOrDash(data.GeneratedBy));
-        page.Move(10);
-
-        page.Section("Financial Summary");
-        page.KeyValue("Rental Fee", FormattingHelper.FormatPeso(transaction.DailyRate * transaction.TotalDays));
-        page.KeyValue("Additional Charges", FormattingHelper.FormatPeso(transaction.AdditionalCharge));
-        page.KeyValue("Total Amount", FormattingHelper.FormatPeso(transaction.TotalAmount));
-        page.KeyValue("Amount Paid", FormattingHelper.FormatPeso(transaction.AmountPaid));
-        page.KeyValue("Balance", FormattingHelper.FormatPeso(transaction.BalanceAmount));
-        page.Move(10);
-
-        page.Section("Payment History");
-        page.TableHeader(["Date", "Type", "Method", "Amount"], [108, 170, 130, 104]);
-        if (data.Payments.Count == 0)
-        {
-            page.TableRow(["No payments recorded.", string.Empty, string.Empty, string.Empty], [108, 170, 130, 104]);
-        }
-        else
-        {
-            foreach (TransactionPaymentListItem payment in data.Payments.OrderBy(payment => payment.PaymentDate))
-            {
-                page.TableRow(
-                    [
-                        payment.PaymentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                        FormattingHelper.ValueOrDash(payment.PaymentCategory),
-                        FormattingHelper.ValueOrDash(payment.ModeOfPayment),
-                        FormattingHelper.FormatPeso(payment.Amount)
-                    ],
-                    [108, 170, 130, 104]);
-            }
-        }
-
-        page.Move(24);
-        page.CenterText($"Thank you for choosing {data.Settings.BusinessName}.", 10, bold: true);
-        page.AddFooter(data.Settings.BusinessName);
-        pages.Add(page.Content);
-        return pages;
-    }
-
-    private static void AddA4Header(A4Page page, TransactionDocumentData data, bool hasLogo)
-    {
-        // Draw a solid theme-colored bar at the top (matching ReportExportService Letter size)
-        page.Rect(0, 712, 612, 80, page.ThemeRgb);
+        // Dynamic Title Logic
+        bool isFullyPaid = transaction.BalanceAmount <= 0 || 
+                           transaction.TransactionStatus == TransactionConstants.Status.Completed ||
+                           transaction.PaymentStatus == TransactionConstants.PaymentStatus.Paid;
         
-        // Pure text header for A4 reports as requested - Strip the logo
-        double y = 758;
-        page.Text(data.Settings.BusinessName, 306, y, 18, bold: true, centered: true, color: "1 1 1");
-        y -= 18;
-        page.Text(data.ContactLine, 306, y, 9, centered: true, color: "0.95 0.95 0.95");
+        string documentTitle = isFullyPaid ? "RECEIPT" : "INVOICE";
+
+        return new TransactionDocumentData(
+            transaction, 
+            payments.OrderBy(p => p.PaymentDate).ToList(), 
+            settings, 
+            CreateBusinessAddress(settings), 
+            generatedBy,
+            documentTitle,
+            isFullyPaid);
+    }
+
+    // A4 PDF Generation (Portrait)
+    private async Task ExportToPdfAsync(string path, TransactionDocumentData data)
+    {
+        await Task.Run(() =>
+        {
+            try
+            {
+                var document = Document.Create(container =>
+                {
+                    container.Page(page =>
+                    {
+                        page.Size(PageSizes.A4);
+                        page.Margin(1.5f, Unit.Centimetre);
+                        page.PageColor(Colors.White);
+                        page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Verdana));
+
+                        ComposeHeader(page.Header(), data);
+                        ComposeContent(page.Content(), data);
+                        ComposeFooter(page.Footer(), data.Settings.BusinessName);
+                    });
+                });
+
+                document.GeneratePdf(path);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"QuestPDF failed to generate {data.DocumentTitle.ToLower()}: {ex.Message}", ex);
+            }
+        });
+    }
+
+    // Thermal PDF Generation (Dynamic Height)
+    private async Task ExportToThermalPdfAsync(string path, TransactionDocumentFormat format, TransactionDocumentData data)
+    {
+        float width = format == TransactionDocumentFormat.Thermal80 ? 226 : 164; // Approx 80mm and 57mm in points
         
-        page.Y = 680;
-    }
-
-    private static string BuildThermalPage(TransactionDocumentData data, TransactionDocumentFormat format, TransactionDocumentKind kind)
-    {
-        ThermalLayout layout = GetThermalLayout(format, data, kind);
-        PdfPage page = new(layout.Width, layout.Height);
-        double y = layout.Height - layout.Margin;
-
-        page.Center(data.Settings.BusinessName, y, layout.HeaderFont, bold: true);
-        y -= layout.LineHeight;
-        foreach (string line in WrapText(data.ContactLine, layout.MaxChars))
+        await Task.Run(() =>
         {
-            page.Center(line, y, layout.SmallFont);
-            y -= layout.LineHeight;
-        }
-
-        y -= 4;
-        page.Center(kind == TransactionDocumentKind.Receipt ? "RECEIPT" : "INVOICE", y, layout.HeaderFont, bold: true);
-        y -= layout.LineHeight;
-        
-        // Dash separator
-        page.Center(new string('-', layout.MaxChars), y, layout.BodyFont, courier: true);
-        y -= layout.LineHeight;
-
-        Transaction transaction = data.Transaction;
-        TransactionPaymentListItem? latestPayment = data.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
-        DateTime paymentDate = latestPayment?.PaymentDate ?? transaction.CreatedAt;
-
-        // Conditional Layout: Stacked for 57mm, Justified for 80mm
-        bool isStacked = format == TransactionDocumentFormat.Thermal57;
-
-        y = ThermalItem(page, layout, "Customer", FormattingHelper.ValueOrDash(transaction.CustomerName), y, isStacked);
-        y = ThermalItem(page, layout, "Date", paymentDate.ToString("MMM d, yyyy"), y, isStacked);
-        y = ThermalItem(page, layout, "Transaction ID", $"#{transaction.TransactionCode}", y, isStacked);
-        y = ThermalItem(page, layout, "Vehicle", FormattingHelper.ValueOrDash(transaction.CarName), y, isStacked);
-        y = ThermalItem(page, layout, "Plate No", FormattingHelper.ValueOrDash(transaction.PlateNumber), y, isStacked);
-        
-        // Dash separator
-        page.Center(new string('-', layout.MaxChars), y, layout.BodyFont, courier: true);
-        y -= layout.LineHeight;
-
-        // Financial Values
-        y = ThermalItem(page, layout, "TOTAL AMOUNT", FormattingHelper.FormatPeso(transaction.TotalAmount), y, isStacked, bold: true);
-        y = ThermalItem(page, layout, kind == TransactionDocumentKind.Receipt ? "AMOUNT PAID" : "PAID", FormattingHelper.FormatPeso(transaction.AmountPaid), y, isStacked, bold: true);
-        y = ThermalItem(page, layout, "BALANCE", FormattingHelper.FormatPeso(transaction.BalanceAmount), y, isStacked, bold: true);
-
-        // Payment History Section
-        if (data.Payments.Count > 0)
-        {
-            y -= 4;
-            page.Center(new string('-', layout.MaxChars), y, layout.BodyFont, courier: true);
-            y -= layout.LineHeight;
-            page.Center("PAYMENT HISTORY", y, layout.BodyFont, bold: true);
-            y -= layout.LineHeight;
-
-            foreach (var payment in data.Payments.OrderByDescending(p => p.PaymentDate))
+            try
             {
-                string dateMode = $"{payment.PaymentDate:MMM dd} - {payment.ModeOfPayment}";
-                y = ThermalItem(page, layout, dateMode, FormattingHelper.FormatPeso(payment.Amount), y, isStacked);
+                var document = Document.Create(container =>
+                {
+                    container.Page(page =>
+                    {
+                        page.ContinuousSize(width);
+                        page.Margin(0.5f, Unit.Centimetre);
+                        page.PageColor(Colors.White);
+                        page.DefaultTextStyle(x => x.FontSize(format == TransactionDocumentFormat.Thermal80 ? 9 : 8).FontFamily(Fonts.Verdana));
+
+                        page.Content().Column(column =>
+                        {
+                            ComposeThermalHeader(column, data);
+                            ComposeThermalCustomerSection(column, data);
+                            ComposeThermalItemsTable(column, data);
+                            ComposeThermalPaymentHistory(column, data, format == TransactionDocumentFormat.Thermal57);
+                            ComposeThermalTotals(column, data);
+                            ComposeThermalFooter(column, data);
+                        });
+                    });
+                });
+
+                document.GeneratePdf(path);
             }
-        }
-        
-        page.Center(new string('-', layout.MaxChars), y, layout.BodyFont, courier: true);
-        y -= layout.LineHeight + 8;
-        page.Center("Thank you for choosing us!", y, layout.BodyFont, bold: true);
-        return page.Content;
-    }
-
-    private static double ThermalItem(PdfPage page, ThermalLayout layout, string label, string value, double y, bool stacked, bool bold = false)
-    {
-        string safeValue = FormattingHelper.SanitizePdfText(value);
-        if (stacked)
-        {
-            // Stacked layout: Label on top, Value below
-            page.Text(label, layout.Margin, y, layout.BodyFont, bold: bold, courier: true);
-            y -= layout.LineHeight;
-            page.Text(safeValue, layout.Margin + 4, y, layout.BodyFont, bold: bold, courier: true);
-            return y - layout.LineHeight;
-        }
-        else
-        {
-            // Justified layout: Label left, Value right
-            page.Text(label, layout.Margin, y, layout.BodyFont, bold: bold, courier: true);
-            page.Text(safeValue, layout.Width - layout.Margin, y, layout.BodyFont, bold: bold, rightAligned: true, courier: true);
-            return y - layout.LineHeight;
-        }
-    }
-
-    private static ThermalLayout GetThermalLayout(TransactionDocumentFormat format, TransactionDocumentData data, TransactionDocumentKind kind)
-    {
-        double width = format == TransactionDocumentFormat.Thermal57 ? 162 : 226;
-        double margin = format == TransactionDocumentFormat.Thermal57 ? 8 : 12;
-        int maxChars = format == TransactionDocumentFormat.Thermal57 ? 24 : 32;
-        
-        const double lineHeight = 14;
-        double y = margin;
-        
-        // Header
-        y += lineHeight; // Business Name
-        y += WrapText(data.ContactLine, maxChars).Count() * lineHeight;
-        y += 4 + lineHeight; // Document Title
-        y += lineHeight; // Separator
-
-        // Details
-        int detailLines = format == TransactionDocumentFormat.Thermal57 ? 10 : 5;
-        y += detailLines * lineHeight;
-        y += lineHeight; // Separator
-
-        // Totals
-        int totalLines = format == TransactionDocumentFormat.Thermal57 ? 6 : 3;
-        y += totalLines * lineHeight;
-
-        // Payment History
-        if (data.Payments.Count > 0)
-        {
-            y += 4 + lineHeight; // Separator
-            y += lineHeight; // PAYMENT HISTORY Header
-            int paymentLines = format == TransactionDocumentFormat.Thermal57 ? data.Payments.Count * 2 : data.Payments.Count;
-            y += paymentLines * lineHeight;
-        }
-
-        y += lineHeight; // Separator
-        y += lineHeight + 8; // Footer
-        y += margin;
-
-        return new ThermalLayout(width, y, margin, maxChars, 8, 9, 10, lineHeight, 0);
-    }
-
-    private static void WritePdf(string path, IReadOnlyList<string> pageContents, TransactionDocumentFormat format)
-    {
-        LogoData? logo = format == TransactionDocumentFormat.StandardA4 ? LoadLogoJpeg() : null;
-        PdfSize pageSize = format == TransactionDocumentFormat.StandardA4
-            ? new PdfSize(612, 792) // Letter size
-            : GetThermalPageSize(pageContents[0]);
-
-        using FileStream stream = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        using StreamWriter writer = new(stream, new UTF8Encoding(false));
-        List<long> offsets = [];
-        int pageCount = pageContents.Count;
-        int regularFontObject = 3 + (pageCount * 2);
-        int boldFontObject = regularFontObject + 1;
-        int courierFontObject = boldFontObject + 1;
-        int imageObject = logo is null ? 0 : courierFontObject + 1;
-
-        writer.WriteLine("%PDF-1.4");
-        WritePdfObject(writer, offsets, 1, "<< /Type /Catalog /Pages 2 0 R >>");
-        WritePdfObject(writer, offsets, 2, $"<< /Type /Pages /Kids [{string.Join(" ", Enumerable.Range(0, pageCount).Select(index => $"{3 + (index * 2)} 0 R"))}] /Count {pageCount} >>");
-        for (int index = 0; index < pageCount; index++)
-        {
-            int pageObject = 3 + (index * 2);
-            int contentObject = pageObject + 1;
-            string imageResource = (format == TransactionDocumentFormat.StandardA4 && logo is not null) ? $" /XObject << /Im1 {imageObject} 0 R >>" : string.Empty;
-            WritePdfObject(writer, offsets, pageObject, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {pageSize.Width.ToString(CultureInfo.InvariantCulture)} {pageSize.Height.ToString(CultureInfo.InvariantCulture)}] /Resources << /Font << /F1 {regularFontObject} 0 R /F2 {boldFontObject} 0 R /F3 {courierFontObject} 0 R >>{imageResource} >> /Contents {contentObject} 0 R >>");
-            WritePdfStreamObject(writer, offsets, contentObject, pageContents[index]);
-        }
-
-        WritePdfObject(writer, offsets, regularFontObject, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-        WritePdfObject(writer, offsets, boldFontObject, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
-        WritePdfObject(writer, offsets, courierFontObject, "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>");
-        if (format == TransactionDocumentFormat.StandardA4 && logo is not null)
-        {
-            WritePdfBinaryStreamObject(writer, offsets, imageObject, $"<< /Type /XObject /Subtype /Image /Width {logo.Width} /Height {logo.Height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {logo.Bytes.Length} >>", logo.Bytes);
-        }
-
-        writer.Flush();
-        long xrefOffset = writer.BaseStream.Position;
-        writer.WriteLine("xref");
-        writer.WriteLine($"0 {offsets.Count + 1}");
-        writer.WriteLine("0000000000 65535 f ");
-        foreach (long offset in offsets)
-        {
-            writer.WriteLine($"{offset:0000000000} 00000 n ");
-        }
-
-        writer.WriteLine("trailer");
-        writer.WriteLine($"<< /Size {offsets.Count + 1} /Root 1 0 R >>");
-        writer.WriteLine("startxref");
-        writer.WriteLine(xrefOffset);
-        writer.WriteLine("%%EOF");
-    }
-
-    private static PdfSize GetThermalPageSize(string pageContent)
-    {
-        string marker = "%SIZE ";
-        string firstLine = pageContent.Split('\n').FirstOrDefault() ?? string.Empty;
-        if (firstLine.StartsWith(marker, StringComparison.Ordinal))
-        {
-            string[] parts = firstLine[marker.Length..].Trim().Split('x');
-            if (parts.Length == 2
-                && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double width)
-                && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double height))
+            catch (Exception ex)
             {
-                return new PdfSize(width, height);
+                throw new InvalidOperationException($"QuestPDF failed to generate thermal {data.DocumentTitle.ToLower()}: {ex.Message}", ex);
             }
-        }
-
-        return new PdfSize(226, 520);
+        });
     }
 
-    private static void WritePdfObject(StreamWriter writer, List<long> offsets, int objectNumber, string value)
+    // A4 Components
+    private void ComposeHeader(IContainer container, TransactionDocumentData data)
     {
-        writer.Flush();
-        offsets.Add(writer.BaseStream.Position);
-        writer.WriteLine($"{objectNumber} 0 obj");
-        writer.WriteLine(value);
-        writer.WriteLine("endobj");
+        container.Row(row =>
+        {
+            row.RelativeItem().Column(col =>
+            {
+                col.Item().Text(data.Settings.BusinessName).FontSize(16).SemiBold().FontColor(ThemePrimary);
+                col.Item().Text(data.BusinessAddress).FontSize(8).FontColor(Colors.Grey.Medium);
+                col.Item().Text($"Contact: {data.Settings.ContactNumber}").FontSize(8).FontColor(Colors.Grey.Medium);
+                if (!string.IsNullOrWhiteSpace(data.Settings.EmailAddress))
+                    col.Item().Text(data.Settings.EmailAddress).FontSize(8).FontColor(Colors.Grey.Medium);
+            });
+
+            row.RelativeItem().AlignRight().Column(col =>
+            {
+                col.Item().Text(data.DocumentTitle).FontSize(24).ExtraBold().FontColor(ThemePrimaryDark);
+                col.Item().Text(x =>
+                {
+                    x.Span("No: ").SemiBold();
+                    x.Span(data.Transaction.TransactionCode).SemiBold().FontColor(ThemePrimaryDark);
+                });
+                col.Item().Text($"Generated: {DateTime.Now:MMM d, yyyy h:mm tt}").FontSize(8);
+                col.Item().Text($"Transaction Date: {data.Transaction.CreatedAt:MMM d, yyyy}").FontSize(8);
+            });
+        });
     }
 
-    private static void WritePdfStreamObject(StreamWriter writer, List<long> offsets, int objectNumber, string content)
+    private void ComposeContent(IContainer container, TransactionDocumentData data)
     {
-        writer.Flush();
-        offsets.Add(writer.BaseStream.Position);
-        byte[] bytes = Encoding.ASCII.GetBytes(content);
-        writer.WriteLine($"{objectNumber} 0 obj");
-        writer.WriteLine($"<< /Length {bytes.Length} >>");
-        writer.WriteLine("stream");
-        writer.Flush();
-        writer.BaseStream.Write(bytes, 0, bytes.Length);
-        writer.WriteLine();
-        writer.WriteLine("endstream");
-        writer.WriteLine("endobj");
-    }
-
-    private static void WritePdfBinaryStreamObject(StreamWriter writer, List<long> offsets, int objectNumber, string dictionary, byte[] bytes)
-    {
-        writer.Flush();
-        offsets.Add(writer.BaseStream.Position);
-        writer.WriteLine($"{objectNumber} 0 obj");
-        writer.WriteLine(dictionary);
-        writer.WriteLine("stream");
-        writer.Flush();
-        writer.BaseStream.Write(bytes, 0, bytes.Length);
-        writer.WriteLine();
-        writer.WriteLine("endstream");
-        writer.WriteLine("endobj");
-    }
-
-    private static LogoData? LoadLogoJpeg()
-    {
-        SystemSettingsModel settings = AppBrandingManager.CurrentSettings;
-        string? logoPath = settings.SystemIconPath;
-
-        // Skip logo if explicitly set to None
-        if (string.Equals(settings.SystemLogoMode, "None", StringComparison.OrdinalIgnoreCase))
+        container.PaddingTop(15).Column(column =>
         {
-            return null;
-        }
+            // Customer & Rental Information Cards
+            column.Item().Row(row =>
+            {
+                row.RelativeItem().PaddingRight(10).Column(c =>
+                {
+                    c.Item().Text("CUSTOMER INFORMATION").FontSize(10).SemiBold().FontColor(ThemePrimaryDark);
+                    c.Item().PaddingTop(4).Border(0.5f).BorderColor(Colors.Grey.Lighten2).Background(Colors.Grey.Lighten5).Padding(8).Column(inner =>
+                    {
+                        inner.Item().Text(data.Transaction.CustomerName).SemiBold();
+                        inner.Item().Text(data.Transaction.CustomerPhone ?? "-");
+                        inner.Item().Text(data.Transaction.CustomerAddress ?? "-").FontSize(8).FontColor(Colors.Grey.Medium);
+                    });
+                });
 
-        Image? logoImage = null;
-        try
-        {
-            // Only attempt to load if the file actually exists
-            if (!string.IsNullOrWhiteSpace(logoPath) && System.IO.File.Exists(logoPath))
-            {
-                logoImage = Image.FromFile(logoPath);
-            }
-            else
-            {
-                return null;
-            }
-        }
-        catch
-        {
-            logoImage?.Dispose();
-            return null; // Gracefully skip logo on any error
-        }
+                row.RelativeItem().PaddingLeft(10).Column(c =>
+                {
+                    c.Item().Text("RENTAL DETAILS").FontSize(10).SemiBold().FontColor(ThemePrimaryDark);
+                    c.Item().PaddingTop(4).Border(0.5f).BorderColor(Colors.Grey.Lighten2).Background(Colors.Grey.Lighten5).Padding(8).Column(inner =>
+                    {
+                        inner.Item().Text(FormattingHelper.CarPlate(data.Transaction.CarName, data.Transaction.PlateNumber)).SemiBold();
+                        inner.Item().Text(x => { x.Span("Period: ").FontSize(8).FontColor(Colors.Grey.Medium); x.Span($"{data.Transaction.StartDate:MMM d} - {data.Transaction.EndDate:MMM d, yyyy}").FontSize(8); });
+                        inner.Item().Text(x => { x.Span("Duration: ").FontSize(8).FontColor(Colors.Grey.Medium); x.Span($"{data.Transaction.TotalDays} day(s)").FontSize(8); });
+                        inner.Item().Text(x => { x.Span("Status: ").FontSize(8).FontColor(Colors.Grey.Medium); x.Span(data.Transaction.TransactionStatus).FontSize(8).SemiBold().FontColor(ThemePrimary); });
+                    });
+                });
+            });
 
-        if (logoImage == null) return null;
+            // Payment Breakdown / Items Table
+            column.Item().PaddingTop(20).Text("ITEMIZED CHARGES").FontSize(10).SemiBold().FontColor(ThemePrimaryDark);
+            column.Item().PaddingTop(4).Table(table =>
+            {
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.RelativeColumn(3);
+                    columns.RelativeColumn();
+                    columns.RelativeColumn();
+                    columns.RelativeColumn();
+                });
 
-        using (logoImage)
-        {
-            const int maxSize = 192;
-            int width;
-            int height;
-            if (logoImage.Width >= logoImage.Height)
+                table.Header(header =>
+                {
+                    header.Cell().Background(ThemePrimaryDark).Padding(4).Text("Description").FontColor(ThemeContrastText).SemiBold();
+                    header.Cell().Background(ThemePrimaryDark).Padding(4).Text("Qty/Days").FontColor(ThemeContrastText).SemiBold().AlignCenter();
+                    header.Cell().Background(ThemePrimaryDark).Padding(4).Text("Rate").FontColor(ThemeContrastText).SemiBold().AlignRight();
+                    header.Cell().Background(ThemePrimaryDark).Padding(4).Text("Amount").FontColor(ThemeContrastText).SemiBold().AlignRight();
+                });
+
+                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).Text($"Base Rental Fee ({data.Transaction.CarName})");
+                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text(data.Transaction.TotalDays.ToString());
+                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.DailyRate));
+                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.DailyRate * data.Transaction.TotalDays));
+
+                if (data.Transaction.AdditionalCharge > 0)
+                {
+                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).Text("Additional Charges / Penalties");
+                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text("-");
+                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).AlignRight().Text("-");
+                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(4).AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.AdditionalCharge));
+                }
+            });
+
+            // Payment History
+            if (data.Payments.Any())
             {
-                width = maxSize;
-                height = Math.Max(1, (int)Math.Round(logoImage.Height * (maxSize / (double)logoImage.Width)));
-            }
-            else
-            {
-                height = maxSize;
-                width = Math.Max(1, (int)Math.Round(logoImage.Width * (maxSize / (double)logoImage.Height)));
+                column.Item().PaddingTop(20).Text("PAYMENT HISTORY").FontSize(10).SemiBold().FontColor(ThemePrimaryDark);
+                column.Item().PaddingTop(4).Table(table =>
+                {
+                    table.ColumnsDefinition(columns =>
+                    {
+                        columns.RelativeColumn(2);
+                        columns.RelativeColumn(1.5f);
+                        columns.RelativeColumn(2);
+                        columns.RelativeColumn();
+                    });
+
+                    table.Header(header =>
+                    {
+                        header.Cell().BorderBottom(1).Padding(4).Text("Date & Time").SemiBold();
+                        header.Cell().BorderBottom(1).Padding(4).Text("Method").SemiBold();
+                        header.Cell().BorderBottom(1).Padding(4).Text("Reference No.").SemiBold();
+                        header.Cell().BorderBottom(1).Padding(4).Text("Amount").SemiBold().AlignRight();
+                    });
+
+                    foreach (var p in data.Payments)
+                    {
+                        table.Cell().Padding(4).Text(p.PaymentDate.ToString("yyyy-MM-dd hh:mm tt")).FontSize(8);
+                        table.Cell().Padding(4).Text(p.ModeOfPayment).FontSize(8);
+                        table.Cell().Padding(4).Text(p.ReferenceNumber ?? "N/A").FontSize(8);
+                        table.Cell().Padding(4).AlignRight().Text(FormattingHelper.FormatPeso(p.Amount)).FontSize(8).SemiBold();
+                    }
+                });
             }
 
-            using Bitmap bitmap = new(width, height);
-            using (Graphics graphics = Graphics.FromImage(bitmap))
+            // Summary Panel
+            column.Item().PaddingTop(15).Row(row =>
             {
-                graphics.Clear(Color.White);
-                graphics.DrawImage(logoImage, new Rectangle(0, 0, width, height));
-            }
+                row.RelativeItem(2);
+                row.RelativeItem().Padding(4).Border(0.5f).BorderColor(Colors.Grey.Lighten2).BorderTop(2).BorderColor(ThemePrimary).Background(Colors.Grey.Lighten4).Column(c =>
+                {
+                    c.Item().Row(r => { r.RelativeItem().Text("SUBTOTAL").FontSize(7).SemiBold().FontColor(Colors.Grey.Medium); r.RelativeItem().AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.TotalAmount)).FontSize(8).SemiBold(); });
+                    c.Item().Row(r => { r.RelativeItem().Text("TOTAL PAID").FontSize(7).SemiBold().FontColor(Colors.Grey.Medium); r.RelativeItem().AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.AmountPaid)).FontSize(8).SemiBold().FontColor(ThemePrimary); });
+                    c.Item().PaddingTop(4).BorderTop(0.5f).BorderColor(Colors.Grey.Lighten2).Row(r => 
+                    { 
+                        r.RelativeItem().Text("REMAINING BALANCE").FontSize(8).Bold().FontColor(ThemePrimaryDark); 
+                        r.RelativeItem().AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.BalanceAmount)).FontSize(10).ExtraBold().FontColor(ThemePrimaryDark); 
+                    });
+                    
+                    c.Item().PaddingTop(4).AlignCenter().Text(data.IsFullyPaid ? "STATUS: PAID" : "STATUS: PARTIAL / UNPAID")
+                        .FontSize(9).Bold().FontColor(data.IsFullyPaid ? ToQuestColor(ThemeHelper.Success) : ToQuestColor(ThemeHelper.Danger));
+                });
+            });
 
-            using MemoryStream memory = new();
-            bitmap.Save(memory, ImageFormat.Jpeg);
-            return new LogoData(memory.ToArray(), width, height);
-        }
+            column.Item().PaddingTop(25).Column(c =>
+            {
+                c.Item().Text("OFFICIAL REMARKS").FontSize(10).SemiBold().FontColor(ThemePrimaryDark);
+                c.Item().PaddingTop(4).Text(string.IsNullOrWhiteSpace(data.Transaction.Notes) ? "No additional notes provided." : data.Transaction.Notes).FontSize(8).Italic().FontColor(Colors.Grey.Medium);
+                c.Item().PaddingTop(10).Text(x => { x.Span("Processed By: ").SemiBold(); x.Span(data.GeneratedBy); });
+            });
+        });
+    }
+
+    private void ComposeFooter(IContainer container, string businessName)
+    {
+        container.PaddingTop(10).BorderTop(0.5f).BorderColor(Colors.Grey.Lighten2).Row(row =>
+        {
+            row.RelativeItem().Text(x => { x.Span($"Thank you for choosing {businessName}!").SemiBold().FontColor(ThemePrimary); });
+            row.RelativeItem().AlignRight().Text(x => { x.Span("Generated by NatarakiCarRental System | Page ").FontSize(8).FontColor(Colors.Grey.Medium); x.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Medium); });
+        });
+    }
+
+    // Thermal Components
+    private void ComposeThermalHeader(ColumnDescriptor column, TransactionDocumentData data)
+    {
+        column.Item().AlignCenter().Column(c =>
+        {
+            c.Item().AlignCenter().Text(data.Settings.BusinessName).FontSize(12).ExtraBold().FontColor(ThemePrimary);
+            c.Item().AlignCenter().Text(data.BusinessAddress).FontSize(7);
+            c.Item().AlignCenter().Text($"Tel: {data.Settings.ContactNumber}").FontSize(7);
+            c.Item().PaddingVertical(5).AlignCenter().Text(data.DocumentTitle).FontSize(14).ExtraBold().FontColor(ThemePrimaryDark);
+            
+            c.Item().AlignCenter().Text(text =>
+            {
+                text.Span("No: ").SemiBold();
+                text.Span(data.Transaction.TransactionCode).SemiBold();
+                text.DefaultTextStyle(x => x.FontSize(8));
+            });
+            
+            c.Item().AlignCenter().Text(DateTime.Now.ToString("MMM d, yyyy h:mm tt")).FontSize(7);
+        });
+        column.Item().PaddingVertical(5).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+    }
+
+    private void ComposeThermalCustomerSection(ColumnDescriptor column, TransactionDocumentData data)
+    {
+        column.Item().Column(c =>
+        {
+            c.Item().Text(x => { x.Span("Customer: ").SemiBold(); x.Span(data.Transaction.CustomerName); });
+            c.Item().Text(x => { x.Span("Vehicle: ").SemiBold(); x.Span(FormattingHelper.CarPlate(data.Transaction.CarName, data.Transaction.PlateNumber)); });
+            c.Item().Text(x => { x.Span("Duration: ").SemiBold(); x.Span($"{data.Transaction.TotalDays} day(s) ({data.Transaction.StartDate:MMM d} - {data.Transaction.EndDate:MMM d})"); });
+        });
+        column.Item().PaddingVertical(5).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten3);
+    }
+
+    private void ComposeThermalItemsTable(ColumnDescriptor column, TransactionDocumentData data)
+    {
+        column.Item().Table(table =>
+        {
+            table.ColumnsDefinition(columns =>
+            {
+                columns.RelativeColumn();
+                columns.RelativeColumn();
+            });
+
+            table.Cell().Text("Rental Fee").SemiBold();
+            table.Cell().AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.DailyRate * data.Transaction.TotalDays));
+
+            if (data.Transaction.AdditionalCharge > 0)
+            {
+                table.Cell().Text("Penalties/Addl").SemiBold();
+                table.Cell().AlignRight().Text(FormattingHelper.FormatPeso(data.Transaction.AdditionalCharge));
+            }
+        });
+        column.Item().PaddingVertical(5).LineHorizontal(1).LineColor(ThemePrimary);
+    }
+
+    private void ComposeThermalPaymentHistory(ColumnDescriptor column, TransactionDocumentData data, bool isCompact)
+    {
+        if (!data.Payments.Any()) return;
+
+        column.Item().PaddingTop(5).Text("PAYMENT HISTORY").FontSize(8).SemiBold().FontColor(ThemePrimaryDark);
+        column.Item().Table(table =>
+        {
+            table.ColumnsDefinition(columns =>
+            {
+                columns.RelativeColumn(2);
+                columns.RelativeColumn(2);
+                columns.RelativeColumn(1.5f);
+            });
+
+            foreach (var p in data.Payments)
+            {
+                string methodLabel = isCompact ? (p.ModeOfPayment.Length > 5 ? p.ModeOfPayment[..5] : p.ModeOfPayment) : p.ModeOfPayment;
+                string refLabel = isCompact ? "Ref:" : "Ref No:";
+                
+                table.Cell().Text(p.PaymentDate.ToString("MM/dd HH:mm")).FontSize(7);
+                table.Cell().Text($"{methodLabel} {(string.IsNullOrWhiteSpace(p.ReferenceNumber) ? "" : $"({p.ReferenceNumber})")}").FontSize(7);
+                table.Cell().AlignRight().Text(FormattingHelper.FormatPeso(p.Amount)).FontSize(7).SemiBold();
+            }
+        });
+        column.Item().PaddingVertical(5).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten3);
+    }
+
+    private void ComposeThermalTotals(ColumnDescriptor column, TransactionDocumentData data)
+    {
+        column.Item().AlignRight().Column(c =>
+        {
+            c.Item().Text(x => { x.Span("TOTAL: ").FontSize(11).ExtraBold().FontColor(ThemePrimaryDark); x.Span(FormattingHelper.FormatPeso(data.Transaction.TotalAmount)).FontSize(11).ExtraBold().FontColor(ThemePrimaryDark); });
+            c.Item().Text(x => { x.Span("PAID: ").SemiBold(); x.Span(FormattingHelper.FormatPeso(data.Transaction.AmountPaid)).SemiBold().FontColor(ThemePrimary); });
+            c.Item().PaddingTop(2).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
+            c.Item().Text(x => { x.Span("BALANCE: ").FontSize(10).ExtraBold(); x.Span(FormattingHelper.FormatPeso(data.Transaction.BalanceAmount)).FontSize(10).ExtraBold(); });
+            
+            c.Item().PaddingTop(5).AlignCenter().Text(data.IsFullyPaid ? "STATUS: PAID" : "STATUS: UNSETTLED")
+                .FontSize(10).Bold().FontColor(data.IsFullyPaid ? ToQuestColor(ThemeHelper.Success) : ToQuestColor(ThemeHelper.Danger));
+        });
+    }
+
+    private void ComposeThermalFooter(ColumnDescriptor column, TransactionDocumentData data)
+    {
+        column.Item().PaddingTop(15).AlignCenter().Column(c =>
+        {
+            c.Item().AlignCenter().Text("Thank you for choosing us!").SemiBold();
+            c.Item().AlignCenter().Text("Drive safely and see you again.").FontSize(7);
+            c.Item().PaddingTop(5).AlignCenter().Text("Generated by NatarakiCarRental").FontSize(6).FontColor(Colors.Grey.Medium);
+        });
     }
 
     private static string CreateBusinessAddress(SystemSettingsModel settings)
     {
-        if (!string.IsNullOrWhiteSpace(settings.BusinessAddress))
-        {
-            return settings.BusinessAddress.Trim();
-        }
-
-        string[] parts =
-        [
-            settings.BusinessStreetAddress,
-            settings.BusinessBarangayName,
-            settings.BusinessCityName,
-            settings.BusinessProvinceName,
-            settings.BusinessRegionName
-        ];
+        if (!string.IsNullOrWhiteSpace(settings.BusinessAddress)) return settings.BusinessAddress.Trim();
+        string[] parts = [settings.BusinessStreetAddress, settings.BusinessBarangayName, settings.BusinessCityName, settings.BusinessProvinceName, settings.BusinessRegionName];
         return string.Join(", ", parts.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part.Trim()));
-    }
-
-    private static string CreateBusinessContactLine(TransactionDocumentData data)
-    {
-        string[] parts = [data.Settings.ContactNumber, data.Settings.EmailAddress, data.BusinessAddress];
-        return string.Join(" | ", parts.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part.Trim()));
-    }
-
-    private static IEnumerable<string> WrapText(string value, int maxChars)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            yield return "-";
-            yield break;
-        }
-
-        string remaining = value.Trim();
-        while (remaining.Length > maxChars)
-        {
-            int split = remaining.LastIndexOf(' ', Math.Min(maxChars, remaining.Length - 1));
-            if (split <= 0)
-            {
-                split = maxChars;
-            }
-
-            yield return remaining[..split].TrimEnd();
-            remaining = remaining[split..].TrimStart();
-        }
-
-        yield return remaining;
-    }
-
-    private static IEnumerable<string> WrapPdfLine(string line)
-    {
-        const int maxLength = 92;
-        if (line.Length <= maxLength)
-        {
-            yield return line;
-            yield break;
-        }
-
-        string remaining = line;
-        while (remaining.Length > maxLength)
-        {
-            int split = remaining.LastIndexOf(' ', maxLength);
-            if (split <= 0)
-            {
-                split = maxLength;
-            }
-
-            yield return remaining[..split];
-            remaining = remaining[split..].TrimStart();
-        }
-
-        yield return remaining;
-    }
-
-    private enum TransactionDocumentKind
-    {
-        Receipt,
-        Invoice
     }
 
     private sealed record TransactionDocumentData(
@@ -518,177 +446,7 @@ public sealed class TransactionDocumentExportService
         IReadOnlyList<TransactionPaymentListItem> Payments,
         SystemSettingsModel Settings,
         string BusinessAddress,
-        string GeneratedBy)
-    {
-        public string ContactLine => CreateBusinessContactLine(this);
-    }
-
-    private sealed record LogoData(byte[] Bytes, int Width, int Height);
-
-    private sealed record PdfSize(double Width, double Height);
-
-    private sealed record ThermalLayout(
-        double Width,
-        double Height,
-        double Margin,
-        int MaxChars,
-        int SmallFont,
-        int BodyFont,
-        int HeaderFont,
-        double LineHeight,
-        double LogoSize);
-
-    private class PdfPage
-    {
-        private readonly StringBuilder _builder = new();
-        private readonly double _width;
-
-        public PdfPage(double width, double height)
-        {
-            _width = width;
-            _builder.AppendLine(FormattableString.Invariant($"%SIZE {width:0.##}x{height:0.##}"));
-        }
-
-        public string Content => _builder.ToString();
-
-        public void Text(string text, double x, double y, int size, bool bold = false, bool centered = false, bool rightAligned = false, string color = "0 0 0", bool courier = false)
-        {
-            string safe = FormattingHelper.EscapePdfText(FormattingHelper.SanitizePdfText(text));
-            double width = EstimateTextWidth(text, size, courier);
-            if (centered)
-            {
-                x -= width / 2;
-            }
-            else if (rightAligned)
-            {
-                x -= width;
-            }
-
-            _builder.AppendLine($"{color} rg");
-            _builder.AppendLine("BT");
-            string font = courier ? "F3" : bold ? "F2" : "F1";
-            _builder.AppendLine($"/{font} {size} Tf");
-            _builder.AppendLine(FormattableString.Invariant($"{x:0.##} {y:0.##} Td"));
-            _builder.AppendLine($"({safe}) Tj");
-            _builder.AppendLine("ET");
-        }
-
-        public void Center(string text, double y, int size, bool bold = false, bool courier = false)
-        {
-            Text(text, _width / 2, y, size, bold, centered: true, courier: courier, color: "0 0 0");
-        }
-
-        public void Rect(double x, double y, double width, double height, string color)
-        {
-            _builder.AppendLine($"{color} rg");
-            _builder.AppendLine(FormattableString.Invariant($"{x:0.##} {y:0.##} {width:0.##} {height:0.##} re f"));
-        }
-
-        public void Line(double x1, double y1, double x2, double y2, string color, double width = 0.5)
-        {
-            _builder.AppendLine($"{color} RG");
-            _builder.AppendLine(FormattableString.Invariant($"{width:0.##} w"));
-            _builder.AppendLine(FormattableString.Invariant($"{x1:0.##} {y1:0.##} m {x2:0.##} {y2:0.##} l S"));
-        }
-
-        public void Image(string name, double x, double y, double width, double height)
-        {
-            _builder.AppendLine("q");
-            _builder.AppendLine(FormattableString.Invariant($"{width:0.##} 0 0 {height:0.##} {x:0.##} {y:0.##} cm"));
-            _builder.AppendLine($"/{name} Do");
-            _builder.AppendLine("Q");
-        }
-
-        protected static double EstimateTextWidth(string text, int size, bool courier = false) => text.Length * size * (courier ? 0.60 : 0.48);
-    }
-
-    private sealed class A4Page : PdfPage
-    {
-        private const double Left = 50;
-        private const double Right = 562;
-        private readonly string _themeRgb;
-
-        public A4Page(LogoData? logo) : base(612, 792)
-        {
-            Color primary = ThemeHelper.Primary;
-            _themeRgb = $"{primary.R / 255d:0.###} {primary.G / 255d:0.###} {primary.B / 255d:0.###}";
-            Y = 680;
-        }
-
-        public double Y { get; set; }
-        public string ThemeRgb => _themeRgb;
-
-        public void AccentBox(double x, double y, double width, double height) => Rect(x, y, width, height, _themeRgb);
-
-        public void Move(double amount) => Y -= amount;
-
-        public void CenterText(string text, int size, bool bold = false)
-        {
-            Text(text, 306, Y, size, bold, centered: true);
-            Y -= size + 10;
-        }
-
-        public void Section(string title)
-        {
-            Rect(Left, Y - 4, Right - Left, 18, _themeRgb);
-            Text(title, Left + 8, Y + 1, 10, bold: true, color: "1 1 1");
-            Y -= 28;
-        }
-
-        public void KeyValue(string label, string value)
-        {
-            Text($"{label}:", Left + 8, Y, 9, bold: true);
-            foreach (string line in WrapText(value, 64))
-            {
-                Text(line, Left + 150, Y, 9);
-                Y -= 14;
-            }
-            Line(Left, Y + 5, Right, Y + 5, "0.90 0.93 0.96");
-        }
-
-        public void TableHeader(IReadOnlyList<string> columns, IReadOnlyList<double> widths)
-        {
-            Rect(Left, Y - 5, Right - Left, 18, _themeRgb);
-            double x = Left + 6;
-            for (int i = 0; i < columns.Count; i++)
-            {
-                Text(columns[i], x, Y, 8, bold: true, color: "1 1 1");
-                x += widths[i];
-            }
-            Y -= 24;
-        }
-
-        public void TableRow(IReadOnlyList<string> values, IReadOnlyList<double> widths)
-        {
-            double x = Left + 6;
-            double startY = Y;
-            double maxY = Y - 14;
-            for (int i = 0; i < values.Count; i++)
-            {
-                int maxChars = i switch
-                {
-                    1 => 28,
-                    2 => 20,
-                    _ => 16
-                };
-                double cellY = startY;
-                foreach (string line in WrapText(values[i], maxChars))
-                {
-                    Text(line, x, cellY, 8);
-                    cellY -= 12;
-                }
-                maxY = Math.Min(maxY, cellY);
-                x += widths[i];
-            }
-            Y = maxY - 2;
-            Line(Left, Y + 7, Right, Y + 7, "0.90 0.93 0.96");
-        }
-
-        public void AddFooter(string businessName)
-        {
-            Line(Left, 42, Right, 42, "0.80 0.84 0.90");
-            Text($"Generated by {businessName}", Left, 28, 8, color: "0.39 0.45 0.55");
-            Text(DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), Right, 28, 8, rightAligned: true, color: "0.39 0.45 0.55");
-        }
-    }
+        string GeneratedBy,
+        string DocumentTitle,
+        bool IsFullyPaid);
 }

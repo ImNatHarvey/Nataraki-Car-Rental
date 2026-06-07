@@ -878,7 +878,12 @@ public sealed class TransactionDetailsForm : Form
             return;
         }
 
-        string documentName = isReceipt ? "Receipt" : "Invoice";
+        // Logic matched with TransactionDocumentExportService
+        bool isFullyPaid = _transaction.BalanceAmount <= 0 || 
+                           _transaction.TransactionStatus == TransactionConstants.Status.Completed ||
+                           _transaction.PaymentStatus == TransactionConstants.PaymentStatus.Paid;
+
+        string documentName = (isReceipt || isFullyPaid) ? "Receipt" : "Invoice";
         using SaveFileDialog dialog = new()
         {
             Filter = "PDF files (*.pdf)|*.pdf",

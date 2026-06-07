@@ -8,6 +8,8 @@ public sealed class Transaction
     public int CustomerId { get; set; }
     public int CarId { get; set; }
     public string CustomerName { get; set; } = string.Empty;
+    public string? CustomerPhone { get; set; }
+    public string? CustomerAddress { get; set; }
     public string CarName { get; set; } = string.Empty;
     public string PlateNumber { get; set; } = string.Empty;
     public DateTime StartDate { get; set; }
