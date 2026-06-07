@@ -25,12 +25,14 @@ public sealed class ActivityLogRepository
         string? module,
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
-        int maxRows = 500)
+        int pageNumber = 1,
+        int pageSize = 50)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
+        int offset = Math.Max(0, (pageNumber - 1) * pageSize);
 
         const string sql = """
-            SELECT TOP (@MaxRows)
+            SELECT
                 logs.ActivityLogId,
                 logs.UserId,
                 UserFullName = logs.UserFullName,
@@ -55,7 +57,9 @@ public sealed class ActivityLogRepository
                     OR logs.EntityName LIKE @SearchPattern
                     OR logs.Description LIKE @SearchPattern
                   )
-            ORDER BY logs.CreatedAt DESC, logs.ActivityLogId DESC;
+            ORDER BY logs.CreatedAt DESC, logs.ActivityLogId DESC
+            OFFSET @Offset ROWS
+            FETCH NEXT @PageSize ROWS ONLY;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -63,7 +67,8 @@ public sealed class ActivityLogRepository
             sql,
             new
             {
-                MaxRows = Math.Clamp(maxRows, 1, 1000),
+                Offset = offset,
+                PageSize = pageSize,
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
                 Action = NullIfWhiteSpace(action),
@@ -73,6 +78,46 @@ public sealed class ActivityLogRepository
             });
 
         return logs.ToList();
+    }
+
+    public async Task<int> CountAsync(
+        string searchText,
+        string? action,
+        string? module,
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null)
+    {
+        string normalizedSearchText = searchText?.Trim() ?? string.Empty;
+
+        const string sql = """
+            SELECT COUNT(1)
+            FROM dbo.ActivityLogs AS logs
+            WHERE (@Action IS NULL OR logs.Action = @Action)
+              AND (@Module IS NULL OR logs.Module = @Module)
+              AND (@DateFrom IS NULL OR logs.CreatedAt >= @DateFrom)
+              AND (@DateTo IS NULL OR logs.CreatedAt <= @DateTo)
+              AND (
+                    @SearchText = N''
+                    OR logs.UserFullName LIKE @SearchPattern
+                    OR logs.Action LIKE @SearchPattern
+                    OR logs.Module LIKE @SearchPattern
+                    OR logs.EntityName LIKE @SearchPattern
+                    OR logs.Description LIKE @SearchPattern
+                  );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<int>(
+            sql,
+            new
+            {
+                SearchText = normalizedSearchText,
+                SearchPattern = $"%{normalizedSearchText}%",
+                Action = NullIfWhiteSpace(action),
+                Module = NullIfWhiteSpace(module),
+                DateFrom = dateFrom,
+                DateTo = dateTo
+            });
     }
 
     public async Task InsertAsync(ActivityLog log, IDbTransaction? transaction = null)

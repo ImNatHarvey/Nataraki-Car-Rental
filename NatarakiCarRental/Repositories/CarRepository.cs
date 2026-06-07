@@ -47,9 +47,10 @@ public sealed class CarRepository
         )
         """;
 
-    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived, DateTime referenceDate)
+    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived, DateTime referenceDate, string? status = null, int pageNumber = 1, int pageSize = 50)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
+        int offset = Math.Max(0, (pageNumber - 1) * pageSize);
 
         string sql = $"""
             WITH {CarStatusCte}
@@ -78,13 +79,16 @@ public sealed class CarRepository
                 ArchivedAt
             FROM CarStatus
             WHERE IsArchived = @IsArchived
+              AND (@Status IS NULL OR ComputedStatus = @Status)
               AND (
                     @SearchText = N''
                     OR CarName LIKE @SearchPattern
                     OR Model LIKE @SearchPattern
                     OR PlateNumber LIKE @SearchPattern
                   )
-            ORDER BY CarId DESC;
+            ORDER BY CarId DESC
+            OFFSET @Offset ROWS
+            FETCH NEXT @PageSize ROWS ONLY;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -93,15 +97,51 @@ public sealed class CarRepository
             new
             {
                 IsArchived = includeArchived,
+                Status = string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
                 ReferenceDate = referenceDate.Date,
                 MaintenanceTypes = OffsiteConstants.Type.MaintenanceCategory,
                 ActiveRentalStatuses = new[] { FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Status.Rented },
-                ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending, FleetScheduleConstants.Status.Reserved }
+                ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending },
+                Offset = offset,
+                PageSize = pageSize
             });
 
         return cars.ToList();
+    }
+
+    public async Task<int> CountCarsAsync(string searchText, bool includeArchived, string? status = null)
+    {
+        string normalizedSearchText = searchText?.Trim() ?? string.Empty;
+
+        string sql = $"""
+            WITH {CarStatusCte}
+            SELECT COUNT(1)
+            FROM CarStatus
+            WHERE IsArchived = @IsArchived
+              AND (@Status IS NULL OR ComputedStatus = @Status)
+              AND (
+                    @SearchText = N''
+                    OR CarName LIKE @SearchPattern
+                    OR Model LIKE @SearchPattern
+                    OR PlateNumber LIKE @SearchPattern
+                  );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<int>(
+            sql,
+            new
+            {
+                IsArchived = includeArchived,
+                Status = string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
+                SearchText = normalizedSearchText,
+                SearchPattern = $"%{normalizedSearchText}%",
+                MaintenanceTypes = OffsiteConstants.Type.MaintenanceCategory,
+                ActiveRentalStatuses = new[] { FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Status.Rented },
+                ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending }
+            });
     }
 
     public async Task<Car?> GetCarByIdAsync(int carId, DateTime referenceDate, IDbTransaction? transaction = null)

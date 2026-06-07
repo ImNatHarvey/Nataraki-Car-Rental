@@ -150,11 +150,10 @@ public sealed class ManageSystemControl : UserControl
         _resizeTimer.Start();
     }
 
-    private async void ResizeTimer_Tick(object? sender, EventArgs e)
+    private void ResizeTimer_Tick(object? sender, EventArgs e)
     {
         _resizeTimer.Stop();
-        if (_activeTabKey == "Users") await LoadUsersAsync();
-        if (_activeTabKey == "Roles") await LoadRolesAsync();
+        // Removed heavy DB calls. DataGridView and TableLayoutPanel handle responsive layout automatically.
     }
 
     private async void ManageSystemControl_Load(object? sender, EventArgs e)

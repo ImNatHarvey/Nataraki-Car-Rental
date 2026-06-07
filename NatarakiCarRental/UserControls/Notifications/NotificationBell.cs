@@ -94,7 +94,28 @@ public sealed class NotificationBell : UserControl
     {
         if (_unreadCount > 0)
         {
-            _badgeLabel.Text = _unreadCount > 9 ? "9+" : _unreadCount.ToString();
+            string badgeText;
+            if (_unreadCount < 10)
+                badgeText = _unreadCount.ToString();
+            else if (_unreadCount < 100)
+                badgeText = _unreadCount.ToString();
+            else
+                badgeText = "99+";
+
+            _badgeLabel.Text = badgeText;
+            
+            using (Graphics g = _badgeLabel.CreateGraphics())
+            {
+                SizeF textSize = g.MeasureString(badgeText, _badgeLabel.Font);
+                int padding = 6;
+                int width = Math.Max(16, (int)textSize.Width + padding);
+                
+                _badgeLabel.Size = new Size(width, 16);
+                _badgeLabel.Location = new Point(Width - width - 2, 2);
+                
+                ControlFactory.ApplyRoundedPanel(_badgeLabel);
+            }
+            
             _badgeLabel.Visible = true;
         }
         else

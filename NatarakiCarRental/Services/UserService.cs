@@ -25,6 +25,7 @@ public sealed class UserService
 
     public Task<IReadOnlyList<UserListItem>> SearchUsersAsync(string? searchTerm = null, int? roleId = null, bool? isActive = null, bool includeArchived = false)
     {
+        AccessControlService.EnforcePermission("ManageSystem.Users");
         return _userRepository.SearchAsync(searchTerm, roleId, isActive, includeArchived);
     }
 

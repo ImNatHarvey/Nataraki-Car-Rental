@@ -80,6 +80,8 @@ public sealed class OffsiteControl : UserControl
     private int _totalItems;
     private bool _isMapTabActive = false;
     private bool _showArchivedRecords;
+    private int _hoveredRowIndex = -1;
+    private string? _hoveredAction = null;
 
     private static Button CreateAddButton()
     {
@@ -721,7 +723,10 @@ public sealed class OffsiteControl : UserControl
             for (int i = 0; i < layout.Count; i++)
             {
                 var entry = layout[i];
-                Color backColor = GetActionColor(entry.Action);
+                bool isHovered = _hoveredRowIndex == e.RowIndex && _hoveredAction == entry.Action;
+                Color baseColor = GetActionColor(entry.Action);
+                Color backColor = isHovered ? ControlPaint.Light(baseColor, 0.2f) : baseColor;
+                
                 using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
                 using SolidBrush brush = new(backColor);
                 using SolidBrush foreBrush = new(Color.White);
@@ -851,7 +856,6 @@ public sealed class OffsiteControl : UserControl
         List<(string Action, RectangleF Bounds)> result = [];
         if (actions.Count == 0) return result;
 
-        using Graphics g = CreateGraphics();
         Font font = FontHelper.SemiBold(8.5F);
         
         float currentX = cellBounds.X + 6;
@@ -860,7 +864,7 @@ public sealed class OffsiteControl : UserControl
 
         foreach (string action in actions)
         {
-            float width = GetActionPillWidth(g, font, action);
+            float width = TextRenderer.MeasureText(action, font).Width + 22F;
             result.Add((action, new RectangleF(currentX, y, width, height)));
             currentX += width + 6;
         }

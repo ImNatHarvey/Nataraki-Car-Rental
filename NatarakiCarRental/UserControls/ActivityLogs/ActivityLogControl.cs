@@ -501,14 +501,26 @@ public sealed class ActivityLogControl : UserControl
             DateTime dateFrom = _dateFromPicker.Value.Date;
             DateTime dateTo = _dateToPicker.Value.Date.AddDays(1).AddSeconds(-1);
 
+            int totalItems = await _activityLogService.CountAsync(
+                _searchTextBox.Text,
+                GetSelectedFilter(_actionComboBox),
+                GetSelectedFilter(_entityTypeComboBox),
+                dateFrom,
+                dateTo);
+
+            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
+            if (_currentPage > totalPages) _currentPage = totalPages;
+
             IReadOnlyList<ActivityLog> logs = await _activityLogService.SearchLogsAsync(
                 _searchTextBox.Text,
                 GetSelectedFilter(_actionComboBox),
                 GetSelectedFilter(_entityTypeComboBox),
                 dateFrom,
                 dateTo,
-                MaxQueryRows);
-            PopulateGrid(logs);
+                _currentPage,
+                _pageSize);
+
+            PopulateGrid(logs, totalItems, totalPages);
         }
         catch (Exception exception)
         {
@@ -524,7 +536,7 @@ public sealed class ActivityLogControl : UserControl
         _customerActionsCard.SetMetric(IconChar.Users, "Customer Actions", metrics.CustomerActions.ToString(), "Customer record changes", ThemeHelper.Purple);
     }
 
-    private void PopulateGrid(IReadOnlyList<ActivityLog> allLogs)
+    private void PopulateGrid(IReadOnlyList<ActivityLog> pagedLogs, int totalItems, int totalPages)
     {
         _timelinePanel.SuspendLayout();
 
@@ -536,15 +548,9 @@ public sealed class ActivityLogControl : UserControl
             control.Dispose();
         }
 
-        int totalItems = allLogs.Count;
-        int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
-        if (_currentPage > totalPages) _currentPage = totalPages;
-
         _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({totalItems} records)";
         _prevPageButton.Enabled = _currentPage > 1;
         _nextPageButton.Enabled = _currentPage < totalPages;
-
-        var pagedLogs = allLogs.Skip((_currentPage - 1) * _pageSize).Take(_pageSize);
 
         DateTime? lastDate = null;
         foreach (ActivityLog log in pagedLogs)
@@ -589,9 +595,6 @@ public sealed class ActivityLogControl : UserControl
             Margin = new Padding(16, 0, 0, 8),
             BackColor = ThemeHelper.Surface
         };
-
-        typeof(BorderedPanel).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?.SetValue(row, true, null);
 
         ControlFactory.ApplyRoundedPanel(row);
 

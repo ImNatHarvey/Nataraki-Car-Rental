@@ -25,13 +25,27 @@ public sealed class ActivityLogService
         string? entityName = null,
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
-        int maxRows = 500)
+        int pageNumber = 1,
+        int pageSize = 50)
     {
-        return _activityLogRepository.SearchLogsAsync(searchText, action, entityName, dateFrom, dateTo, maxRows);
+        AccessControlService.EnforcePermission("ActivityLog.View");
+        return _activityLogRepository.SearchLogsAsync(searchText, action, entityName, dateFrom, dateTo, pageNumber, pageSize);
+    }
+
+    public Task<int> CountAsync(
+        string searchText,
+        string? action = null,
+        string? entityName = null,
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null)
+    {
+        AccessControlService.EnforcePermission("ActivityLog.View");
+        return _activityLogRepository.CountAsync(searchText, action, entityName, dateFrom, dateTo);
     }
 
     public Task<ActivityLogMetrics> GetMetricsAsync()
     {
+        AccessControlService.EnforcePermission("ActivityLog.View");
         return _activityLogRepository.GetMetricsAsync();
     }
 

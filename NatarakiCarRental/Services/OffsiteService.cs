@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.Data.SqlClient;
 using NatarakiCarRental.Data;
 using NatarakiCarRental.Exceptions;
@@ -596,7 +597,7 @@ public sealed class OffsiteService
             || string.Equals(workResult, "Not Repaired", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task ValidateCreateRequestAsync(CreateOffsiteRecordRequest request)
+    private async Task ValidateCreateRequestAsync(CreateOffsiteRecordRequest request, IDbTransaction? transaction = null)
     {
         var result = await _validator.ValidateAsync(request);
         if (!result.IsValid) throw new ValidationException(result.Errors);
@@ -604,11 +605,11 @@ public sealed class OffsiteService
         if (request.ExpectedReturnDate.HasValue && request.ExpectedReturnDate.Value.Date < request.StartDate.Date)
             throw new ValidationException([new ValidationFailure("ExpectedReturnDate", "Expected return date cannot be before start date.")]);
 
-        Car? car = await _carRepository.GetCarByIdAsync(request.CarId, DateTime.Today);
+        Car? car = await _carRepository.GetCarByIdAsync(request.CarId, DateTime.Today, transaction);
         if (car == null || car.IsArchived)
             throw new ValidationException([new ValidationFailure("CarId", "Selected car was not found or is archived.")]);
 
-        bool hasActive = await _offsiteRepository.HasActiveOffsiteForCarAsync(request.CarId);
+        bool hasActive = await _offsiteRepository.HasActiveOffsiteForCarAsync(request.CarId, null, transaction);
         if (hasActive)
             throw new ValidationException([new ValidationFailure("CarId", "This vehicle already has an active offsite maintenance record. Future maintenance planning should be scheduled through Fleet Schedule.")]);
     }

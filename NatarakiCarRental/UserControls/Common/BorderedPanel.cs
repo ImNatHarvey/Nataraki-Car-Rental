@@ -10,6 +10,7 @@ public class BorderedPanel : Panel
         BackColor = ThemeHelper.Surface;
         BorderStyle = BorderStyle.None;
         ResizeRedraw = true;
+        DoubleBuffered = true;
     }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

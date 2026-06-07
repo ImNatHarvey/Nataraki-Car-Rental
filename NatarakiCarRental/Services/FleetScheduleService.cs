@@ -105,13 +105,14 @@ public sealed class FleetScheduleService
     public async Task<int> CreateAsync(FleetSchedule schedule)
     {
         AccessControlService.EnforcePermission("FleetSchedule.Create");
-        await PrepareForSaveAsync(schedule);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
         try
         {
+            await PrepareForSaveAsync(schedule, transaction: transaction);
+
             schedule.CreatedByUserId = _currentUserId;
             int scheduleId = await _scheduleRepository.CreateAsync(schedule, transaction);
             await _activityLogService.LogAsync(
@@ -187,14 +188,14 @@ public sealed class FleetScheduleService
     {
         // This is an internal workflow from Transaction module, bypass standard Edit permission check here 
         // because Transaction module has its own permission checks (e.g. Transactions.StartRental).
-        
-        await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId, isInternalWorkflow: true);
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
 
         try
         {
+            await PrepareForSaveAsync(schedule, excludedScheduleId: schedule.ScheduleId, isInternalWorkflow: true, transaction: transaction);
+
             int affectedRows = await _scheduleRepository.UpdateAsync(schedule, transaction);
 
             if (affectedRows == 0)

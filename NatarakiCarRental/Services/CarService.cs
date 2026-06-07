@@ -63,17 +63,24 @@ public sealed class CarService
 
     public async Task<IReadOnlyList<Car>> GetActiveCarsAsync()
     {
-        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: false, DateTime.Today);
+        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: false, DateTime.Today, null, 1, 1000);
     }
 
     public async Task<IReadOnlyList<Car>> GetArchivedCarsAsync()
     {
-        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: true, DateTime.Today);
+        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: true, DateTime.Today, null, 1, 1000);
     }
 
-    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived)
+    public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived, string? status = null, int pageNumber = 1, int pageSize = 50)
     {
-        return await _carRepository.SearchCarsAsync(searchText, includeArchived, DateTime.Today);
+        AccessControlService.EnforcePermission("CarGarage.View");
+        return await _carRepository.SearchCarsAsync(searchText, includeArchived, DateTime.Today, status, pageNumber, pageSize);
+    }
+
+    public Task<int> CountCarsAsync(string searchText, bool includeArchived, string? status = null)
+    {
+        AccessControlService.EnforcePermission("CarGarage.View");
+        return _carRepository.CountCarsAsync(searchText, includeArchived, status);
     }
 
     public Task<CarCounts> GetCarCountsAsync()

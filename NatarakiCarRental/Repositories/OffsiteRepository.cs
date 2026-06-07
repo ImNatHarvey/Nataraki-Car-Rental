@@ -286,26 +286,33 @@ public sealed class OffsiteRepository
         return await connection.ExecuteAsync(sql, new { Id = offsiteRecordId });
     }
 
-    public async Task<bool> HasActiveOffsiteForCarAsync(int carId, int? excludeId = null)
+    public async Task<bool> HasActiveOffsiteForCarAsync(int carId, int? excludeId = null, IDbTransaction? transaction = null)
     {
         string sql = $"""
             SELECT COUNT(1)
-            FROM dbo.OffsiteRecords
+            FROM dbo.OffsiteRecords WITH (UPDLOCK, HOLDLOCK)
             WHERE CarId = @CarId
               AND Status = N'{OffsiteConstants.Status.Ongoing}'
               AND IsArchived = 0
               AND (@ExcludeId IS NULL OR OffsiteRecordId <> @ExcludeId);
             """;
-        using var connection = _connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<int>(sql, new { CarId = carId, ExcludeId = excludeId }) > 0;
+        var connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+        try
+        {
+            return await connection.ExecuteScalarAsync<int>(sql, new { CarId = carId, ExcludeId = excludeId }, transaction) > 0;
+        }
+        finally
+        {
+            if (transaction == null) connection.Dispose();
+        }
     }
 
     public async Task<OffsiteMetrics> GetMetricsAsync(DateTime referenceDate)
     {
         const string sql = """
             SELECT
-                TotalOffsiteRecords = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
-                MaintenanceCars = COUNT(DISTINCT CASE WHEN Status = @OngoingStatus AND IsArchived = 0 THEN CarId END),
+                TotalOffsiteRecords = (SELECT COUNT(CASE WHEN IsArchived = 0 THEN 1 END) FROM dbo.OffsiteRecords),
+                MaintenanceCars = (SELECT COUNT(DISTINCT CASE WHEN Status = @OngoingStatus AND IsArchived = 0 THEN CarId END) FROM dbo.OffsiteRecords),
                 UpcomingMaintenance = (
                     SELECT COUNT(1)
                     FROM dbo.FleetSchedules
@@ -314,8 +321,7 @@ public sealed class OffsiteRepository
                       AND StartDate > @ReferenceDate
                       AND IsArchived = 0
                 ),
-                CompletedRecords = COUNT(CASE WHEN Status = @CompletedStatus AND IsArchived = 0 THEN 1 END)
-            FROM dbo.OffsiteRecords;
+                CompletedRecords = (SELECT COUNT(CASE WHEN Status = @CompletedStatus AND IsArchived = 0 THEN 1 END) FROM dbo.OffsiteRecords);
             """;
 
         using var connection = _connectionFactory.CreateConnection();

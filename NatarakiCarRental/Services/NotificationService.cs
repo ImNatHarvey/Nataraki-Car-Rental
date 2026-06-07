@@ -53,6 +53,8 @@ public sealed class NotificationService
 
     public async Task MarkAllAsReadAsync()
     {
+        // System notifications are global. Only admins should be able to mark all as read.
+        AccessControlService.EnforcePermission("ManageSystem.Settings");
         await _repository.MarkAllAsReadAsync();
         NotificationsChanged?.Invoke(null, EventArgs.Empty);
     }
@@ -64,6 +66,8 @@ public sealed class NotificationService
 
     public async Task DeleteAsync(int notificationId)
     {
+        // System notifications are global. Only admins should be able to delete them.
+        AccessControlService.EnforcePermission("ManageSystem.Settings");
         await _repository.DeleteAsync(notificationId);
         NotificationsChanged?.Invoke(null, EventArgs.Empty);
     }

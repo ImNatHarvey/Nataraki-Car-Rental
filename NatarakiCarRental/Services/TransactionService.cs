@@ -587,38 +587,39 @@ public sealed class TransactionService
             throw Validation(nameof(Transaction.EndDate), "New end date must be later than the current end date.");
         }
 
-        // Check for conflicts in FleetSchedule
-        DateTime extensionStart = transaction.EndDate.Date.AddDays(1);
-        DateTime extensionEnd = newEndDate.Date;
-
-        bool hasConflict = await _scheduleRepository.HasConflictExcludingAsync(
-            transaction.CarId,
-            extensionStart,
-            extensionEnd,
-            transaction.FleetScheduleId);
-
-        if (hasConflict)
-        {
-            throw Validation(nameof(Transaction.EndDate), "This rental cannot be extended because the car is already reserved or booked during the requested extension period.");
-        }
-
         int extraDays = (newEndDate.Date - transaction.EndDate.Date).Days;
         decimal extensionCharge = transaction.DailyRate * extraDays;
         decimal finalTotal = transaction.TotalAmount + extensionCharge;
-
-        FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
-        if (schedule is null || schedule.IsArchived)
-        {
-            throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found.");
-        }
-
-        schedule.EndDate = newEndDate.Date;
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
+            // Check for conflicts in FleetSchedule inside the transaction
+            DateTime extensionStart = transaction.EndDate.Date.AddDays(1);
+            DateTime extensionEnd = newEndDate.Date;
+
+            bool hasConflict = await _scheduleRepository.HasConflictAsync(
+                transaction.CarId,
+                extensionStart,
+                extensionEnd,
+                transaction.FleetScheduleId,
+                dbTransaction);
+
+            if (hasConflict)
+            {
+                throw Validation(nameof(Transaction.EndDate), "This rental cannot be extended because the car is already reserved or booked during the requested extension period.");
+            }
+
+            FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
+            if (schedule is null || schedule.IsArchived)
+            {
+                throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found.");
+            }
+
+            schedule.EndDate = newEndDate.Date;
+
             await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
 
             if (amountPaid > 0)
@@ -751,13 +752,6 @@ public sealed class TransactionService
             throw Validation(nameof(AddTransactionPaymentRequest.Amount), "Payment amount must be greater than 0.");
         }
 
-        decimal currentTotalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(request.TransactionId);
-
-        if (currentTotalPaid + request.Amount > transaction.TotalAmount)
-        {
-            throw Validation(nameof(AddTransactionPaymentRequest.Amount), $"Payment amount exceeds the remaining balance. Remaining: ₱{transaction.TotalAmount - currentTotalPaid:N2}");
-        }
-
         if (!TransactionConstants.ModeOfPayment.All.Contains(request.ModeOfPayment))
         {
             throw Validation(nameof(AddTransactionPaymentRequest.ModeOfPayment), "Mode of payment is invalid.");
@@ -768,6 +762,13 @@ public sealed class TransactionService
 
         try
         {
+            decimal currentTotalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(request.TransactionId, dbTransaction);
+
+            if (currentTotalPaid + request.Amount > transaction.TotalAmount)
+            {
+                throw Validation(nameof(AddTransactionPaymentRequest.Amount), $"Payment amount exceeds the remaining balance. Remaining: ₱{transaction.TotalAmount - currentTotalPaid:N2}");
+            }
+
             TransactionPayment payment = new()
             {
                 TransactionId = request.TransactionId,

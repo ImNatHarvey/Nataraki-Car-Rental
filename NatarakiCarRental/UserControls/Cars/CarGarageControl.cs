@@ -445,15 +445,15 @@ public sealed class CarGarageControl : UserControl
             CarCounts counts = await _carService.GetCarCountsAsync();
             UpdateMetricCards(counts);
 
-            IReadOnlyList<Car> cars = await _carService.SearchCarsAsync(_searchTextBox.Text, _showArchived);
+            string? statusFilter = _filterComboBox.SelectedIndex > 0 ? _filterComboBox.SelectedItem?.ToString() : null;
 
-            if (_filterComboBox.SelectedIndex > 0)
-            {
-                string selectedStatus = _filterComboBox.SelectedItem?.ToString() ?? "";
-                cars = cars.Where(c => c.Status == selectedStatus).ToList();
-            }
+            int totalItems = await _carService.CountCarsAsync(_searchTextBox.Text, _showArchived, statusFilter);
+            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
+            if (_currentPage > totalPages) _currentPage = totalPages;
 
-            PopulateGrid(cars);
+            IReadOnlyList<Car> cars = await _carService.SearchCarsAsync(_searchTextBox.Text, _showArchived, statusFilter, _currentPage, _pageSize);
+
+            PopulateGrid(cars, totalItems, totalPages);
         }
         catch (Exception exception)
         {
@@ -469,20 +469,14 @@ public sealed class CarGarageControl : UserControl
         _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Maintenance Cars", counts.MaintenanceCars.ToString(), "Under maintenance today", ThemeHelper.Danger);
     }
 
-    private void PopulateGrid(IReadOnlyList<Car> allCars)
+    private void PopulateGrid(IReadOnlyList<Car> pagedCars, int totalItems, int totalPages)
     {
         AddGridColumns();
         _carsGrid.Rows.Clear();
 
-        int totalItems = allCars.Count;
-        int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalItems / _pageSize));
-        if (_currentPage > totalPages) _currentPage = totalPages;
-        
         _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({totalItems} records)";
         _prevPageButton.Enabled = _currentPage > 1;
         _nextPageButton.Enabled = _currentPage < totalPages;
-
-        var pagedCars = allCars.Skip((_currentPage - 1) * _pageSize).Take(_pageSize);
 
         foreach (Car car in pagedCars)
         {
