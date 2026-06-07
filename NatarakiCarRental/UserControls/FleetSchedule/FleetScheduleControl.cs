@@ -474,7 +474,33 @@ public sealed class FleetScheduleControl : UserControl
                 graphics.DrawString(displayStatus, FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(rect.X + 8, rect.Y, rect.Width - 12, rect.Height), format);
             }
 
+            DrawTodayIndicator(graphics, days);
+
             DrawStickyCarColumn(graphics, gridPen, majorGridPen, headerBrush, textBrush, mutedBrush);
+        }
+
+        private void DrawTodayIndicator(Graphics graphics, int daysInMonth)
+        {
+            if (_owner.SelectedMonth.Year != DateTime.Today.Year || _owner.SelectedMonth.Month != DateTime.Today.Month)
+            {
+                return;
+            }
+
+            int today = DateTime.Today.Day;
+            int x = CarColumnWidth + (today - 1) * DayWidth;
+            
+            // Draw Line
+            using Pen todayPen = new(ThemeHelper.Primary, 2);
+            graphics.DrawLine(todayPen, x, 0, x, AutoScrollMinSize.Height);
+
+            // Draw Label
+            using SolidBrush bgBrush = new(ThemeHelper.Primary);
+            Rectangle labelRect = new(x - 22, 2, 44, 14);
+            using GraphicsPath path = FleetScheduleVisualHelper.CreateRoundedRectanglePath(labelRect, 4);
+            graphics.FillPath(bgBrush, path);
+
+            using StringFormat format = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            graphics.DrawString("TODAY", FontHelper.SemiBold(7F), Brushes.White, labelRect, format);
         }
 
         private Point TranslatePoint(Point point)

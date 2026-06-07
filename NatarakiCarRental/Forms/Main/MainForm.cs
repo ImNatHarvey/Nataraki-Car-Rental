@@ -23,6 +23,9 @@ public sealed class MainForm : Form
     private readonly NotificationBell _notificationBell = new();
     private readonly List<IconButton> _navigationButtons = [];
     private readonly Label _brandLabel = new();
+    private readonly Label _dateLabel = new();
+    private readonly Label _timeLabel = new();
+    private readonly System.Windows.Forms.Timer _sidebarClockTimer = new() { Interval = 1000 };
     private readonly Panel _brandIconHost = new();
     private readonly Panel _identityHost = new();
     private readonly Panel _identityPanel = new();
@@ -42,9 +45,23 @@ public sealed class MainForm : Form
         {
             _identityAvatar.Image?.Dispose();
             AppBrandingManager.SettingsUpdated -= AppBrandingManager_SettingsUpdated;
+            _sidebarClockTimer.Stop();
+            _sidebarClockTimer.Dispose();
         };
         
         AppBrandingManager.SettingsUpdated += AppBrandingManager_SettingsUpdated;
+
+        _sidebarClockTimer.Tick += SidebarClockTimer_Tick;
+        UpdateSidebarClock();
+        _sidebarClockTimer.Start();
+    }
+
+    private void SidebarClockTimer_Tick(object? sender, EventArgs e) => UpdateSidebarClock();
+
+    private void UpdateSidebarClock()
+    {
+        _dateLabel.Text = DateTime.Now.ToString("dddd, MMMM d, yyyy");
+        _timeLabel.Text = DateTime.Now.ToString("h:mm:ss tt") + " (PHT)";
     }
 
     private void AppBrandingManager_SettingsUpdated(object? sender, EventArgs e)
@@ -80,7 +97,7 @@ public sealed class MainForm : Form
         Panel brandPanel = new()
         {
             Dock = DockStyle.Top,
-            Height = 64
+            Height = 110
         };
 
         _brandIconHost.Location = new Point(0, 8);
@@ -96,8 +113,20 @@ public sealed class MainForm : Form
         _brandLabel.ForeColor = ThemeHelper.TextPrimary;
         _brandLabel.TextAlign = ContentAlignment.MiddleLeft;
 
+        _dateLabel.AutoSize = true;
+        _dateLabel.Location = new Point(0, 56);
+        _dateLabel.Font = FontHelper.Regular(9F);
+        _dateLabel.ForeColor = ThemeHelper.TextSecondary;
+
+        _timeLabel.AutoSize = true;
+        _timeLabel.Location = new Point(0, 78);
+        _timeLabel.Font = FontHelper.SemiBold(11F);
+        _timeLabel.ForeColor = ThemeHelper.TextPrimary;
+
         brandPanel.Controls.Add(_brandIconHost);
         brandPanel.Controls.Add(_brandLabel);
+        brandPanel.Controls.Add(_dateLabel);
+        brandPanel.Controls.Add(_timeLabel);
 
         ConfigureIdentityPanel();
         ConfigureHeaderPanel();
@@ -107,7 +136,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            Padding = new Padding(0, 28, 0, 0)
+            Padding = new Padding(0, 12, 0, 0)
         };
 
         NavigationItem[] menuItems =
