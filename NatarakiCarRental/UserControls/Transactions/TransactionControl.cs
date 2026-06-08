@@ -273,6 +273,7 @@ public sealed class TransactionControl : UserControl
         _transactionsGrid.CellMouseMove += TransactionsGrid_CellMouseMove;
         _transactionsGrid.CellMouseLeave += (_, _) => _transactionsGrid.Cursor = Cursors.Default;
         _transactionsGrid.CellPainting += TransactionsGrid_CellPainting;
+        DataGridViewHelper.SetupStatusPills(_transactionsGrid, "Payment", "Status");
 
         _emptyStateLabel.Text = "No transaction records found.";
         _emptyStateLabel.Dock = DockStyle.Bottom;
@@ -505,67 +506,46 @@ public sealed class TransactionControl : UserControl
 
     private void TransactionsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
-        {
-            return;
-        }
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
 
         string columnName = _transactionsGrid.Columns[e.ColumnIndex].Name;
-        bool isBadge = columnName is "Payment" or "Status";
-        bool isAction = columnName == "Actions";
-        if (!isBadge && !isAction)
-        {
-            return;
-        }
+        if (columnName != "Actions") return;
 
         e.PaintBackground(e.CellBounds, true);
         string text = e.Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text) || e.Graphics is null)
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(text) || e.Graphics is null) return;
 
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
 
-        if (isAction)
+        string[] actions = text.Split('|');
+        var layout = GetTransactionActionButtonBounds(e.CellBounds, actions);
+
+        for (int i = 0; i < layout.Count; i++)
         {
-            string[] actions = text.Split('|');
-            var layout = GetTransactionActionButtonBounds(e.CellBounds, actions);
+            var entry = layout[i];
+            Color color = DataGridViewHelper.GetStatusColor(entry.Action);
+            
+            // Use local drawing logic for action buttons to maintain specific look if needed, 
+            // but we can also use a helper if we had one for arbitrary pills.
+            float radius = entry.Bounds.Height / 2;
+            using GraphicsPath path = new();
+            float diameter = radius * 2;
+            RectangleF arc = new(entry.Bounds.Location, new SizeF(diameter, diameter));
+            path.AddArc(arc, 180, 90);
+            arc.X = entry.Bounds.Right - diameter;
+            path.AddArc(arc, 270, 90);
+            arc.Y = entry.Bounds.Bottom - diameter;
+            path.AddArc(arc, 0, 90);
+            arc.X = entry.Bounds.Left;
+            path.AddArc(arc, 90, 90);
+            path.CloseFigure();
 
-            for (int i = 0; i < layout.Count; i++)
-            {
-                var entry = layout[i];
-                Color color = GetPillColor(entry.Action);
-                using GraphicsPath path = CreateRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
-                using SolidBrush background = new(color);
-                using SolidBrush foreground = new(Color.White);
-
-                e.Graphics.FillPath(background, path);
-
-                using StringFormat format = new()
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center,
-                    FormatFlags = StringFormatFlags.NoWrap,
-                    Trimming = StringTrimming.EllipsisCharacter
-                };
-                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
-            }
-        }
-        else
-        {
-            Color color = GetPillColor(text);
-            float height = StatusPillHeight;
-            float preferredWidth = columnName == "Payment" ? PaymentStatusPillWidth : TransactionStatusPillWidth;
-            float width = Math.Min(preferredWidth, e.CellBounds.Width - 4);
-            float x = e.CellBounds.X + Math.Max((e.CellBounds.Width - width) / 2F, 2F);
-            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
-            RectangleF rect = new(x, y, width, height);
-            using GraphicsPath path = CreateRoundedRect(rect, height / 2);
             using SolidBrush background = new(color);
             using SolidBrush foreground = new(Color.White);
+
             e.Graphics.FillPath(background, path);
+
             using StringFormat format = new()
             {
                 Alignment = StringAlignment.Center,
@@ -573,49 +553,10 @@ public sealed class TransactionControl : UserControl
                 FormatFlags = StringFormatFlags.NoWrap,
                 Trimming = StringTrimming.EllipsisCharacter
             };
-            e.Graphics.DrawString(text, font, foreground, rect, format);
+            e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
         }
 
         e.Handled = true;
-    }
-
-    private static Color GetPillColor(string text)
-    {
-        return text switch
-        {
-            TransactionConstants.PaymentStatus.Paid => ThemeHelper.Success,
-            TransactionConstants.PaymentStatus.Partial => ThemeHelper.Warning,
-            TransactionConstants.PaymentStatus.Unpaid => ThemeHelper.Danger,
-            TransactionConstants.Status.Pending => ThemeHelper.Warning,
-            TransactionConstants.Status.Reserved => ThemeHelper.Primary,
-            TransactionConstants.Status.Active => ThemeHelper.Success,
-            TransactionConstants.Status.Completed => ThemeHelper.GrayIcon,
-            TransactionConstants.Status.Cancelled => ThemeHelper.Danger,
-            "View" => ThemeHelper.Primary,
-            "Payment" => ThemeHelper.Warning,
-            "Start Rental" => ThemeHelper.Primary,
-            "Complete" => ThemeHelper.Success,
-            "Cancel" => ThemeHelper.Danger,
-            "Archive" => ThemeHelper.Danger,
-            "Restore" => ThemeHelper.Success,
-            _ => ThemeHelper.Primary
-        };
-    }
-
-    private static GraphicsPath CreateRoundedRect(RectangleF rect, float radius)
-    {
-        GraphicsPath path = new();
-        float diameter = radius * 2;
-        RectangleF arc = new(rect.Location, new SizeF(diameter, diameter));
-        path.AddArc(arc, 180, 90);
-        arc.X = rect.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = rect.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = rect.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     private async void AddButton_Click(object? sender, EventArgs e)

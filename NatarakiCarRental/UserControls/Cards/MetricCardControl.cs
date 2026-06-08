@@ -36,7 +36,7 @@ public sealed class MetricCardControl : BorderedPanel
         BorderColor = ThemeHelper.Border;
         Margin = new Padding(0);
         Padding = new Padding(18);
-        MinimumSize = new Size(190, 118);
+        MinimumSize = new Size(180, 110);
 
         _iconBox.IconColor = ThemeHelper.Primary;
         _iconBox.IconSize = 24;
@@ -45,22 +45,25 @@ public sealed class MetricCardControl : BorderedPanel
         _iconBox.Size = new Size(30, 30);
 
         _titleLabel.AutoSize = false;
-        _titleLabel.Location = new Point(58, 18);
-        _titleLabel.Size = new Size(150, 24);
+        _titleLabel.Location = new Point(54, 20);
+        _titleLabel.Size = new Size(Width - 72, 24);
         _titleLabel.Font = FontHelper.SemiBold(9F);
         _titleLabel.ForeColor = ThemeHelper.TextSecondary;
+        _titleLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         _valueLabel.AutoSize = false;
         _valueLabel.Location = new Point(18, 56);
-        _valueLabel.Size = new Size(190, 32);
+        _valueLabel.Size = new Size(Width - 36, 32);
         _valueLabel.Font = FontHelper.Title(18F);
         _valueLabel.ForeColor = ThemeHelper.TextPrimary;
+        _valueLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         _helperTextLabel.AutoSize = false;
-        _helperTextLabel.Location = new Point(18, 92);
-        _helperTextLabel.Size = new Size(190, 26);
+        _helperTextLabel.Location = new Point(18, 90);
+        _helperTextLabel.Size = new Size(Width - 36, 26);
         _helperTextLabel.Font = FontHelper.Regular(8.5F);
         _helperTextLabel.ForeColor = ThemeHelper.TextSecondary;
+        _helperTextLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         Controls.Add(_iconBox);
         Controls.Add(_titleLabel);

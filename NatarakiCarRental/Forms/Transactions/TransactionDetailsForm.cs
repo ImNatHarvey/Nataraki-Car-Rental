@@ -70,13 +70,14 @@ public sealed class TransactionDetailsForm : Form
     private IReadOnlyList<Customer> _customers = [];
     private IReadOnlyList<Car> _cars = [];
 
-    public TransactionDetailsForm(int currentUserId)
+    public TransactionDetailsForm(int currentUserId, int initialTabIndex = 0)
     {
         _mode = TransactionFormMode.Add;
         _currentUserId = currentUserId;
         _transactionService = new TransactionService(currentUserId);
         _scheduleService = new FleetScheduleService(currentUserId);
         InitializeForm();
+        _flowTabs.SelectedIndex = initialTabIndex;
         Load += TransactionDetailsForm_Load;
     }
 

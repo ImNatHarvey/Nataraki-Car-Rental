@@ -17,47 +17,33 @@ public static class ReportLayoutHelper
         return new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            AutoSize = false,
+            AutoSize = true,
             WrapContents = true,
             FlowDirection = FlowDirection.LeftToRight,
             Padding = new Padding(8, 8, 0, 0),
             Margin = new Padding(0, 0, 0, 16),
-            BackColor = ThemeHelper.ContentBackground,
-            Visible = true
+            BackColor = ThemeHelper.ContentBackground
         };
     }
 
     public static void LayoutMetricCards(FlowLayoutPanel panel, IReadOnlyList<Control> cards)
     {
-        if (panel.IsDisposed || cards.Count == 0)
-        {
-            return;
-        }
+        if (panel.Width == 0) return;
+        
+        int availableWidth = panel.Width - panel.Padding.Horizontal - 24;
+        int columns = availableWidth < 1200 ? 3 : 4;
+        if (availableWidth < 800) columns = 2;
 
-        int availableWidth = Math.Max(panel.ClientSize.Width, panel.Parent?.ClientSize.Width ?? 0);
-        if (availableWidth <= 0)
-        {
-            availableWidth = 1000;
-        }
-
-        int columns = availableWidth < 1150 ? 3 : 4;
-        int gap = 14;
-        int cardHeight = 132;
-        int horizontalPadding = panel.Padding.Left + panel.Padding.Right;
-        int cardWidth = Math.Max(220, (availableWidth - horizontalPadding - (gap * columns)) / columns);
-        int rows = (int)Math.Ceiling(cards.Count / (double)columns);
-        int height = panel.Padding.Top + panel.Padding.Bottom + (rows * cardHeight) + ((rows - 1) * gap);
+        int gap = 16;
+        int cardWidth = (availableWidth - (gap * (columns - 1))) / columns;
 
         panel.SuspendLayout();
-        panel.Visible = true;
-        panel.Height = height;
         foreach (Control card in cards)
         {
-            card.Dock = DockStyle.None;
+            card.Size = new Size(cardWidth, 132);
             card.Margin = new Padding(0, 0, gap, gap);
-            card.Size = new Size(cardWidth, cardHeight);
         }
-        panel.ResumeLayout(true);
+        panel.ResumeLayout();
     }
 
     public static void AddMetricCard(FlowLayoutPanel panel, MetricCardControl card, IconChar icon, string title, string value, string helperText, Color iconColor)
@@ -78,7 +64,7 @@ public static class ReportLayoutHelper
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
             AllowUserToResizeRows = false,
-            AllowUserToResizeColumns = false,
+            AllowUserToResizeColumns = true,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             BackgroundColor = ThemeHelper.Surface,
             BorderStyle = BorderStyle.None,
@@ -127,13 +113,9 @@ public static class ReportLayoutHelper
 
     public static void AddEmptyRow(DataGridView grid)
     {
-        if (grid.Columns.Count == 0 || grid.Rows.Count > 0)
-        {
-            return;
-        }
-
+        if (grid.Columns.Count == 0 || grid.Rows.Count > 0) return;
         object[] cells = Enumerable.Repeat<object>(string.Empty, grid.Columns.Count).ToArray();
-        cells[0] = "No records found for this date range.";
+        cells[0] = "No records found.";
         grid.Rows.Add(cells);
     }
 
@@ -170,8 +152,6 @@ public static class ReportLayoutHelper
     }
 
     public static string FormatPeso(decimal amount) => $"₱{amount:N2}";
-
     public static string FormatPercent(decimal value) => $"{value:N1}%";
-
     public static string FormatDate(DateTime date) => $"{date:MMM d, yyyy}";
 }

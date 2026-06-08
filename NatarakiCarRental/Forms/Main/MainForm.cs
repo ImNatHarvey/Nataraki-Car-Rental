@@ -400,7 +400,7 @@ public sealed class MainForm : Form
         Icon = icon;
     }
 
-    private void Navigate(string pageName)
+    internal void Navigate(string pageName)
     {
         if (pageName == "Overview")
         {
