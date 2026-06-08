@@ -10,7 +10,8 @@ namespace NatarakiCarRental.Forms.FleetSchedule;
 public enum FleetScheduleFormMode
 {
     Add,
-    Edit
+    Edit,
+    View
 }
 
 public sealed class FleetScheduleDetailsForm : Form
@@ -26,6 +27,7 @@ public sealed class FleetScheduleDetailsForm : Form
     private readonly FleetScheduleModel? _sourceSchedule;
     private readonly int? _prefilledCarId;
     private readonly DateTime? _prefilledDate;
+    private readonly string? _viewNote;
     private readonly ErrorProvider _errorProvider = new();
 
     private readonly ComboBox _carComboBox = CreateComboBox();
@@ -60,7 +62,8 @@ public sealed class FleetScheduleDetailsForm : Form
         int currentUserId,
         FleetScheduleModel? schedule = null,
         int? prefilledCarId = null,
-        DateTime? prefilledDate = null)
+        DateTime? prefilledDate = null,
+        string? viewNote = null)
     {
         _currentUserId = currentUserId;
         _scheduleService = new FleetScheduleService(currentUserId);
@@ -69,13 +72,24 @@ public sealed class FleetScheduleDetailsForm : Form
         _sourceSchedule = schedule;
         _prefilledCarId = prefilledCarId;
         _prefilledDate = prefilledDate;
+        _viewNote = viewNote;
+        _isViewOnly = mode == FleetScheduleFormMode.View;
+
         InitializeForm();
         Load += FleetScheduleDetailsForm_Load;
     }
 
     private void InitializeForm()
     {
-        Text = _mode == FleetScheduleFormMode.Edit ? "Edit Schedule" : "Add Schedule";
+        if (_mode == FleetScheduleFormMode.View)
+        {
+            Text = "View Schedule";
+        }
+        else
+        {
+            Text = _mode == FleetScheduleFormMode.Edit ? "Edit Schedule" : "Add Schedule";
+        }
+
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -117,14 +131,36 @@ public sealed class FleetScheduleDetailsForm : Form
             Controls.Add(helperLabel);
             _validationLabel.Location = new Point(34, 76);
         }
+        else if (_mode == FleetScheduleFormMode.View && !string.IsNullOrWhiteSpace(_viewNote))
+        {
+            _transactionManagedNoteLabel = new Label
+            {
+                Text = _viewNote,
+                AutoSize = true,
+                Location = new Point(32, 58),
+                Font = FontHelper.Regular(8.5F),
+                ForeColor = ThemeHelper.TextSecondary
+            };
+            Controls.Add(_transactionManagedNoteLabel);
+            _validationLabel.Location = new Point(34, 76);
+        }
         else
         {
             _validationLabel.Location = new Point(34, 58);
         }
 
+        if (_mode == FleetScheduleFormMode.View)
+        {
+            _carComboBox.Enabled = false;
+            _customerComboBox.Enabled = false;
+            _scheduleTypeComboBox.Enabled = false;
+            _startDatePicker.Enabled = false;
+            _endDatePicker.Enabled = false;
+        }
+
         Panel contentPanel = new()
         {
-            Location = new Point(32, _mode == FleetScheduleFormMode.Add ? 104 : 88),
+            Location = new Point(32, (_mode == FleetScheduleFormMode.Add || (_mode == FleetScheduleFormMode.View && !string.IsNullOrWhiteSpace(_viewNote))) ? 104 : 88),
             Size = new Size(856, 470),
             BackColor = ThemeHelper.Surface
         };
@@ -144,13 +180,14 @@ public sealed class FleetScheduleDetailsForm : Form
         contentLayout.Controls.Add(CreateSection("Date Range", CreateDateRangeLayout()), 0, 2);
         contentPanel.Controls.Add(contentLayout);
 
-        _cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        _cancelButton.Location = new Point(622, 590);
+        _cancelButton = CreateSecondaryButton(_mode == FleetScheduleFormMode.View ? "Close" : "Cancel", 110, 38);
+        _cancelButton.Location = new Point(_mode == FleetScheduleFormMode.View ? 778 : 622, 590);
         _cancelButton.DialogResult = DialogResult.Cancel;
 
         _saveButton = ControlFactory.CreatePrimaryButton(_mode == FleetScheduleFormMode.Edit ? "Save Schedule" : "Add Schedule", 134, 38);
         _saveButton.Location = new Point(754, 590);
         _saveButton.Click += SaveButton_Click;
+        _saveButton.Visible = _mode != FleetScheduleFormMode.View;
 
         if (_mode == FleetScheduleFormMode.Edit)
         {
@@ -343,6 +380,13 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         if (_sourceSchedule is null) return;
 
+        // If we are already in View mode from constructor, just load data and return
+        if (_mode == FleetScheduleFormMode.View)
+        {
+            await LoadScheduleAsync(_sourceSchedule);
+            return;
+        }
+
         bool isLinkedToTransaction = await _scheduleService.IsLinkedToActiveTransactionAsync(_sourceSchedule.ScheduleId);
         bool isRental = _sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Rental;
         
@@ -387,16 +431,23 @@ public sealed class FleetScheduleDetailsForm : Form
         _startDatePicker.Enabled = false;
         _endDatePicker.Enabled = false;
 
-        _transactionManagedNoteLabel = new Label
+        if (_transactionManagedNoteLabel == null)
         {
-            Text = noteText,
-            AutoSize = true,
-            Location = new Point(32, 58),
-            Font = FontHelper.Regular(8.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        };
-        Controls.Add(_transactionManagedNoteLabel);
-        _validationLabel.Location = new Point(34, 76);
+            _transactionManagedNoteLabel = new Label
+            {
+                Text = noteText,
+                AutoSize = true,
+                Location = new Point(32, 58),
+                Font = FontHelper.Regular(8.5F),
+                ForeColor = ThemeHelper.TextSecondary
+            };
+            Controls.Add(_transactionManagedNoteLabel);
+            _validationLabel.Location = new Point(34, 76);
+        }
+        else
+        {
+            _transactionManagedNoteLabel.Text = noteText;
+        }
 
         if (_sourceSchedule is not null)
         {
