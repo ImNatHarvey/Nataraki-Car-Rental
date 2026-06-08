@@ -39,32 +39,22 @@ public sealed class NotificationPanelControl : UserControl
     private void InitializeControl()
     {
         Size = new Size(340, 500);
-        BackColor = ThemeHelper.Surface;
-        Padding = new Padding(1); // For border effect if needed
+        BackColor = ThemeHelper.Border; // Acts as the border color
+        Padding = new Padding(1); // 1px border thickness
 
         BorderedPanel container = new()
         {
             Dock = DockStyle.Fill,
-            BorderColor = ThemeHelper.Border,
+            BorderColor = Color.Transparent, // Transparent because parent Padding handles the border
             BackColor = ThemeHelper.Surface
         };
 
         Panel header = new()
         {
             Dock = DockStyle.Top,
-            Height = 52,
+            Height = 44, // Slightly reduced height since title is gone
             Padding = new Padding(16, 0, 16, 0),
             BackColor = ThemeHelper.Surface
-        };
-
-        Label titleLabel = new()
-        {
-            Text = "Notifications",
-            Font = FontHelper.SemiBold(11.5F),
-            ForeColor = ThemeHelper.TextPrimary,
-            Dock = DockStyle.Left,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoSize = true
         };
 
         Button markAllRead = new()
@@ -94,7 +84,6 @@ public sealed class NotificationPanelControl : UserControl
             NotificationService.NotifyNotificationsChanged();
         };
 
-        header.Controls.Add(titleLabel);
         header.Controls.Add(markAllRead);
 
         Panel footer = new()
