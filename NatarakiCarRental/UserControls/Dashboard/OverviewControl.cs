@@ -44,10 +44,17 @@ public sealed class OverviewControl : UserControl
     private TableLayoutPanel? _metricGrid;
     private readonly List<MetricCardControl> _kpiCards = [];
 
+    private int _lastLayoutWidth;
+    private readonly System.Windows.Forms.Timer _layoutThrottleTimer = new() { Interval = 100 };
+
     public OverviewControl()
     {
         InitializeControl();
         Load += OverviewControl_Load;
+        _layoutThrottleTimer.Tick += (s, e) => {
+            _layoutThrottleTimer.Stop();
+            PerformDeferredLayout();
+        };
     }
 
     private void InitializeControl()
@@ -89,13 +96,26 @@ public sealed class OverviewControl : UserControl
         _scrollContainer.Controls.Add(_mainLayout);
         Controls.Add(_scrollContainer);
 
-        // Responsive handling
+        // Responsive handling with throttling
         Resize += (_, _) => {
-            SuspendLayout();
-            _mainLayout.Width = _scrollContainer.Width - (SystemInformation.VerticalScrollBarWidth + 10);
-            UpdateLayouts();
-            ResumeLayout();
+            if (_scrollContainer.Width == _lastLayoutWidth) return;
+            _layoutThrottleTimer.Stop();
+            _layoutThrottleTimer.Start();
         };
+    }
+
+    private void PerformDeferredLayout()
+    {
+        if (IsDisposed) return;
+        
+        int currentWidth = _scrollContainer.Width;
+        if (currentWidth == _lastLayoutWidth) return;
+        
+        SuspendLayout();
+        _mainLayout.Width = Math.Max(100, currentWidth - (SystemInformation.VerticalScrollBarWidth + 10));
+        UpdateLayouts();
+        _lastLayoutWidth = currentWidth;
+        ResumeLayout(true);
     }
 
     private TableLayoutPanel CreateMetricGrid()
@@ -237,9 +257,12 @@ public sealed class OverviewControl : UserControl
 
         ConfigureInsightsTable();
         
-        Panel tableContainer = DataGridViewHelper.CreateBorderedContainer(_insightsTable);
+        Panel tableContainer = ControlFactory.CreateCardPanel(new Size(0, 504));
+        tableContainer.Padding = new Padding(18);
         tableContainer.Dock = DockStyle.Fill;
-        tableContainer.Height = 504; // Explicit height with buffer
+        
+        _insightsTable.Dock = DockStyle.Fill;
+        tableContainer.Controls.Add(_insightsTable);
 
         section.Controls.Add(LayoutHelper.CreateSectionHeader("Operational Insights"), 0, 0);
         section.Controls.Add(_filterBar, 0, 1);
@@ -330,7 +353,7 @@ public sealed class OverviewControl : UserControl
     {
         Load -= OverviewControl_Load;
         await RefreshDashboardAsync();
-        UpdateLayouts();
+        PerformDeferredLayout();
     }
 
     private async Task RefreshDashboardAsync()

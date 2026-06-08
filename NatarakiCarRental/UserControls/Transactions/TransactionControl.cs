@@ -13,8 +13,6 @@ namespace NatarakiCarRental.UserControls.Transactions;
 public sealed class TransactionControl : UserControl
 {
     private const float StatusPillHeight = 26F;
-    private const float PaymentStatusPillWidth = 92F;
-    private const float TransactionStatusPillWidth = 118F;
     private const int WideTransactionsGridThreshold = 1200;
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
@@ -39,6 +37,10 @@ public sealed class TransactionControl : UserControl
     private readonly Button _nextPageButton = CreatePaginationButton("Next");
     private bool _showArchived;
 
+    private int _lastWidth;
+    private int _lastHeight;
+    private readonly System.Windows.Forms.Timer _layoutThrottleTimer = new() { Interval = 100 };
+
     public TransactionControl(int currentUserId)
     {
         _currentUserId = currentUserId;
@@ -46,6 +48,10 @@ public sealed class TransactionControl : UserControl
         _addTransactionButton = CreatePrimaryIconButton("Add Transaction", IconChar.Plus, 158, 36);
         InitializeControl();
         Load += TransactionControl_Load;
+        _layoutThrottleTimer.Tick += async (s, e) => {
+            _layoutThrottleTimer.Stop();
+            await PerformDeferredLayoutAsync();
+        };
     }
 
     private static Button CreatePaginationButton(string text)
@@ -87,6 +93,26 @@ public sealed class TransactionControl : UserControl
         mainLayout.Controls.Add(CreateTablePanel(), 0, 3);
         mainLayout.Controls.Add(CreatePaginationPanel(), 0, 4);
         Controls.Add(mainLayout);
+
+        Resize += (_, _) => {
+            if (Width == _lastWidth) return;
+            _layoutThrottleTimer.Stop();
+            _layoutThrottleTimer.Start();
+        };
+    }
+
+    private async Task PerformDeferredLayoutAsync()
+    {
+        if (IsDisposed) return;
+        UpdateTransactionsGridColumnLayout();
+        
+        if (Math.Abs(Height - _lastHeight) > 50)
+        {
+            _lastHeight = Height;
+            _currentPage = 1;
+            await LoadTransactionsAsync();
+        }
+        _lastWidth = Width;
     }
 
     private Panel CreatePaginationPanel()
@@ -245,35 +271,13 @@ public sealed class TransactionControl : UserControl
         panel.Dock = DockStyle.Fill;
         panel.Padding = new Padding(18);
 
+        DataGridViewHelper.ApplyStandardStyle(_transactionsGrid);
         _transactionsGrid.Dock = DockStyle.Fill;
-        _transactionsGrid.AllowUserToAddRows = false;
-        _transactionsGrid.AllowUserToDeleteRows = false;
-        _transactionsGrid.AllowUserToResizeRows = false;
-        _transactionsGrid.AllowUserToResizeColumns = false;
-        _transactionsGrid.ScrollBars = ScrollBars.Both;
-        _transactionsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _transactionsGrid.BackgroundColor = ThemeHelper.Surface;
-        _transactionsGrid.BorderStyle = BorderStyle.FixedSingle;
-        _transactionsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
-        _transactionsGrid.ColumnHeadersHeight = 38;
-        _transactionsGrid.EnableHeadersVisualStyles = false;
-        _transactionsGrid.GridColor = ThemeHelper.TableGridLine;
-        _transactionsGrid.ReadOnly = true;
-        _transactionsGrid.RowHeadersVisible = false;
-        _transactionsGrid.RowTemplate.Height = 38;
-        _transactionsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _transactionsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-        _transactionsGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
-        _transactionsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
-        _transactionsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        _transactionsGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
-        _transactionsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
-        _transactionsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         _transactionsGrid.CellMouseClick += TransactionsGrid_CellMouseClick;
         _transactionsGrid.CellMouseMove += TransactionsGrid_CellMouseMove;
         _transactionsGrid.CellMouseLeave += (_, _) => _transactionsGrid.Cursor = Cursors.Default;
-        _transactionsGrid.CellPainting += TransactionsGrid_CellPainting;
         DataGridViewHelper.SetupStatusPills(_transactionsGrid, "Payment", "Status");
+        DataGridViewHelper.SetupActionButtons(_transactionsGrid);
 
         _emptyStateLabel.Text = "No transaction records found.";
         _emptyStateLabel.Dock = DockStyle.Bottom;
@@ -372,23 +376,13 @@ public sealed class TransactionControl : UserControl
         SetFixedColumnWidth("Actions", 470);
     }
 
-    private int _lastHeight;
-
     private async void TransactionControl_Load(object? sender, EventArgs e)
     {
         Load -= TransactionControl_Load;
         _lastHeight = Height;
-        Resize += async (_, _) =>
-        {
-            UpdateTransactionsGridColumnLayout();
-            if (Math.Abs(Height - _lastHeight) > 50)
-            {
-                _lastHeight = Height;
-                _currentPage = 1;
-                await LoadTransactionsAsync();
-            }
-        };
+        _lastWidth = Width;
         await LoadTransactionsAsync();
+        UpdateTransactionsGridColumnLayout();
     }
 
     private async Task LoadTransactionsAsync()
@@ -504,61 +498,6 @@ public sealed class TransactionControl : UserControl
         return button;
     }
 
-    private void TransactionsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
-    {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-
-        string columnName = _transactionsGrid.Columns[e.ColumnIndex].Name;
-        if (columnName != "Actions") return;
-
-        e.PaintBackground(e.CellBounds, true);
-        string text = e.Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text) || e.Graphics is null) return;
-
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
-
-        string[] actions = text.Split('|');
-        var layout = GetTransactionActionButtonBounds(e.CellBounds, actions);
-
-        for (int i = 0; i < layout.Count; i++)
-        {
-            var entry = layout[i];
-            Color color = DataGridViewHelper.GetStatusColor(entry.Action);
-            
-            // Use local drawing logic for action buttons to maintain specific look if needed, 
-            // but we can also use a helper if we had one for arbitrary pills.
-            float radius = entry.Bounds.Height / 2;
-            using GraphicsPath path = new();
-            float diameter = radius * 2;
-            RectangleF arc = new(entry.Bounds.Location, new SizeF(diameter, diameter));
-            path.AddArc(arc, 180, 90);
-            arc.X = entry.Bounds.Right - diameter;
-            path.AddArc(arc, 270, 90);
-            arc.Y = entry.Bounds.Bottom - diameter;
-            path.AddArc(arc, 0, 90);
-            arc.X = entry.Bounds.Left;
-            path.AddArc(arc, 90, 90);
-            path.CloseFigure();
-
-            using SolidBrush background = new(color);
-            using SolidBrush foreground = new(Color.White);
-
-            e.Graphics.FillPath(background, path);
-
-            using StringFormat format = new()
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                FormatFlags = StringFormatFlags.NoWrap,
-                Trimming = StringTrimming.EllipsisCharacter
-            };
-            e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
-        }
-
-        e.Handled = true;
-    }
-
     private async void AddButton_Click(object? sender, EventArgs e)
     {
         if (!AccessControlService.HasPermission("Transactions.Create"))
@@ -586,15 +525,9 @@ public sealed class TransactionControl : UserControl
             return;
         }
 
-        string text = _transactionsGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return;
-        }
-
         int transactionId = Convert.ToInt32(_transactionsGrid.Rows[e.RowIndex].Cells["TransactionId"].Value);
-
-        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
+        string? clickedAction = DataGridViewHelper.GetClickedAction(_transactionsGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y);
+        
         if (clickedAction is null)
         {
             return;
@@ -666,68 +599,9 @@ public sealed class TransactionControl : UserControl
 
     private void TransactionsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        _transactionsGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is null
+        _transactionsGrid.Cursor = DataGridViewHelper.GetClickedAction(_transactionsGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y) is null
             ? Cursors.Default
             : Cursors.Hand;
-    }
-
-    private string? GetActionAt(int rowIndex, int columnIndex, int x, int y)
-    {
-        if (rowIndex < 0 || columnIndex < 0 || _transactionsGrid.Columns[columnIndex].Name != "Actions")
-        {
-            return null;
-        }
-
-        string text = _transactionsGrid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        using Graphics graphics = _transactionsGrid.CreateGraphics();
-        Font font = _transactionsGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
-        float currentX = 4F;
-        float yOffset = (_transactionsGrid.Rows[rowIndex].Height - StatusPillHeight) / 2F;
-
-        foreach (string action in text.Split('|'))
-        {
-            float width = GetActionPillWidth(graphics, font, action);
-            RectangleF rect = new(currentX, yOffset, width, StatusPillHeight);
-            if (rect.Contains(x, y))
-            {
-                return action;
-            }
-
-            currentX += width + 6F;
-        }
-
-        return null;
-    }
-
-    private List<(string Action, RectangleF Bounds)> GetTransactionActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
-    {
-        List<(string Action, RectangleF Bounds)> result = [];
-        if (actions.Count == 0) return result;
-
-        using Graphics g = CreateGraphics();
-        Font font = FontHelper.SemiBold(9F);
-        float currentX = cellBounds.X + 4;
-        float height = StatusPillHeight;
-        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
-
-        foreach (string action in actions)
-        {
-            float width = GetActionPillWidth(g, font, action);
-            result.Add((action, new RectangleF(currentX, y, width, height)));
-            currentX += width + 6;
-        }
-
-        return result;
-    }
-
-    private static float GetActionPillWidth(Graphics graphics, Font font, string action)
-    {
-        return graphics.MeasureString(action, font).Width + 22F;
     }
 
     private async Task ViewTransactionAsync(int transactionId)

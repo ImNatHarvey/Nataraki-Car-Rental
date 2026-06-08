@@ -33,6 +33,9 @@ public sealed class CustomerControl : UserControl
     private CustomerListFilter _filter = CustomerListFilter.Active;
 
     private readonly int _currentUserId;
+    private int _lastWidth;
+    private int _lastHeight;
+    private readonly System.Windows.Forms.Timer _layoutThrottleTimer = new() { Interval = 100 };
 
     public CustomerControl(int currentUserId)
     {
@@ -40,6 +43,10 @@ public sealed class CustomerControl : UserControl
         _customerService = new CustomerService(currentUserId);
         InitializeControl();
         Load += CustomerControl_Load;
+        _layoutThrottleTimer.Tick += async (s, e) => {
+            _layoutThrottleTimer.Stop();
+            await PerformDeferredLayoutAsync();
+        };
     }
 
     private static Button CreatePaginationButton(string text)
@@ -84,6 +91,24 @@ public sealed class CustomerControl : UserControl
         mainLayout.Controls.Add(CreatePaginationPanel(), 0, 4);
 
         Controls.Add(mainLayout);
+
+        Resize += (_, _) => {
+            if (Width == _lastWidth) return;
+            _layoutThrottleTimer.Stop();
+            _layoutThrottleTimer.Start();
+        };
+    }
+
+    private async Task PerformDeferredLayoutAsync()
+    {
+        if (IsDisposed) return;
+        if (Math.Abs(Height - _lastHeight) > 50)
+        {
+            _lastHeight = Height;
+            _currentPage = 1;
+            await LoadCustomersAsync();
+        }
+        _lastWidth = Width;
     }
 
     private Panel CreatePaginationPanel()
@@ -115,39 +140,6 @@ public sealed class CustomerControl : UserControl
         panel.Controls.Add(_prevPageButton);
         panel.Controls.Add(_nextPageButton);
         panel.Controls.Add(_paginationLabel);
-        return panel;
-    }
-
-    private static Panel CreateHeaderPanel()
-    {
-        Panel panel = new()
-        {
-            Dock = DockStyle.Fill,
-            BackColor = ThemeHelper.ContentBackground
-        };
-
-        Label titleLabel = new()
-        {
-            Text = "Customers",
-            AutoSize = false,
-            Location = new Point(0, 0),
-            Size = new Size(260, 34),
-            Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
-        };
-
-        Label subtitleLabel = new()
-        {
-            Text = "Manage client records, documents, blacklist status, and archived customers.",
-            AutoSize = false,
-            Location = new Point(2, 42),
-            Size = new Size(680, 24),
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        };
-
-        panel.Controls.Add(titleLabel);
-        panel.Controls.Add(subtitleLabel);
         return panel;
     }
 
@@ -218,8 +210,8 @@ public sealed class CustomerControl : UserControl
         _archivedButton.Click += async (_, _) => await SwitchFilterAsync(CustomerListFilter.Archived);
 
         panel.Controls.Add(_activeButton);
-        panel.Controls.Add(_blacklistedButton);
         panel.Controls.Add(_archivedButton);
+        panel.Controls.Add(_blacklistedButton);
         panel.Controls.Add(addCustomerButton);
         return panel;
     }
@@ -297,34 +289,13 @@ public sealed class CustomerControl : UserControl
         panel.Dock = DockStyle.Fill;
         panel.Padding = new Padding(18);
 
+        DataGridViewHelper.ApplyStandardStyle(_customersGrid);
         _customersGrid.Dock = DockStyle.Fill;
-        _customersGrid.AllowUserToAddRows = false;
-        _customersGrid.AllowUserToDeleteRows = false;
-        _customersGrid.AllowUserToResizeRows = false;
-        _customersGrid.AllowUserToResizeColumns = false;
-        _customersGrid.ScrollBars = ScrollBars.Vertical;
-        _customersGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _customersGrid.BackgroundColor = ThemeHelper.Surface;
-        _customersGrid.BorderStyle = BorderStyle.FixedSingle;
-        _customersGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
-        _customersGrid.ColumnHeadersHeight = 38;
-        _customersGrid.EnableHeadersVisualStyles = false;
-        _customersGrid.GridColor = ThemeHelper.TableGridLine;
-        _customersGrid.ReadOnly = true;
-        _customersGrid.RowHeadersVisible = false;
-        _customersGrid.RowTemplate.Height = 38;
-        _customersGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _customersGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-        _customersGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
-        _customersGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
-        _customersGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        _customersGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
-        _customersGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
-        _customersGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         _customersGrid.CellMouseClick += CustomersGrid_CellMouseClick;
         _customersGrid.CellMouseMove += CustomersGrid_CellMouseMove;
         _customersGrid.CellMouseLeave += (_, _) => _customersGrid.Cursor = Cursors.Default;
-        _customersGrid.CellPainting += CustomersGrid_CellPainting;
+        DataGridViewHelper.SetupStatusPills(_customersGrid, "Status");
+        DataGridViewHelper.SetupActionButtons(_customersGrid);
 
         _emptyStateLabel.Text = "No customer records found.";
         _emptyStateLabel.Dock = DockStyle.Bottom;
@@ -391,29 +362,12 @@ public sealed class CustomerControl : UserControl
         }
     }
 
-    private void AddActionColumn(string name, string headerText, string buttonText)
-    {
-        DataGridViewButtonColumn column = new()
-        {
-            Name = name,
-            HeaderText = headerText,
-            Text = buttonText,
-            UseColumnTextForButtonValue = true,
-            FlatStyle = FlatStyle.Flat
-        };
-        column.DefaultCellStyle.BackColor = ThemeHelper.Surface;
-        column.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-        _customersGrid.Columns.Add(column);
-    }
-
     private async Task SwitchFilterAsync(CustomerListFilter filter)
     {
         _currentPage = 1;
         _filter = filter;
         await LoadCustomersAsync();
     }
-
-    private int _lastHeight;
 
     private async Task LoadCustomersAsync()
     {
@@ -436,15 +390,7 @@ public sealed class CustomerControl : UserControl
     {
         Load -= CustomerControl_Load;
         _lastHeight = Height;
-        Resize += async (_, _) =>
-        {
-            if (Math.Abs(Height - _lastHeight) > 50)
-            {
-                _lastHeight = Height;
-                _currentPage = 1;
-                await LoadCustomersAsync();
-            }
-        };
+        _lastWidth = Width;
         await LoadCustomersAsync();
     }
 
@@ -546,139 +492,6 @@ public sealed class CustomerControl : UserControl
         button.IconColor = isActive ? Color.White : ThemeHelper.TextSecondary;
     }
 
-    private void CustomersGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
-    {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
-        {
-            return;
-        }
-
-        string columnName = _customersGrid.Columns[e.ColumnIndex].Name;
-        bool isStatus = columnName == "Status";
-        bool isAction = columnName == "Actions";
-
-        if (!isStatus && !isAction)
-        {
-            return;
-        }
-
-        e.PaintBackground(e.CellBounds, true);
-        string text = e.Value?.ToString() ?? string.Empty;
-
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        if (e.Graphics is null)
-        {
-            return;
-        }
-
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
-
-        if (isAction)
-        {
-            string[] actions = text.Split('|');
-            var layout = GetCustomerActionButtonBounds(e.CellBounds, actions);
-
-            for (int i = 0; i < layout.Count; i++)
-            {
-                var entry = layout[i];
-                Color color = GetPillBackColor(columnName, entry.Action);
-                using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
-                using SolidBrush background = new(color);
-                using SolidBrush foreground = new(Color.White);
-
-                e.Graphics.FillPath(background, path);
-
-                using StringFormat format = new()
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center,
-                    FormatFlags = StringFormatFlags.NoWrap,
-                    Trimming = StringTrimming.EllipsisCharacter
-                };
-                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
-            }
-        }
-        else
-        {
-            Color color = GetPillBackColor(columnName, text);
-            float height = 26;
-            SizeF textSize = e.Graphics.MeasureString(text, font);
-            float width = textSize.Width + 24;
-            if (width > e.CellBounds.Width - 4) width = e.CellBounds.Width - 4;
-            
-            float x = e.CellBounds.X + 8;
-            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
-            RectangleF rect = new(x, y, width, height);
-
-            using GraphicsPath path = GetRoundedRect(rect, height / 2);
-            using SolidBrush backBrush = new(color);
-            using SolidBrush foreBrush = new(Color.White);
-            e.Graphics.FillPath(backBrush, path);
-
-            using StringFormat format = new()
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                FormatFlags = StringFormatFlags.NoWrap,
-                Trimming = StringTrimming.EllipsisCharacter
-            };
-            e.Graphics.DrawString(text, font, foreBrush, rect, format);
-        }
-
-        e.Handled = true;
-    }
-
-    private static Color GetPillBackColor(string columnName, string text)
-    {
-        if (columnName == "Status")
-        {
-            return text switch
-            {
-                "Active" => ThemeHelper.Success,
-                "Blacklisted" => ThemeHelper.Danger,
-                "Archived" => ThemeHelper.GrayIcon,
-                _ => ThemeHelper.GrayIcon
-            };
-        }
-
-        return text switch
-        {
-            "View" => ThemeHelper.Primary,
-            "Edit" => ThemeHelper.Success,
-            "Blacklist" => ThemeHelper.Danger,
-            "Remove Blacklist" => ThemeHelper.Warning,
-            "Archive" => ThemeHelper.Danger,
-            "Restore" => ThemeHelper.Warning,
-            _ => ThemeHelper.Primary
-        };
-    }
-
-    private List<(string Action, RectangleF Bounds)> GetCustomerActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
-    {
-        List<(string Action, RectangleF Bounds)> result = [];
-        if (actions.Count == 0) return result;
-
-        using Graphics g = CreateGraphics();
-        Font font = FontHelper.SemiBold(9F);
-        float currentX = cellBounds.X + 4;
-        float height = 26;
-        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
-
-        foreach (string action in actions)
-        {
-            float width = g.MeasureString(action, font).Width + 22F;
-            result.Add((action, new RectangleF(currentX, y, width, height)));
-            currentX += width + 6;
-        }
-
-        return result;
-    }
-
     private async void CustomersGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left)
@@ -693,7 +506,7 @@ public sealed class CustomerControl : UserControl
         }
 
         int customerId = Convert.ToInt32(_customersGrid.Rows[e.RowIndex].Cells["CustomerId"].Value);
-        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
+        string? clickedAction = DataGridViewHelper.GetClickedAction(_customersGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y);
 
         if (clickedAction is null)
         {
@@ -723,42 +536,9 @@ public sealed class CustomerControl : UserControl
         }
     }
 
-    private string? GetActionAt(int rowIndex, int columnIndex, int x, int y)
-    {
-        if (rowIndex < 0 || columnIndex < 0 || _customersGrid.Columns[columnIndex].Name != "Actions")
-        {
-            return null;
-        }
-
-        string text = _customersGrid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        using Graphics graphics = _customersGrid.CreateGraphics();
-        Font font = _customersGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
-        float currentX = 4F;
-        float yOffset = (_customersGrid.Rows[rowIndex].Height - 26) / 2F;
-
-        foreach (string action in text.Split('|'))
-        {
-            float width = graphics.MeasureString(action, font).Width + 22F;
-            RectangleF rect = new(currentX, yOffset, width, 26);
-            if (rect.Contains(x, y))
-            {
-                return action;
-            }
-
-            currentX += width + 6F;
-        }
-
-        return null;
-    }
-
     private void CustomersGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        _customersGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is not null
+        _customersGrid.Cursor = DataGridViewHelper.GetClickedAction(_customersGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y) is not null
             ? Cursors.Hand
             : Cursors.Default;
     }
@@ -958,29 +738,5 @@ public sealed class CustomerControl : UserControl
         }
 
         return customer;
-    }
-
-    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
-    {
-        GraphicsPath path = new();
-        float diameter = radius * 2;
-        SizeF size = new(diameter, diameter);
-        RectangleF arc = new(rect.Location, size);
-
-        if (radius <= 0)
-        {
-            path.AddRectangle(rect);
-            return path;
-        }
-
-        path.AddArc(arc, 180, 90);
-        arc.X = rect.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = rect.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = rect.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 }

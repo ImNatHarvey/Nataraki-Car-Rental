@@ -1,6 +1,5 @@
 using FontAwesome.Sharp;
 using System.Drawing.Drawing2D;
-using System.Linq;
 using NatarakiCarRental.Forms.Cars;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
@@ -35,6 +34,9 @@ public sealed class CarGarageControl : UserControl
     private bool _showArchived;
 
     private readonly int _currentUserId;
+    private int _lastWidth;
+    private int _lastHeight;
+    private readonly System.Windows.Forms.Timer _layoutThrottleTimer = new() { Interval = 100 };
 
     public CarGarageControl(int currentUserId)
     {
@@ -42,6 +44,10 @@ public sealed class CarGarageControl : UserControl
         _carService = new CarService(currentUserId);
         InitializeControl();
         Load += CarGarageControl_Load;
+        _layoutThrottleTimer.Tick += async (s, e) => {
+            _layoutThrottleTimer.Stop();
+            await PerformDeferredLayoutAsync();
+        };
     }
 
     private static Button CreatePaginationButton(string text)
@@ -86,6 +92,24 @@ public sealed class CarGarageControl : UserControl
         mainLayout.Controls.Add(CreatePaginationPanel(), 0, 4);
 
         Controls.Add(mainLayout);
+
+        Resize += (_, _) => {
+            if (Width == _lastWidth) return;
+            _layoutThrottleTimer.Stop();
+            _layoutThrottleTimer.Start();
+        };
+    }
+
+    private async Task PerformDeferredLayoutAsync()
+    {
+        if (IsDisposed) return;
+        if (Math.Abs(Height - _lastHeight) > 50)
+        {
+            _lastHeight = Height;
+            _currentPage = 1;
+            await LoadCarsAsync();
+        }
+        _lastWidth = Width;
     }
 
     private Panel CreatePaginationPanel()
@@ -117,39 +141,6 @@ public sealed class CarGarageControl : UserControl
         panel.Controls.Add(_prevPageButton);
         panel.Controls.Add(_nextPageButton);
         panel.Controls.Add(_paginationLabel);
-        return panel;
-    }
-
-    private static Panel CreateHeaderPanel()
-    {
-        Panel panel = new()
-        {
-            Dock = DockStyle.Fill,
-            BackColor = ThemeHelper.ContentBackground
-        };
-
-        Label titleLabel = new()
-        {
-            Text = "Car Garage",
-            AutoSize = false,
-            Location = new Point(0, 0),
-            Size = new Size(260, 34),
-            Font = FontHelper.Title(22F),
-            ForeColor = ThemeHelper.TextPrimary
-        };
-
-        Label subtitleLabel = new()
-        {
-            Text = "Manage vehicle records, availability, and archived cars.",
-            AutoSize = false,
-            Location = new Point(2, 42),
-            Size = new Size(520, 24),
-            Font = FontHelper.Regular(10.5F),
-            ForeColor = ThemeHelper.TextSecondary
-        };
-        panel.Controls.Add(titleLabel);
-        panel.Controls.Add(subtitleLabel);
-
         return panel;
     }
 
@@ -324,37 +315,13 @@ public sealed class CarGarageControl : UserControl
         panel.Dock = DockStyle.Fill;
         panel.Padding = new Padding(18);
 
+        DataGridViewHelper.ApplyStandardStyle(_carsGrid);
         _carsGrid.Dock = DockStyle.Fill;
-        _carsGrid.AllowUserToAddRows = false;
-        _carsGrid.AllowUserToDeleteRows = false;
-        _carsGrid.AllowUserToResizeRows = false;
-        _carsGrid.AllowUserToResizeColumns = false;
-        _carsGrid.ScrollBars = ScrollBars.Vertical;
-        _carsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _carsGrid.BackgroundColor = ThemeHelper.Surface;
-        _carsGrid.BorderStyle = BorderStyle.FixedSingle;
-        _carsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
-        _carsGrid.ColumnHeadersHeight = 38;
-        _carsGrid.EnableHeadersVisualStyles = false;
-        _carsGrid.GridColor = ThemeHelper.TableGridLine;
-        _carsGrid.ReadOnly = true;
-        _carsGrid.RowHeadersVisible = false;
-        _carsGrid.RowTemplate.Height = 38;
-        _carsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-
-        _carsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-        _carsGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
-
-        _carsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
-        _carsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        _carsGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
-        _carsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
-        _carsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-
         _carsGrid.CellMouseClick += CarsGrid_CellMouseClick;
         _carsGrid.CellMouseMove += CarsGrid_CellMouseMove;
         _carsGrid.CellMouseLeave += (_, _) => _carsGrid.Cursor = Cursors.Default;
-        _carsGrid.CellPainting += CarsGrid_CellPainting;
+        DataGridViewHelper.SetupStatusPills(_carsGrid, "Status");
+        DataGridViewHelper.SetupActionButtons(_carsGrid);
 
         _emptyStateLabel.Text = "No car records found.";
         _emptyStateLabel.Dock = DockStyle.Bottom;
@@ -417,21 +384,11 @@ public sealed class CarGarageControl : UserControl
         }
     }
 
-    private int _lastHeight;
-
     private async void CarGarageControl_Load(object? sender, EventArgs e)
     {
         Load -= CarGarageControl_Load;
         _lastHeight = Height;
-        Resize += async (_, _) =>
-        {
-            if (Math.Abs(Height - _lastHeight) > 50)
-            {
-                _lastHeight = Height;
-                _currentPage = 1;
-                await LoadCarsAsync();
-            }
-        };
+        _lastWidth = Width;
         await LoadCarsAsync();
     }
 
@@ -523,114 +480,6 @@ public sealed class CarGarageControl : UserControl
         button.IconColor = isActive ? Color.White : ThemeHelper.TextSecondary;
     }
 
-    private void CarsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
-    {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-
-        string columnName = _carsGrid.Columns[e.ColumnIndex].Name;
-        bool isStatus = columnName == "Status";
-        bool isAction = columnName == "Actions";
-
-        if (!isStatus && !isAction) return;
-
-        e.PaintBackground(e.CellBounds, true);
-        string text = e.Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrEmpty(text) || e.Graphics is null) return;
-
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
-
-        if (isAction)
-        {
-            string[] actions = text.Split('|');
-            var layout = GetCarActionButtonBounds(e.CellBounds, actions);
-
-            for (int i = 0; i < layout.Count; i++)
-            {
-                var entry = layout[i];
-                Color color = GetPillColor(entry.Action);
-                using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
-                using SolidBrush background = new(color);
-                using SolidBrush foreground = new(Color.White);
-
-                e.Graphics.FillPath(background, path);
-
-                using StringFormat format = new()
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center,
-                    FormatFlags = StringFormatFlags.NoWrap,
-                    Trimming = StringTrimming.EllipsisCharacter
-                };
-                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
-            }
-        }
-        else
-        {
-            Color color = GetPillColor(text);
-            float height = 26;
-            SizeF textSize = e.Graphics.MeasureString(text, font);
-            float width = textSize.Width + 24;
-            if (width > e.CellBounds.Width - 4) width = e.CellBounds.Width - 4;
-
-            float x = e.CellBounds.X + 8;
-            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
-            RectangleF rect = new(x, y, width, height);
-
-            using GraphicsPath path = GetRoundedRect(rect, height / 2);
-            using SolidBrush backBrush = new(color);
-            using SolidBrush foreBrush = new(Color.White);
-            e.Graphics.FillPath(backBrush, path);
-
-            using StringFormat format = new()
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                FormatFlags = StringFormatFlags.NoWrap,
-                Trimming = StringTrimming.EllipsisCharacter
-            };
-            e.Graphics.DrawString(text, font, foreBrush, rect, format);
-        }
-
-        e.Handled = true;
-    }
-
-    private static Color GetPillColor(string text)
-    {
-        return text switch
-        {
-            "Available" or "Rented" => ThemeHelper.Success,
-            "Maintenance" => ThemeHelper.Danger,
-            "Reserved" => ThemeHelper.Primary,
-            "View" => ThemeHelper.Primary,
-            "Edit" => ThemeHelper.Success,
-            "Archive" => ThemeHelper.Danger,
-            "Restore" => ThemeHelper.Warning,
-            _ => ThemeHelper.GrayIcon
-        };
-    }
-
-    private List<(string Action, RectangleF Bounds)> GetCarActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
-    {
-        List<(string Action, RectangleF Bounds)> result = [];
-        if (actions.Count == 0) return result;
-
-        using Graphics g = CreateGraphics();
-        Font font = FontHelper.SemiBold(9F);
-        float currentX = cellBounds.X + 4;
-        float height = 26;
-        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
-
-        foreach (string action in actions)
-        {
-            float width = g.MeasureString(action, font).Width + 22F;
-            result.Add((action, new RectangleF(currentX, y, width, height)));
-            currentX += width + 6;
-        }
-
-        return result;
-    }
-
     private async void CarsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
@@ -639,7 +488,7 @@ public sealed class CarGarageControl : UserControl
         if (columnName != "Actions") return;
 
         int carId = Convert.ToInt32(_carsGrid.Rows[e.RowIndex].Cells["CarId"].Value);
-        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
+        string? clickedAction = DataGridViewHelper.GetClickedAction(_carsGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y);
 
         if (clickedAction is null) return;
 
@@ -660,41 +509,11 @@ public sealed class CarGarageControl : UserControl
         }
     }
 
-    private string? GetActionAt(int rowIndex, int columnIndex, int x, int y)
-    {
-        if (rowIndex < 0 || columnIndex < 0 || _carsGrid.Columns[columnIndex].Name != "Actions") return null;
-
-        string text = _carsGrid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(text)) return null;
-
-        using Graphics graphics = _carsGrid.CreateGraphics();
-        Font font = _carsGrid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
-        float currentX = 4F;
-        float yOffset = (_carsGrid.Rows[rowIndex].Height - 26) / 2F;
-
-        foreach (string action in text.Split('|'))
-        {
-            float width = graphics.MeasureString(action, font).Width + 22F;
-            RectangleF rect = new(currentX, yOffset, width, 26);
-            if (rect.Contains(x, y)) return action;
-
-            currentX += width + 6F;
-        }
-
-        return null;
-    }
-
     private void CarsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        _carsGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is not null
+        _carsGrid.Cursor = DataGridViewHelper.GetClickedAction(_carsGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y) is not null
             ? Cursors.Hand
             : Cursors.Default;
-    }
-
-    private bool IsActionColumn(int columnIndex)
-    {
-        return columnIndex >= 0
-            && _carsGrid.Columns[columnIndex].Name is "ViewAction" or "EditAction" or "ArchiveAction" or "RestoreAction";
     }
 
     private async void AddCarButton_Click(object? sender, EventArgs e)
@@ -829,29 +648,5 @@ public sealed class CarGarageControl : UserControl
 
         await _carService.RestoreCarAsync(carId);
         await LoadCarsAsync();
-    }
-
-    private static GraphicsPath GetRoundedRect(RectangleF rect, float radius)
-    {
-        GraphicsPath path = new();
-        float diameter = radius * 2;
-        SizeF size = new(diameter, diameter);
-        RectangleF arc = new(rect.Location, size);
-
-        if (radius <= 0)
-        {
-            path.AddRectangle(rect);
-            return path;
-        }
-
-        path.AddArc(arc, 180, 90);
-        arc.X = rect.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = rect.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = rect.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 }

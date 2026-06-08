@@ -440,6 +440,15 @@ public sealed class FleetScheduleControl : UserControl
             int totalWidth = CarColumnWidth + days * DayWidth;
             int totalHeight = AutoScrollMinSize.Height;
 
+            // Fill background - visible area only
+            graphics.FillRectangle(Brushes.White, e.ClipRectangle);
+
+            // Apply scroll transformation to EVERYTHING
+            graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
+
+            // Determine visible range
+            Rectangle visibleRect = new(-AutoScrollPosition.X, -AutoScrollPosition.Y, ClientSize.Width, ClientSize.Height);
+
             using Pen gridPen = new(ThemeHelper.TableGridLine);
             using Pen majorGridPen = new(ThemeHelper.TableGridLineStrong);
             using SolidBrush headerBrush = new(ThemeHelper.ContentBackground);
@@ -449,21 +458,12 @@ public sealed class FleetScheduleControl : UserControl
             using SolidBrush weekendBrush = new(Color.FromArgb(248, 250, 252));
             using SolidBrush todayBrush = new(Color.FromArgb(239, 246, 255));
 
-            // Fill background
-            graphics.FillRectangle(surfaceBrush, ClientRectangle);
-
-            // Apply scroll transformation to EVERYTHING
-            graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
-
-            // 1. Draw Headers and Backgrounds
-            graphics.FillRectangle(headerBrush, 0, 0, totalWidth, HeaderHeight);
-            graphics.FillRectangle(headerBrush, 0, 0, CarColumnWidth, totalHeight);
-            
-            graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(14, 15));
-
+            // 1. Draw Day Backgrounds (Weekend/Today)
             for (int day = 0; day < days; day++)
             {
                 int x = CarColumnWidth + day * DayWidth;
+                if (x + DayWidth < visibleRect.Left || x > visibleRect.Right) continue;
+
                 DateTime date = _owner.SelectedMonth.AddDays(day);
                 
                 if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
@@ -475,33 +475,43 @@ public sealed class FleetScheduleControl : UserControl
                 {
                     graphics.FillRectangle(todayBrush, x, 0, DayWidth, totalHeight);
                 }
-
-                graphics.DrawLine(date.Day == 1 ? majorGridPen : gridPen, x, 0, x, totalHeight);
-                graphics.DrawString(date.Day.ToString(), FontHelper.SemiBold(9F), textBrush, new PointF(x + 13, 8));
-                graphics.DrawString(date.ToString("ddd"), FontHelper.Regular(8F), mutedBrush, new PointF(x + 10, 24));
             }
 
-            // 2. Draw Grid Lines
-            graphics.DrawLine(majorGridPen, 0, HeaderHeight, totalWidth, HeaderHeight);
-            graphics.DrawLine(majorGridPen, CarColumnWidth, 0, CarColumnWidth, totalHeight);
-
+            // 2. Draw Row Lines and Car Names
             int drawableRows = Math.Min(_owner._cars.Count, _rowLayouts.Count);
             for (int row = 0; row < drawableRows; row++)
             {
                 RowLayout rowLayout = _rowLayouts[row];
+                if (rowLayout.Top + rowLayout.Height < visibleRect.Top || rowLayout.Top > visibleRect.Bottom) continue;
+
                 float nameY = rowLayout.Top + Math.Max((rowLayout.Height - 34) / 2F, 8);
                 
                 graphics.DrawLine(gridPen, 0, rowLayout.Top, totalWidth, rowLayout.Top);
-                graphics.DrawString(rowLayout.Car.CarName, FontHelper.SemiBold(9F), textBrush, new PointF(14, nameY));
-                graphics.DrawString(rowLayout.Car.PlateNumber, FontHelper.Regular(8.5F), mutedBrush, new PointF(14, nameY + 18));
+                
+                // Draw name and plate (Sticky column effect is handled by redrawing everything on scroll, 
+                // but we draw background for the sticky column later)
             }
 
-            // 3. Draw Schedules
+            // 3. Draw Grid Vertical Lines
+            for (int day = 0; day <= days; day++)
+            {
+                int x = CarColumnWidth + day * DayWidth;
+                if (x < visibleRect.Left || x > visibleRect.Right) continue;
+
+                DateTime date = day < days ? _owner.SelectedMonth.AddDays(day) : _owner.SelectedMonth.AddDays(days - 1).AddDays(1);
+                graphics.DrawLine(date.Day == 1 || day == days ? majorGridPen : gridPen, x, 0, x, totalHeight);
+            }
+
+            // 4. Draw Schedules
             _scheduleBounds.Clear();
             foreach (ScheduleLayout layout in _rowLayouts.SelectMany(rowLayout => rowLayout.Schedules))
             {
                 Rectangle rect = layout.Bounds;
                 _scheduleBounds[layout.Schedule.ScheduleId] = rect;
+
+                // Only draw if visible
+                if (rect.Right < visibleRect.Left || rect.Left > visibleRect.Right || 
+                    rect.Bottom < visibleRect.Top || rect.Top > visibleRect.Bottom) continue;
 
                 using GraphicsPath path = FleetScheduleVisualHelper.CreateRoundedRectanglePath(rect, 12);
                 using SolidBrush fillBrush = new(FleetScheduleVisualHelper.GetColor(layout.Schedule.Status, layout.Schedule.ScheduleType));
@@ -518,14 +528,61 @@ public sealed class FleetScheduleControl : UserControl
                 graphics.DrawString(displayStatus, FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(rect.X + 8, rect.Y, rect.Width - 12, rect.Height), format);
             }
 
+            // 5. Sticky Headers and Columns (Drawn last to be on top)
+            // Restore transformation for sticky elements
+            graphics.ResetTransform();
+
+            // Sticky Left Column (Cars)
+            Rectangle carColHeaderRect = new(0, 0, CarColumnWidth, HeaderHeight);
+            graphics.FillRectangle(headerBrush, carColHeaderRect);
+            graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(14, 15));
+            graphics.DrawLine(majorGridPen, CarColumnWidth, 0, CarColumnWidth, Height);
+            graphics.DrawLine(majorGridPen, 0, HeaderHeight, Width, HeaderHeight);
+
+            // Sticky Rows for visible range
+            for (int row = 0; row < drawableRows; row++)
+            {
+                RowLayout rowLayout = _rowLayouts[row];
+                int screenTop = rowLayout.Top + AutoScrollPosition.Y;
+                if (screenTop + rowLayout.Height < HeaderHeight || screenTop > Height) continue;
+
+                Rectangle carNameRect = new(0, screenTop, CarColumnWidth, rowLayout.Height);
+                graphics.FillRectangle(headerBrush, carNameRect);
+                graphics.DrawLine(gridPen, 0, screenTop, CarColumnWidth, screenTop);
+                
+                float nameY = screenTop + Math.Max((rowLayout.Height - 34) / 2F, 8);
+                graphics.DrawString(rowLayout.Car.CarName, FontHelper.SemiBold(9F), textBrush, new PointF(14, nameY));
+                graphics.DrawString(rowLayout.Car.PlateNumber, FontHelper.Regular(8.5F), mutedBrush, new PointF(14, nameY + 18));
+            }
+
+            // Sticky Top Header (Days)
+            graphics.SetClip(new Rectangle(CarColumnWidth + 1, 0, Width - CarColumnWidth - 1, HeaderHeight));
+            graphics.TranslateTransform(AutoScrollPosition.X, 0); // Only X scroll for day headers
+            for (int day = 0; day < days; day++)
+            {
+                int x = CarColumnWidth + day * DayWidth;
+                if (x + DayWidth < visibleRect.Left || x > visibleRect.Right) continue;
+
+                DateTime date = _owner.SelectedMonth.AddDays(day);
+                graphics.DrawString(date.Day.ToString(), FontHelper.SemiBold(9F), textBrush, new PointF(x + 13, 8));
+                graphics.DrawString(date.ToString("ddd"), FontHelper.Regular(8F), mutedBrush, new PointF(x + 10, 24));
+                
+                graphics.DrawLine(date.Day == 1 ? majorGridPen : gridPen, x, 0, x, HeaderHeight);
+            }
+            graphics.ResetTransform();
+            graphics.ResetClip();
+
+            // 6. Today Indicator (Must be scrolled)
+            graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
             DrawTodayIndicator(graphics, days);
+            graphics.ResetTransform();
 
             if (_owner._cars.Count == 0)
             {
                 const string message = "No active cars available. Add cars in Car Garage first.";
                 SizeF messageSize = graphics.MeasureString(message, FontHelper.Regular(11F));
-                float x = Math.Max((totalWidth - messageSize.Width) / 2, 24);
-                float y = HeaderHeight + Math.Max((totalHeight - HeaderHeight - messageSize.Height) / 2, 28);
+                float x = (Width - messageSize.Width) / 2;
+                float y = (Height - messageSize.Height) / 2;
                 graphics.DrawString(message, FontHelper.Regular(11F), mutedBrush, new PointF(x, y));
             }
         }

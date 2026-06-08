@@ -1,13 +1,11 @@
 using System.Text.Json;
 using System.Runtime.InteropServices;
-using System.Drawing.Drawing2D;
-using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.WinForms;
 using FontAwesome.Sharp;
+using Microsoft.Web.WebView2.Core;
+using NatarakiCarRental.Forms.Offsite;
 using NatarakiCarRental.Helpers;
 using NatarakiCarRental.Models;
 using NatarakiCarRental.Services;
-using NatarakiCarRental.Forms.Offsite;
 using NatarakiCarRental.UserControls.Cards;
 using NatarakiCarRental.UserControls.Common;
 
@@ -15,93 +13,49 @@ namespace NatarakiCarRental.UserControls.Offsite;
 
 public sealed class OffsiteControl : UserControl
 {
-    private const float ActionPillHeight = 26F;
-    private const int NarrowRecordsGridWidth = 1200;
-    private static readonly TimeSpan NormalRefreshInterval = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan DemoInterval = TimeSpan.FromSeconds(5);
-
-    private readonly VehicleTrackingService _trackingService = new();
-    private readonly VehicleTrackingSimulator _simulator = new();
     private readonly OffsiteService _offsiteService;
+    private readonly VehicleTrackingService _trackingService = new();
     private readonly SecurityVerificationService _verificationService = new();
     private readonly int _currentUserId;
-    
-    // Main Navigation Buttons (Module-style)
+
     private readonly IconButton _mapTrackingTabButton = new();
     private readonly IconButton _offsiteRecordsTabButton = new();
     private readonly Panel _mainContentPanel = new();
+    private bool _isMapTabActive = true;
 
-    // Map Tracking Components
-    private readonly ComboBox _carComboBox = new();
-    private readonly IconButton _refreshButton = CreateToolbarIconButton(IconChar.Rotate, "Refresh", 95);
-    private readonly IconButton _startTrackingButton = CreateToolbarIconButton(IconChar.Play, "Start Tracking", 145);
-    private readonly IconButton _stopTrackingButton = CreateToolbarIconButton(IconChar.Stop, "Stop Tracking", 145);
-    private readonly WebView2 _mapWebView = new();
-    
-    private readonly Label _selectedCarValueLabel = CreateValueLabel();
-    private readonly Label _plateNumberValueLabel = CreateValueLabel();
-    private readonly Label _latitudeValueLabel = CreateValueLabel();
-    private readonly Label _longitudeValueLabel = CreateValueLabel();
-    private readonly Label _lastUpdatedValueLabel = CreateValueLabel();
-    private readonly Label _sourceValueLabel = CreateValueLabel();
-    private readonly Label _statusLabel = new();
-    private readonly Label _autoRefreshLabel = new();
-    
-    private readonly System.Windows.Forms.Timer _refreshTimer = new();
-    private readonly System.Windows.Forms.Timer _demoTimer = new();
-    private readonly System.Windows.Forms.Timer _recordsSearchTimer = new() { Interval = 350 };
+    // Map View Controls
+    private Microsoft.Web.WebView2.WinForms.WebView2 _mapWebView = new();
+    private readonly ComboBox _carSelector = new();
+    private readonly MetricCardControl _lastSeenCard = new();
+    private readonly MetricCardControl _statusCard = new();
+    private readonly MetricCardControl _speedCard = new();
+    private readonly Label _selectedCarNameLabel = new();
+    private readonly Label _selectedCarPlateLabel = new();
+    private readonly Label _selectedCarLocationLabel = new();
+    private bool _mapReady;
 
-    // Records Components
+    // Records View Controls
     private readonly DataGridView _recordsGrid = new();
-    private readonly IconButton _recordsSubTabButton = new();
-    private readonly IconButton _archivedSubTabButton = new();
     private readonly TextBox _searchBox = new();
     private readonly ComboBox _typeFilter = new();
     private readonly ComboBox _statusFilter = new();
-    private readonly Button _addRecordButton = CreateAddButton();
+    private readonly IconButton _recordsSubTabButton = new();
+    private readonly IconButton _archivedSubTabButton = new();
+    private readonly Button _addRecordButton;
     private readonly Label _emptyStateLabel = new();
-    private readonly Label _paginationLabel = new();
-    private readonly Button _prevPageButton = CreatePaginationButton("Previous");
-    private readonly Button _nextPageButton = CreatePaginationButton("Next");
-    
     private readonly MetricCardControl _offsiteRecordsCard = new();
     private readonly MetricCardControl _maintenanceCarsCard = new();
     private readonly MetricCardControl _upcomingMaintenanceCard = new();
     private readonly MetricCardControl _completedRecordsCard = new();
 
-    private bool _mapReady;
-    private bool _isRefreshing;
-    private bool _isDemoTickRunning;
-    private bool _isInitializingRecordFilters;
-    private bool _isLoadingRecords;
-    private bool _pendingRecordsReload;
     private int _currentPage = 1;
-    private int _pageSize = 4;
+    private int _pageSize = 10;
     private int _totalItems;
-    private bool _isMapTabActive = false;
+    private readonly Label _paginationLabel = new();
+    private readonly Button _prevPageButton = CreatePaginationButton("Previous");
+    private readonly Button _nextPageButton = CreatePaginationButton("Next");
     private bool _showArchivedRecords;
-    private int _hoveredRowIndex = -1;
-    private string? _hoveredAction = null;
-
-    private static Button CreateAddButton()
-    {
-        IconButton button = new()
-        {
-            Text = "Add Record",
-            IconChar = IconChar.Plus,
-            IconColor = Color.White,
-            IconSize = 14,
-            Size = new Size(130, 36),
-            BackColor = ThemeHelper.Primary,
-            ForeColor = Color.White,
-            Font = FontHelper.SemiBold(9F),
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand,
-            TextImageRelation = TextImageRelation.ImageBeforeText
-        };
-        button.FlatAppearance.BorderSize = 0;
-        return button;
-    }
+    private bool _isInitializingRecordFilters;
 
     private static Button CreatePaginationButton(string text)
     {
@@ -123,67 +77,43 @@ public sealed class OffsiteControl : UserControl
     {
         _currentUserId = currentUserId;
         _offsiteService = new OffsiteService(currentUserId);
+        _addRecordButton = ControlFactory.CreatePrimaryButton("Add Offsite Record", 168, 36);
         InitializeControl();
-        Load += OffsiteControl_Load;
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _refreshTimer.Stop();
-            _demoTimer.Stop();
-            _recordsSearchTimer.Stop();
-            _refreshTimer.Dispose();
-            _demoTimer.Dispose();
-            _recordsSearchTimer.Dispose();
-            _mapWebView.Dispose();
-        }
-
-        base.Dispose(disposing);
     }
 
     private void InitializeControl()
     {
         BackColor = ThemeHelper.ContentBackground;
         Dock = DockStyle.Fill;
-        Padding = new Padding(32, 8, 32, 32);
+        Padding = new Padding(24, 8, 24, 24);
 
-        TableLayoutPanel mainLayout = new()
+        TableLayoutPanel layout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2
         };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        
-        mainLayout.Controls.Add(CreateMainTabSwitcher(), 0, 0);
-        
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        layout.Controls.Add(CreateHeaderTabs(), 0, 0);
         _mainContentPanel.Dock = DockStyle.Fill;
-        _mainContentPanel.BackColor = ThemeHelper.ContentBackground;
-        mainLayout.Controls.Add(_mainContentPanel, 0, 1);
-        
-        Controls.Add(mainLayout);
+        layout.Controls.Add(_mainContentPanel, 0, 1);
+
+        Controls.Add(layout);
+        _ = ShowMapTrackingViewAsync();
+
         Resize += OffsiteControl_Resize;
-
-        _refreshTimer.Interval = (int)NormalRefreshInterval.TotalMilliseconds;
-        _refreshTimer.Tick += async (_, _) => await RefreshSelectedCarLocationAsync(showEmptyMessage: false);
-
-        _demoTimer.Interval = (int)DemoInterval.TotalMilliseconds;
-        _demoTimer.Tick += async (_, _) => await InsertDemoLocationAsync();
-
-        _recordsSearchTimer.Tick += RecordsSearchTimer_Tick;
     }
 
-    private Panel CreateMainTabSwitcher()
+    private Panel CreateHeaderTabs()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        
-        ConfigureTabButton(_offsiteRecordsTabButton, "Offsite Records", IconChar.ClipboardList, new Point(0, 10), 160);
-        ConfigureTabButton(_mapTrackingTabButton, "Map Tracking", IconChar.MapLocationDot, new Point(168, 10), 160);
 
-        _mapTrackingTabButton.Click += (_, _) => ShowMapTrackingView();
+        ConfigureTabButton(_mapTrackingTabButton, "Map Tracking", IconChar.MapLocationDot, new Point(0, 10), 160);
+        ConfigureTabButton(_offsiteRecordsTabButton, "Maintenance Records", IconChar.ClipboardList, new Point(168, 10), 200);
+
+        _mapTrackingTabButton.Click += async (_, _) => await ShowMapTrackingViewAsync();
         _offsiteRecordsTabButton.Click += async (_, _) => await ShowRecordsViewAsync();
 
         panel.Controls.Add(_offsiteRecordsTabButton);
@@ -193,7 +123,7 @@ public sealed class OffsiteControl : UserControl
 
     private bool _isMapInitialized;
 
-    private async void ShowMapTrackingView()
+    private async Task ShowMapTrackingViewAsync()
     {
         if (!_isMapInitialized)
         {
@@ -222,128 +152,188 @@ public sealed class OffsiteControl : UserControl
         ApplyTabStyle(_offsiteRecordsTabButton, !_isMapTabActive);
     }
 
-    private async void OffsiteControl_Resize(object? sender, EventArgs e)
+    private void OffsiteControl_Resize(object? sender, EventArgs e)
     {
         if (_isMapTabActive || _recordsGrid.Columns.Count == 0) return;
         UpdateRecordsGridColumnLayout();
+        
         int newPageSize = GetRecordsPageSize();
         if (newPageSize == _pageSize) return;
         _pageSize = newPageSize;
         _currentPage = 1;
-        await LoadRecordsAsync();
+        _ = LoadRecordsAsync(); 
+    }
+
+    private static void ConfigureTabButton(IconButton button, string text, IconChar icon, Point location, int width)
+    {
+        button.Text = text;
+        button.IconChar = icon;
+        button.IconSize = 18;
+        button.TextImageRelation = TextImageRelation.ImageBeforeText;
+        button.Location = location;
+        button.Size = new Size(width, 36);
+        button.FlatStyle = FlatStyle.Flat;
+        button.Cursor = Cursors.Hand;
+        button.Font = FontHelper.SemiBold(10F);
+        button.FlatAppearance.BorderSize = 0;
+    }
+
+    private static void ApplyTabStyle(IconButton button, bool isActive)
+    {
+        button.BackColor = isActive ? ThemeHelper.Primary : ThemeHelper.Surface;
+        button.ForeColor = isActive ? Color.White : ThemeHelper.TextPrimary;
+        button.IconColor = isActive ? Color.White : ThemeHelper.TextSecondary;
+    }
+
+    // MAP VIEW LOGIC
+    private async Task InitializeMapAsync()
+    {
+        try
+        {
+            await _mapWebView.EnsureCoreWebView2Async();
+            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Maps", "offsite-tracking-map.html");
+            if (File.Exists(htmlPath))
+            {
+                _mapWebView.CoreWebView2.Navigate($"file:///{htmlPath.Replace("\\", "/")}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"WebView2 Error: {ex.Message}");
+        }
     }
 
     private Control CreateMapTrackingLayout()
     {
-        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 1, Padding = new Padding(0, 12, 0, 0) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F)); // Controls
+        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F)); // Selector
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // Map
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116F)); // Compact Info
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F)); // Compact Info
 
         layout.Controls.Add(CreateTrackingControlsRow(), 0, 0);
         layout.Controls.Add(CreateMapContainer(), 0, 1);
         layout.Controls.Add(CreateSelectedCarInfoCard(), 0, 2);
-        
-        Panel scrollPanel = new() { Dock = DockStyle.Fill, AutoScroll = true };
-        scrollPanel.Controls.Add(layout);
-        return scrollPanel;
+
+        _ = PopulateCarSelector();
+        return layout;
     }
 
-    private Control CreateTrackingControlsRow()
+    private Panel CreateTrackingControlsRow()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        FlowLayoutPanel flow = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        Label label = new() { Text = "Track Vehicle:", Font = FontHelper.SemiBold(10F), AutoSize = true, Location = new Point(0, 18), ForeColor = ThemeHelper.TextPrimary };
+        _carSelector.Location = new Point(110, 14);
+        _carSelector.Size = new Size(300, 30);
+        _carSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+        _carSelector.Font = FontHelper.Regular(10F);
+        _carSelector.SelectedIndexChanged += async (_, _) => await HandleCarSelectionChangedAsync();
 
-        Label label = new() { Text = "Tracking Car", AutoSize = true, Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, Margin = new Padding(0, 9, 8, 0) };
-        _carComboBox.Width = 220;
-        _carComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        _carComboBox.Font = FontHelper.Regular(10F);
-        _carComboBox.Margin = new Padding(0, 2, 12, 0);
-        _carComboBox.SelectedIndexChanged += async (_, _) => await RefreshSelectedCarLocationAsync(showEmptyMessage: true);
+        IconButton refreshButton = new()
+        {
+            IconChar = IconChar.Rotate,
+            IconSize = 18,
+            Size = new Size(36, 30),
+            Location = new Point(416, 14),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            BackColor = ThemeHelper.Surface
+        };
+        refreshButton.FlatAppearance.BorderColor = ThemeHelper.Border;
+        refreshButton.Click += async (_, _) => await RefreshSelectedCarLocationAsync();
 
-        _refreshButton.Margin = new Padding(0, 0, 10, 0);
-        _refreshButton.Click += async (_, _) => await RefreshSelectedCarLocationAsync(showEmptyMessage: true);
-
-        _startTrackingButton.Margin = new Padding(0, 0, 8, 0);
-        _startTrackingButton.Click += async (_, _) => await StartDemoTrackingAsync();
-
-        _stopTrackingButton.Margin = new Padding(0, 0, 12, 0);
-        _stopTrackingButton.Click += (_, _) => StopDemoTracking();
-
-        _autoRefreshLabel.Text = "Refresh: 10m";
-        _autoRefreshLabel.AutoSize = true;
-        _autoRefreshLabel.Font = FontHelper.SemiBold(9F);
-        _autoRefreshLabel.ForeColor = ThemeHelper.TextSecondary;
-        _autoRefreshLabel.Margin = new Padding(0, 10, 0, 0);
-
-        flow.Controls.Add(label);
-        flow.Controls.Add(_carComboBox);
-        flow.Controls.Add(_refreshButton);
-        flow.Controls.Add(_startTrackingButton);
-        flow.Controls.Add(_stopTrackingButton);
-        flow.Controls.Add(_autoRefreshLabel);
-
-        panel.Controls.Add(flow);
+        panel.Controls.Add(label);
+        panel.Controls.Add(_carSelector);
+        panel.Controls.Add(refreshButton);
         return panel;
     }
 
     private Control CreateMapContainer()
     {
-        Panel card = ControlFactory.CreateCardPanel(new Size(0, 0));
-        card.Dock = DockStyle.Fill;
-        card.Padding = new Padding(2);
-        card.Margin = new Padding(0, 0, 0, 16);
+        BorderedPanel container = new() { Dock = DockStyle.Fill, Padding = new Padding(1), BorderColor = ThemeHelper.Border };
         _mapWebView.Dock = DockStyle.Fill;
         _mapWebView.NavigationCompleted += MapWebView_NavigationCompleted;
-        card.Controls.Add(_mapWebView);
-        return card;
+        container.Controls.Add(_mapWebView);
+        return container;
     }
 
     private Control CreateSelectedCarInfoCard()
     {
-        Panel card = ControlFactory.CreateCardPanel(new Size(0, 100));
-        card.Dock = DockStyle.Fill;
-        card.Padding = new Padding(22, 16, 22, 16);
+        Panel panel = ControlFactory.CreateCardPanel(new Size(0, 0));
+        panel.Dock = DockStyle.Fill;
+        panel.Margin = new Padding(0, 16, 0, 0);
+        panel.Padding = new Padding(24);
 
-        TableLayoutPanel grid = new() { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 2 };
-        for (int i = 0; i < 6; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16.66F));
-        
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 2 };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
 
-        AddInfoColumn(grid, "Selected Car", _selectedCarValueLabel, 0);
-        AddInfoColumn(grid, "Plate Number", _plateNumberValueLabel, 1);
-        AddInfoColumn(grid, "Last Latitude", _latitudeValueLabel, 2);
-        AddInfoColumn(grid, "Last Longitude", _longitudeValueLabel, 3);
-        AddInfoColumn(grid, "Last Updated", _lastUpdatedValueLabel, 4);
-        AddInfoColumn(grid, "Source", _sourceValueLabel, 5);
+        // Left Column: Basic Car Info
+        Panel carInfoPanel = new() { Dock = DockStyle.Fill };
+        _selectedCarNameLabel.Text = "No car selected";
+        _selectedCarNameLabel.Font = FontHelper.SemiBold(14F);
+        _selectedCarNameLabel.ForeColor = ThemeHelper.Primary;
+        _selectedCarNameLabel.AutoSize = true;
+        _selectedCarNameLabel.Location = new Point(0, 0);
 
-        card.Controls.Add(grid);
-        return card;
+        _selectedCarPlateLabel.Text = "Select a vehicle to track";
+        _selectedCarPlateLabel.Font = FontHelper.Regular(10F);
+        _selectedCarPlateLabel.ForeColor = ThemeHelper.TextSecondary;
+        _selectedCarPlateLabel.AutoSize = true;
+        _selectedCarPlateLabel.Location = new Point(0, 28);
+
+        Label locHeader = new() { Text = "Current Location:", Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextPrimary, AutoSize = true, Location = new Point(0, 60) };
+        _selectedCarLocationLabel.Text = "-";
+        _selectedCarLocationLabel.Font = FontHelper.Regular(9.5F);
+        _selectedCarLocationLabel.ForeColor = ThemeHelper.TextPrimary;
+        _selectedCarLocationLabel.AutoSize = false;
+        _selectedCarLocationLabel.Size = new Size(320, 44);
+        _selectedCarLocationLabel.Location = new Point(0, 80);
+
+        carInfoPanel.Controls.Add(_selectedCarNameLabel);
+        carInfoPanel.Controls.Add(_selectedCarPlateLabel);
+        carInfoPanel.Controls.Add(locHeader);
+        carInfoPanel.Controls.Add(_selectedCarLocationLabel);
+
+        // Right Column: Live Metrics
+        TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 3 };
+        metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3F));
+        metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3F));
+        metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.4F));
+
+        _lastSeenCard.SetMetric(IconChar.Clock, "Last Seen", "N/A", "Last update time", ThemeHelper.GrayIcon);
+        _statusCard.SetMetric(IconChar.CircleDot, "Engine Status", "Unknown", "Real-time state", ThemeHelper.GrayIcon);
+        _speedCard.SetMetric(IconChar.GaugeHigh, "Current Speed", "0 km/h", "Movement velocity", ThemeHelper.GrayIcon);
+
+        metricsGrid.Controls.Add(_lastSeenCard, 0, 0);
+        metricsGrid.Controls.Add(_statusCard, 1, 0);
+        metricsGrid.Controls.Add(_speedCard, 2, 0);
+
+        foreach (Control c in metricsGrid.Controls) { c.Dock = DockStyle.Fill; c.Margin = new Padding(8, 0, 8, 0); }
+
+        layout.Controls.Add(carInfoPanel, 0, 0);
+        layout.Controls.Add(metricsGrid, 1, 0);
+
+        panel.Controls.Add(layout);
+        return panel;
     }
 
+    // RECORDS VIEW LOGIC
     private Control CreateRecordsLayout()
     {
-        TableLayoutPanel layout = new()
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 5,
-            Padding = new Padding(0, 0, 0, 0)
-        };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148F)); // Metrics
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F)); // Search
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F)); // Sub Tabs
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // Table
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F)); // Pagination
 
-        // Metrics
-        TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 12, 0, 8) };
+        // Metrics Row
+        TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, Padding = new Padding(0, 12, 0, 8) };
         for (int i = 0; i < 4; i++) metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
-        
-        _offsiteRecordsCard.SetMetric(IconChar.ClipboardList, "Offsite Records", "0", "Total", ThemeHelper.Primary);
-        _maintenanceCarsCard.SetMetric(IconChar.Gears, "Maintenance Cars", "0", "Distinct", ThemeHelper.Warning);
-        _upcomingMaintenanceCard.SetMetric(IconChar.CalendarAlt, "Upcoming Maintenance", "0", "Scheduled", ThemeHelper.Danger);
+
+        _offsiteRecordsCard.SetMetric(IconChar.ClipboardList, "Active Records", "0", "Total", ThemeHelper.Primary);
+        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Maintenance", "0", "Cars", ThemeHelper.Warning);
+        _upcomingMaintenanceCard.SetMetric(IconChar.CalendarDays, "Upcoming", "0", "Next 7 days", ThemeHelper.GrayIcon);
         _completedRecordsCard.SetMetric(IconChar.CheckCircle, "Completed Records", "0", "Total", ThemeHelper.Success);
 
         AddMetricCard(metricsGrid, _offsiteRecordsCard, 0);
@@ -431,31 +421,6 @@ public sealed class OffsiteControl : UserControl
         return layout;
     }
 
-    private Panel CreatePaginationPanel()
-    {
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-
-        _prevPageButton.Location = new Point(0, 8);
-        _prevPageButton.Click -= PrevPageButton_Click;
-        _prevPageButton.Click += PrevPageButton_Click;
-
-        _nextPageButton.Location = new Point(90, 8);
-        _nextPageButton.Click -= NextPageButton_Click;
-        _nextPageButton.Click += NextPageButton_Click;
-
-        _paginationLabel.AutoSize = false;
-        _paginationLabel.Location = new Point(180, 8);
-        _paginationLabel.Size = new Size(260, 32);
-        _paginationLabel.TextAlign = ContentAlignment.MiddleLeft;
-        _paginationLabel.Font = FontHelper.Regular(9.5F);
-        _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
-
-        panel.Controls.Add(_prevPageButton);
-        panel.Controls.Add(_nextPageButton);
-        panel.Controls.Add(_paginationLabel);
-        return panel;
-    }
-
     private void ConfigureRecordFilters()
     {
         string? selectedType = _typeFilter.SelectedItem?.ToString();
@@ -496,29 +461,12 @@ public sealed class OffsiteControl : UserControl
             if (string.Equals(item?.ToString(), value, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
-
         return false;
-    }
-
-    private void SearchBox_TextChanged(object? sender, EventArgs e)
-    {
-        if (_isInitializingRecordFilters) return;
-
-        _currentPage = 1;
-        _recordsSearchTimer.Stop();
-        _recordsSearchTimer.Start();
-    }
-
-    private async void RecordsSearchTimer_Tick(object? sender, EventArgs e)
-    {
-        _recordsSearchTimer.Stop();
-        await LoadRecordsAsync();
     }
 
     private async void TypeFilter_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_isInitializingRecordFilters) return;
-
         _currentPage = 1;
         await LoadRecordsAsync();
     }
@@ -575,43 +523,18 @@ public sealed class OffsiteControl : UserControl
 
     private void SetupRecordsGrid()
     {
-        _recordsGrid.Dock = DockStyle.Fill;
-        _recordsGrid.AllowUserToAddRows = false;
-        _recordsGrid.AllowUserToDeleteRows = false;
-        _recordsGrid.AllowUserToResizeRows = false;
-        _recordsGrid.AllowUserToResizeColumns = false;
-        _recordsGrid.ScrollBars = ScrollBars.Vertical;
-        _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _recordsGrid.BackgroundColor = ThemeHelper.Surface;
-        _recordsGrid.BorderStyle = BorderStyle.FixedSingle;
-        _recordsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
-        _recordsGrid.ColumnHeadersHeight = 38;
-        _recordsGrid.EnableHeadersVisualStyles = false;
-        _recordsGrid.GridColor = ThemeHelper.TableGridLine;
-        _recordsGrid.ReadOnly = true;
-        _recordsGrid.RowHeadersVisible = false;
-        _recordsGrid.RowTemplate.Height = 38;
-        _recordsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-
-        _recordsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
-        _recordsGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
-
-        _recordsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
-        _recordsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        _recordsGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
-        _recordsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
-        _recordsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-
+        DataGridViewHelper.ApplyStandardStyle(_recordsGrid);
         _recordsGrid.CellMouseClick -= RecordsGrid_CellMouseClick;
         _recordsGrid.CellMouseClick += RecordsGrid_CellMouseClick;
         _recordsGrid.CellMouseMove -= RecordsGrid_CellMouseMove;
         _recordsGrid.CellMouseMove += RecordsGrid_CellMouseMove;
         _recordsGrid.CellMouseLeave -= RecordsGrid_CellMouseLeave;
         _recordsGrid.CellMouseLeave += RecordsGrid_CellMouseLeave;
-        _recordsGrid.CellPainting -= RecordsGrid_CellPainting;
-        _recordsGrid.CellPainting += RecordsGrid_CellPainting;
         _recordsGrid.Resize -= RecordsGrid_Resize;
         _recordsGrid.Resize += RecordsGrid_Resize;
+
+        DataGridViewHelper.SetupStatusPills(_recordsGrid, "Status");
+        DataGridViewHelper.SetupActionButtons(_recordsGrid);
 
         _emptyStateLabel.Text = "No offsite records found.";
         _emptyStateLabel.Dock = DockStyle.Bottom;
@@ -624,161 +547,114 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.Columns.Clear();
         _recordsGrid.Columns.Add("Car", "Car / Plate");
         _recordsGrid.Columns.Add("Type", "Type");
-        _recordsGrid.Columns.Add("Status", "Status");
-        _recordsGrid.Columns.Add("Dates", "Date Range");
         _recordsGrid.Columns.Add("Location", "Location");
-        _recordsGrid.Columns.Add("ContactPerson", "Contact Person");
-        _recordsGrid.Columns.Add("ContactNumber", "Contact Number");
-        _recordsGrid.Columns.Add("AmountPaid", "Amount Paid");
-        _recordsGrid.Columns.Add("Actions", "Actions");
+        _recordsGrid.Columns.Add("Dates", "Dates");
+        _recordsGrid.Columns.Add("Cost", "Cost");
+        _recordsGrid.Columns.Add("Status", "Status");
+
+        var actionsCol = new DataGridViewTextBoxColumn
+        {
+            Name = "Actions",
+            HeaderText = "Actions",
+            ReadOnly = true
+        };
+        _recordsGrid.Columns.Add(actionsCol);
+
         UpdateRecordsGridColumnLayout();
     }
 
-    private void SetColumnSizing(string name, float fillWeight, int minWidth)
+    private async Task LoadRecordsAsync()
     {
-        if (_recordsGrid.Columns[name] is DataGridViewColumn col)
+        try
         {
-            col.FillWeight = fillWeight;
-            col.MinimumWidth = minWidth;
-            col.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            _pageSize = GetRecordsPageSize();
+            var metrics = await _offsiteService.GetMetricsAsync(DateTime.Today);
+            UpdateMetricCards(metrics);
+
+            string? status = _statusFilter.SelectedIndex > 0 ? _statusFilter.SelectedItem?.ToString() : null;
+            string? type = _typeFilter.SelectedIndex > 0 ? _typeFilter.SelectedItem?.ToString() : null;
+
+            var items = await _offsiteService.GetListAsync(
+                _searchBox.Text, 
+                status,
+                type,
+                _showArchivedRecords,
+                _currentPage,
+                _pageSize);
+
+            _totalItems = await _offsiteService.CountAsync(_searchBox.Text, status, type, _showArchivedRecords);
+            PopulateRecordsGrid(items);
+        }
+        catch (Exception ex)
+        {
+            MessageBoxHelper.ShowError($"Failed to load records: {ex.Message}");
         }
     }
 
-    private void SetColumnWidth(string name, int width)
+    private void PopulateRecordsGrid(IReadOnlyList<OffsiteRecordListItem> allItems)
     {
-        if (_recordsGrid.Columns[name] is DataGridViewColumn col)
+        _recordsGrid.Rows.Clear();
+        int totalPages = Math.Max(1, (int)Math.Ceiling(_totalItems / (double)_pageSize));
+        if (_currentPage > totalPages) _currentPage = totalPages;
+
+        _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({_totalItems} records)";
+        _prevPageButton.Enabled = _currentPage > 1;
+        _nextPageButton.Enabled = _currentPage < totalPages;
+
+        foreach (var item in allItems)
         {
-            col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-            col.Width = width;
-            col.MinimumWidth = width;
+            string actions = string.Join("|", GetRowActions(item));
+            
+            int rowIndex = _recordsGrid.Rows.Add(
+                $"{item.CarName} ({item.PlateNumber})",
+                item.OffsiteType,
+                item.LocationName ?? "-",
+                $"{item.StartDate:MMM d} - {item.ExpectedReturnDate:MMM d}",
+                LayoutHelper.FormatPeso(item.EstimatedCost),
+                item.Status,
+                actions);
+            
+            _recordsGrid.Rows[rowIndex].Tag = item;
         }
+
+        _emptyStateLabel.Visible = _totalItems == 0;
     }
 
-    private void UpdateRecordsGridColumnLayout()
+    private void UpdateMetricCards(OffsiteMetrics metrics)
     {
-        if (_recordsGrid.Columns.Count == 0)
-        {
-            return;
-        }
-
-        int gridWidth = _recordsGrid.ClientSize.Width;
-        if (gridWidth > 0 && gridWidth < NarrowRecordsGridWidth)
-        {
-            _recordsGrid.ScrollBars = ScrollBars.Both;
-            _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-            SetColumnWidth("Car", 150);
-            SetColumnWidth("Type", 100);
-            SetColumnWidth("Status", 110);
-            SetColumnWidth("Dates", 135);
-            SetColumnWidth("Location", 170);
-            SetColumnWidth("ContactPerson", 150);
-            SetColumnWidth("ContactNumber", 135);
-            SetColumnWidth("AmountPaid", 120);
-            SetColumnWidth("Actions", 320);
-            return;
-        }
-
-        _recordsGrid.ScrollBars = ScrollBars.Vertical;
-        _recordsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        SetColumnSizing("Car", 18F, 150);
-        SetColumnSizing("Type", 12F, 85);
-        SetColumnSizing("Status", 12F, 85);
-        SetColumnSizing("Dates", 15F, 100);
-        SetColumnSizing("Location", 25F, 120);
-        SetColumnSizing("ContactPerson", 20F, 100);
-        SetColumnSizing("ContactNumber", 15F, 100);
-        SetColumnSizing("AmountPaid", 12F, 85);
-        SetColumnWidth("Actions", 350);
+        _offsiteRecordsCard.SetMetric(IconChar.ClipboardList, "Active Records", metrics.TotalOffsiteRecords.ToString(), "Total", ThemeHelper.Primary);
+        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Maintenance", metrics.MaintenanceCars.ToString(), "Cars", ThemeHelper.Warning);
+        _upcomingMaintenanceCard.SetMetric(IconChar.CalendarDays, "Upcoming", metrics.UpcomingMaintenance.ToString(), "Next 7 days", ThemeHelper.GrayIcon);
+        _completedRecordsCard.SetMetric(IconChar.CheckCircle, "Completed Records", metrics.CompletedRecords.ToString(), "Total", ThemeHelper.Success);
     }
 
-    private void RecordsGrid_Resize(object? sender, EventArgs e)
+    private void RecordsGrid_Resize(object? sender, EventArgs e) => UpdateRecordsGridColumnLayout();
+
+    private int GetRecordsPageSize() => Math.Max(1, (_recordsGrid.Height - _recordsGrid.ColumnHeadersHeight) / _recordsGrid.RowTemplate.Height);
+
+    private async void SearchBox_TextChanged(object? sender, EventArgs e)
     {
-        UpdateRecordsGridColumnLayout();
+        _currentPage = 1;
+        await LoadRecordsAsync();
     }
 
-    private void RecordsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    private void AddMetricCard(TableLayoutPanel grid, MetricCardControl card, int column)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Graphics == null) return;
-        if (e.RowIndex >= _recordsGrid.Rows.Count || e.ColumnIndex >= _recordsGrid.Columns.Count) return;
-
-        string columnName = _recordsGrid.Columns[e.ColumnIndex].Name;
-        bool isStatus = columnName == "Status";
-        bool isAction = columnName == "Actions";
-
-        if (!isStatus && !isAction) return;
-
-        if (_recordsGrid.Rows[e.RowIndex].Tag is not OffsiteRecordListItem item) return;
-
-        e.PaintBackground(e.CellBounds, true);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        Font font = FontHelper.SemiBold(8.5F);
-
-        if (isAction)
-        {
-            var actions = GetRowActions(item);
-            var layout = GetOffsiteActionButtonBounds(e.CellBounds, actions);
-
-            using Pen linePen = new(ThemeHelper.TableGridLine);
-
-            for (int i = 0; i < layout.Count; i++)
-            {
-                var entry = layout[i];
-                bool isHovered = _hoveredRowIndex == e.RowIndex && _hoveredAction == entry.Action;
-                Color baseColor = GetActionColor(entry.Action);
-                Color backColor = isHovered ? ControlPaint.Light(baseColor, 0.2f) : baseColor;
-                
-                using GraphicsPath path = GetRoundedRect(entry.Bounds, entry.Bounds.Height / 2);
-                using SolidBrush brush = new(backColor);
-                using SolidBrush foreBrush = new(Color.White);
-                e.Graphics.FillPath(brush, path);
-                
-                using StringFormat format = new()
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center,
-                    FormatFlags = StringFormatFlags.NoWrap,
-                    Trimming = StringTrimming.EllipsisCharacter
-                };
-                e.Graphics.DrawString(entry.Action, font, foreBrush, entry.Bounds, format);
-            }
-        }
-        else
-        {
-            Color backColor = item.Status switch { "Ongoing" => ThemeHelper.Warning, "Completed" => ThemeHelper.Success, "Cancelled" => ThemeHelper.Danger, _ => ThemeHelper.GrayIcon };
-            float height = ActionPillHeight;
-            float width = 90F;
-            float x = e.CellBounds.X + (e.CellBounds.Width - width) / 2;
-            float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
-            RectangleF rect = new(x, y, width, height);
-
-            using var path = GetRoundedRect(rect, height / 2);
-            using var brush = new SolidBrush(backColor);
-            using var foreBrush = new SolidBrush(Color.White);
-            e.Graphics.FillPath(brush, path);
-
-            using var format = new StringFormat
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                FormatFlags = StringFormatFlags.NoWrap,
-                Trimming = StringTrimming.EllipsisCharacter
-            };
-            e.Graphics.DrawString(item.Status, font, foreBrush, rect, format);
-        }
-
-        e.Handled = true;
+        card.Dock = DockStyle.Fill;
+        card.Margin = new Padding(column == 0 ? 0 : 12, 0, column == 3 ? 0 : 12, 0);
+        grid.Controls.Add(card, column, 0);
     }
 
-    private static Color GetActionColor(string action) => action switch
+    private List<string> GetRowActions(OffsiteRecordListItem item)
     {
-        "View" => ThemeHelper.Primary,
-        "Edit" => ThemeHelper.Success,
-        "Complete" => ThemeHelper.Success,
-        "Cancel" => ThemeHelper.Danger,
-        "Archive" => ThemeHelper.Danger,
-        "Restore" => ThemeHelper.Success,
-        _ => ThemeHelper.Primary
-    };
+        if (_showArchivedRecords)
+            return new List<string> { "View", "Restore" };
+
+        if (string.Equals(item.Status, "Ongoing", StringComparison.OrdinalIgnoreCase))
+            return new List<string> { "View", "Edit", "Complete", "Cancel" };
+
+        return new List<string> { "View", "Archive" };
+    }
 
     private async void RecordsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
@@ -787,7 +663,7 @@ public sealed class OffsiteControl : UserControl
 
         if (_recordsGrid.Rows[e.RowIndex].Tag is not OffsiteRecordListItem item) return;
 
-        string? clickedAction = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y);
+        string? clickedAction = DataGridViewHelper.GetClickedAction(_recordsGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y);
         if (clickedAction == null) return;
 
         switch (clickedAction)
@@ -803,13 +679,7 @@ public sealed class OffsiteControl : UserControl
 
     private void RecordsGrid_CellMouseMove(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.RowIndex >= _recordsGrid.Rows.Count || e.ColumnIndex >= _recordsGrid.Columns.Count)
-        {
-            _recordsGrid.Cursor = Cursors.Default;
-            return;
-        }
-
-        _recordsGrid.Cursor = GetActionAt(e.RowIndex, e.ColumnIndex, e.X, e.Y) is null ? Cursors.Default : Cursors.Hand;
+        _recordsGrid.Cursor = DataGridViewHelper.GetClickedAction(_recordsGrid, e.RowIndex, e.ColumnIndex, e.X, e.Y) is null ? Cursors.Default : Cursors.Hand;
     }
 
     private void RecordsGrid_CellMouseLeave(object? sender, DataGridViewCellEventArgs e)
@@ -817,233 +687,29 @@ public sealed class OffsiteControl : UserControl
         _recordsGrid.Cursor = Cursors.Default;
     }
 
-    private List<string> GetRowActions(OffsiteRecordListItem item)
+    private void ShowDetails(int recordId, bool isReadOnly)
     {
-        if (_showArchivedRecords)
-            return new List<string> { "View", "Restore" };
-
-        if (string.Equals(item.Status, "Ongoing", StringComparison.OrdinalIgnoreCase))
-            return new List<string> { "View", "Edit", "Complete", "Cancel" };
-
-        return new List<string> { "View", "Archive" };
+        using OffsiteRecordDetailsForm form = new(_currentUserId, recordId, isReadOnly);
+        if (form.ShowDialog(this) == DialogResult.OK) _ = LoadRecordsAsync();
     }
 
-    private string? GetActionAt(int rowIndex, int colIndex, int x, int y)
+    private async Task AddRecordAsync()
     {
-        if (rowIndex < 0 || colIndex < 0 || rowIndex >= _recordsGrid.Rows.Count || colIndex >= _recordsGrid.Columns.Count)
-            return null;
-
-        if (_recordsGrid.Columns[colIndex].Name != "Actions")
-            return null;
-
-        if (_recordsGrid.Rows[rowIndex].Tag is not OffsiteRecordListItem item)
-            return null;
-
-        var actions = GetRowActions(item);
-        Rectangle cellBounds = _recordsGrid.GetCellDisplayRectangle(colIndex, rowIndex, false);
-        var layout = GetOffsiteActionButtonBounds(cellBounds, actions);
-
-        foreach (var entry in layout)
+        if (!AccessControlService.HasPermission("Offsite.Create"))
         {
-            RectangleF cellRelativeBounds = new(entry.Bounds.X - cellBounds.X, entry.Bounds.Y - cellBounds.Y, entry.Bounds.Width, entry.Bounds.Height);
-            if (cellRelativeBounds.Contains(x, y)) return entry.Action;
-        }
-        return null;
-    }
-
-    private List<(string Action, RectangleF Bounds)> GetOffsiteActionButtonBounds(Rectangle cellBounds, IReadOnlyList<string> actions)
-    {
-        List<(string Action, RectangleF Bounds)> result = [];
-        if (actions.Count == 0) return result;
-
-        Font font = FontHelper.SemiBold(8.5F);
-        
-        float currentX = cellBounds.X + 6;
-        float height = ActionPillHeight;
-        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
-
-        foreach (string action in actions)
-        {
-            float width = TextRenderer.MeasureText(action, font).Width + 22F;
-            result.Add((action, new RectangleF(currentX, y, width, height)));
-            currentX += width + 6;
-        }
-
-        return result;
-    }
-
-    private static float GetActionPillWidth(Graphics graphics, Font font, string action)
-    {
-        return graphics.MeasureString(action, font).Width + 22F;
-    }
-
-    private static System.Drawing.Drawing2D.GraphicsPath GetRoundedRect(RectangleF rect, float radius)
-    {
-        System.Drawing.Drawing2D.GraphicsPath path = new();
-        float diameter = radius * 2;
-        path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
-        path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
-        path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
-        path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    private static void ConfigureTabButton(IconButton button, string text, IconChar icon, Point location, int width = 120)
-    {
-        button.Text = text; button.IconChar = icon; button.IconSize = 16; button.TextImageRelation = TextImageRelation.ImageBeforeText;
-        button.Location = location; button.Size = new Size(width, 34); button.FlatStyle = FlatStyle.Flat; button.Cursor = Cursors.Hand;
-        button.Font = FontHelper.SemiBold(9.5F); button.FlatAppearance.BorderSize = 0;
-    }
-
-    private static void ApplyTabStyle(IconButton button, bool isActive)
-    {
-        button.BackColor = isActive ? ThemeHelper.Primary : ThemeHelper.Surface;
-        button.ForeColor = isActive ? Color.White : ThemeHelper.TextPrimary;
-        button.IconColor = isActive ? Color.White : ThemeHelper.TextSecondary;
-    }
-
-    private static void AddMetricCard(TableLayoutPanel grid, MetricCardControl card, int column)
-    {
-        card.Dock = DockStyle.Fill;
-        card.Margin = new Padding(0, 0, column == 3 ? 0 : 14, 0);
-        grid.Controls.Add(card, column, 0);
-    }
-
-    private static void AddInfoColumn(TableLayoutPanel grid, string title, Label valueLabel, int column)
-    {
-        Label titleLabel = new() { Text = title, Dock = DockStyle.Fill, Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary };
-        valueLabel.Dock = DockStyle.Fill;
-        grid.Controls.Add(titleLabel, column, 0);
-        grid.Controls.Add(valueLabel, column, 1);
-    }
-
-    private static Label CreateValueLabel() => new() { Text = "-", AutoSize = false, Font = FontHelper.SemiBold(9.5F), ForeColor = ThemeHelper.TextPrimary, AutoEllipsis = true };
-
-    private async void OffsiteControl_Load(object? sender, EventArgs e)
-    {
-        Load -= OffsiteControl_Load;
-        await LoadCarsAsync();
-        await ShowRecordsViewAsync();
-        _refreshTimer.Start();
-    }
-
-    private async Task LoadRecordsAsync()
-    {
-        if (_isLoadingRecords)
-        {
-            _pendingRecordsReload = true;
+            MessageBoxHelper.ShowWarning("Permission denied.");
             return;
         }
 
-        _isLoadingRecords = true;
-        try
-        {
-            do
-            {
-                _pendingRecordsReload = false;
-                await LoadRecordsCoreAsync();
-            }
-            while (_pendingRecordsReload);
-        }
-        finally
-        {
-            _isLoadingRecords = false;
-        }
+        using OffsiteRecordDetailsForm form = new(_currentUserId);
+        if (form.ShowDialog(this) == DialogResult.OK) await LoadRecordsAsync();
     }
 
-    private async Task LoadRecordsCoreAsync()
-    {
-        try
-        {
-            _pageSize = GetRecordsPageSize();
-            string? status = _statusFilter.SelectedIndex > 0 ? _statusFilter.SelectedItem?.ToString() : null;
-            string? type = _typeFilter.SelectedIndex > 0 ? _typeFilter.SelectedItem?.ToString() : null;
-            _totalItems = await _offsiteService.CountAsync(_searchBox.Text, status, type, _showArchivedRecords);
-            int totalPages = Math.Max(1, (int)Math.Ceiling(_totalItems / (double)_pageSize));
-            if (_currentPage > totalPages) _currentPage = totalPages;
-            var items = await _offsiteService.GetListAsync(_searchBox.Text, status, type, _showArchivedRecords, _currentPage, _pageSize);
-
-            _recordsGrid.Rows.Clear();
-            foreach (var item in items)
-            {
-                string dates = item.Status == "Ongoing" 
-                    ? $"{item.StartDate:MMM d} - {item.ExpectedReturnDate?.ToString("MMM d") ?? "???"}"
-                    : $"{item.StartDate:MMM d} - {item.CompletedDate?.ToString("MMM d") ?? "Cancelled"}";
-
-                string location = string.IsNullOrWhiteSpace(item.LocationName) ? "-" : item.LocationName;
-                string contactPerson = string.IsNullOrWhiteSpace(item.ContactPerson) ? "-" : item.ContactPerson.Trim();
-                string contactNumber = string.IsNullOrWhiteSpace(item.ContactNumber) ? "-" : item.ContactNumber.Trim();
-
-                int rowIndex = _recordsGrid.Rows.Add(
-                    $"{item.CarName} ({item.PlateNumber})",
-                    item.OffsiteType,
-                    item.Status,
-                    dates,
-                    location,
-                    contactPerson,
-                    contactNumber,
-                    $"₱{item.ActualCost:N2}",
-                    string.Empty // Actions column is custom painted
-                );
-                
-                _recordsGrid.Rows[rowIndex].Tag = item;
-            }
-            _emptyStateLabel.Visible = !items.Any();
-            UpdateRecordsGridColumnLayout();
-            UpdatePagination(totalPages);
-            await UpdateMetrics();
-        }
-        catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load records: {ex.Message}"); }
-    }
-
-    private int GetRecordsPageSize()
-    {
-        return Height > 700 ? 13 : 4;
-    }
-
-    private void UpdatePagination(int totalPages)
-    {
-        _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({_totalItems} records)";
-        _prevPageButton.Enabled = _currentPage > 1;
-        _nextPageButton.Enabled = _currentPage < totalPages;
-    }
-
-    private async Task UpdateMetrics()
-    {
-        try
-        {
-            OffsiteMetrics metrics = await _offsiteService.GetMetricsAsync(DateTime.Today);
-            _offsiteRecordsCard.SetMetric(IconChar.ClipboardList, "Offsite Records", metrics.TotalOffsiteRecords.ToString(), "Total", ThemeHelper.Primary);
-            _maintenanceCarsCard.SetMetric(IconChar.Gears, "Maintenance Cars", metrics.MaintenanceCars.ToString(), "Distinct", ThemeHelper.Warning);
-            _upcomingMaintenanceCard.SetMetric(IconChar.CalendarAlt, "Upcoming Maintenance", metrics.UpcomingMaintenance.ToString(), "Scheduled", ThemeHelper.Danger);
-            _completedRecordsCard.SetMetric(IconChar.CheckCircle, "Completed Records", metrics.CompletedRecords.ToString(), "Total", ThemeHelper.Success);
-        }
-        catch { /* Ignore metric load errors */ }
-    }
-
-    private static IconButton CreateToolbarIconButton(IconChar icon, string text, int width)
-    {
-        IconButton button = new() { Text = text, IconChar = icon, IconColor = Color.White, IconSize = 16, TextImageRelation = TextImageRelation.ImageBeforeText,
-            Size = new Size(width, 34), BackColor = ThemeHelper.Primary, ForeColor = Color.White, Font = FontHelper.SemiBold(9F), FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand };
-        button.FlatAppearance.BorderSize = 0; return button;
-    }
-
-    private void ShowDetails(int recordId, bool viewOnly) 
-    { 
-        if (!viewOnly && !AccessControlService.HasPermission("Offsite.Edit"))
-        {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
-            return;
-        }
-        using var form = new OffsiteRecordDetailsForm(_currentUserId, recordId, viewOnly); 
-        if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; _ = LoadRecordsAsync(); } 
-    }
     private async Task CompleteRecord(int recordId)
     {
         if (!AccessControlService.HasPermission("Offsite.Complete"))
         {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            MessageBoxHelper.ShowWarning("Permission denied.");
             return;
         }
 
@@ -1052,211 +718,194 @@ public sealed class OffsiteControl : UserControl
             return;
         }
 
-        try
+        using OffsiteRecordDetailsForm form = new(_currentUserId, recordId, false, true);
+        if (form.ShowDialog(this) == DialogResult.OK)
         {
-            using var form = new OffsiteCompletionForm(_currentUserId, recordId);
-            if (form.ShowDialog() == DialogResult.OK)
-            {
-                MessageBoxHelper.ShowSuccess("Offsite record completed successfully.");
-                await LoadRecordsAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBoxHelper.ShowError($"Failed to complete record: {ex.Message}");
+            MessageBoxHelper.ShowSuccess("Offsite record completed successfully.");
+            await LoadRecordsAsync();
         }
     }
-    private async Task CancelRecord(int recordId) 
-    { 
+
+    private async Task CancelRecord(int recordId)
+    {
         if (!AccessControlService.HasPermission("Offsite.Cancel"))
         {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            MessageBoxHelper.ShowWarning("Permission denied.");
             return;
         }
 
-        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel offsite activity"))
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel offsite record"))
         {
             return;
         }
 
-        if (MessageBoxHelper.Confirm("Are you sure you want to cancel this offsite activity?", "Cancel Offsite")) 
-        { 
-            try
-            {
-                await _offsiteService.CancelAsync(recordId); 
-                _currentPage = 1; 
-                await LoadRecordsAsync(); 
-            }
-            catch (Exception ex)
-            {
-                MessageBoxHelper.ShowError($"Failed to cancel record: {ex.Message}");
-            }
-        } 
+        if (MessageBoxHelper.ShowConfirmDanger("Cancel this offsite record?", "Cancel Record"))
+        {
+            await _offsiteService.CancelAsync(recordId);
+            await LoadRecordsAsync();
+        }
     }
-    private async Task ArchiveRecord(int recordId) 
-    { 
+
+    private async Task ArchiveRecord(int recordId)
+    {
         if (!AccessControlService.HasPermission("Offsite.ArchiveRestore"))
         {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            MessageBoxHelper.ShowWarning("Permission denied.");
             return;
         }
 
-        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Archive offsite record"))
+        if (MessageBoxHelper.ShowConfirmDanger("Archive this offsite record?", "Archive Record"))
         {
-            return;
-        }
-
-        if (!MessageBoxHelper.Confirm("Are you sure you want to archive this offsite record?", "Archive Offsite"))
-        {
-            return;
-        }
-
-        try
-        {
-            await _offsiteService.ArchiveAsync(recordId); 
-            MessageBoxHelper.ShowSuccess("Offsite record archived successfully.");
-            _currentPage = 1; 
-            await LoadRecordsAsync(); 
-        }
-        catch (Exception ex)
-        {
-            MessageBoxHelper.ShowError($"Failed to archive record: {ex.Message}");
+            await _offsiteService.ArchiveAsync(recordId);
+            await LoadRecordsAsync();
         }
     }
-    private async Task RestoreRecord(int recordId) 
-    { 
+
+    private async Task RestoreRecord(int recordId)
+    {
         if (!AccessControlService.HasPermission("Offsite.ArchiveRestore"))
         {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
+            MessageBoxHelper.ShowWarning("Permission denied.");
             return;
         }
 
-        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Restore offsite record"))
+        if (MessageBoxHelper.ShowConfirmWarning("Restore this offsite record?", "Restore Record"))
         {
-            return;
-        }
-
-        if (!MessageBoxHelper.Confirm("Are you sure you want to restore this offsite record?", "Restore Offsite"))
-        {
-            return;
-        }
-
-        try
-        {
-            await _offsiteService.RestoreAsync(recordId); 
-            MessageBoxHelper.ShowSuccess("Offsite record restored successfully.");
-            _currentPage = 1; 
-            await LoadRecordsAsync(); 
-        }
-        catch (Exception ex)
-        {
-            MessageBoxHelper.ShowError($"Failed to restore record: {ex.Message}");
+            await _offsiteService.RestoreAsync(recordId);
+            await LoadRecordsAsync();
         }
     }
-    private async Task AddRecordAsync() 
-    { 
-        if (!AccessControlService.HasPermission("Offsite.Create"))
-        {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
-            return;
-        }
-        using var form = new OffsiteRecordDetailsForm(_currentUserId); 
-        if (form.ShowDialog() == DialogResult.OK) { _currentPage = 1; await LoadRecordsAsync(); } 
-    }
 
-    private async Task InitializeMapAsync()
+    private Panel CreatePaginationPanel()
     {
-        try {
-            string mapPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Maps", "offsite-tracking-map.html");
-            if (!File.Exists(mapPath)) { _statusLabel.Text = "Unable to load map. Asset missing."; return; }
-            await _mapWebView.EnsureCoreWebView2Async();
-            _mapWebView.Source = new Uri(mapPath);
-        } catch { _statusLabel.Text = "Unable to load map."; }
+        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+
+        _prevPageButton.Location = new Point(0, 8);
+        _prevPageButton.Click -= PrevPageButton_Click;
+        _prevPageButton.Click += PrevPageButton_Click;
+
+        _nextPageButton.Location = new Point(90, 8);
+        _nextPageButton.Click -= NextPageButton_Click;
+        _nextPageButton.Click += NextPageButton_Click;
+
+        _paginationLabel.AutoSize = false;
+        _paginationLabel.Location = new Point(180, 8);
+        _paginationLabel.Size = new Size(260, 32);
+        _paginationLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _paginationLabel.Font = FontHelper.Regular(9.5F);
+        _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
+
+        panel.Controls.Add(_prevPageButton);
+        panel.Controls.Add(_nextPageButton);
+        panel.Controls.Add(_paginationLabel);
+        return panel;
     }
 
-    private async Task LoadCarsAsync()
+    private void UpdateRecordsGridColumnLayout()
     {
-        try {
-            IReadOnlyList<Car> cars = await _trackingService.GetTrackableCarsAsync();
-            _carComboBox.BeginUpdate();
-            _carComboBox.Items.Clear();
-            _carComboBox.Items.Add("Select a car");
-            foreach (Car car in cars) _carComboBox.Items.Add(new CarOption(car.CarId, car.CarName, car.PlateNumber));
-            _carComboBox.SelectedIndex = 0;
-            _carComboBox.EndUpdate();
-        } catch { }
-    }
+        if (_recordsGrid.Columns.Count == 0) return;
 
-    private async Task RefreshSelectedCarLocationAsync(bool showEmptyMessage)
-    {
-        if (_isRefreshing || _carComboBox.SelectedItem is not CarOption car) return;
-        try {
-            _isRefreshing = true;
-            VehicleLocation? location = await _trackingService.GetLatestLocationAsync(car.CarId);
-            if (location is null) { await ClearLocationDisplayAsync(car); if (showEmptyMessage) _statusLabel.Text = "No tracking data yet."; return; }
-            UpdateLocationDisplay(car, location);
-            await UpdateMapMarkerAsync(location, car.Label);
-        } finally { _isRefreshing = false; }
-    }
-
-    private bool _isStartingDemo;
-
-    private async Task StartDemoTrackingAsync()
-    {
-        if (!AccessControlService.HasPermission("Offsite.MapTracking"))
+        bool isNarrow = _recordsGrid.Width < 800;
+        _recordsGrid.Columns["Car"]!.FillWeight = 120;
+        _recordsGrid.Columns["Type"]!.FillWeight = 100;
+        _recordsGrid.Columns["Location"]!.FillWeight = 120;
+        _recordsGrid.Columns["Dates"]!.FillWeight = 130;
+        _recordsGrid.Columns["Cost"]!.FillWeight = 80;
+        _recordsGrid.Columns["Status"]!.FillWeight = 90;
+        _recordsGrid.Columns["Actions"]!.FillWeight = 150;
+        
+        if (!isNarrow)
         {
-            MessageBoxHelper.ShowWarning("You do not have permission to perform this action.");
-            return;
-        }
-
-        if (_isStartingDemo) return;
-        _isStartingDemo = true;
-        try
-        {
-            if (_carComboBox.SelectedItem is not CarOption) { MessageBoxHelper.ShowWarning("Select a car before starting tracking."); return; }
-            _startTrackingButton.Enabled = false; _stopTrackingButton.Enabled = true;
-            _autoRefreshLabel.Text = "Refresh: 5s";
-            _demoTimer.Start();
-            await InsertDemoLocationAsync();
-        }
-        finally
-        {
-            _isStartingDemo = false;
+            _recordsGrid.Columns["Actions"]!.MinimumWidth = 300;
+            _recordsGrid.Columns["Actions"]!.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            _recordsGrid.Columns["Actions"]!.Width = 300;
         }
     }
 
-    private void StopDemoTracking() { _demoTimer.Stop(); _startTrackingButton.Enabled = true; _stopTrackingButton.Enabled = false; _autoRefreshLabel.Text = "Refresh: 10m"; }
-
-    private async Task InsertDemoLocationAsync()
-    {
-        if (_isDemoTickRunning || _carComboBox.SelectedItem is not CarOption car) return;
-        try { _isDemoTickRunning = true; await _simulator.InsertNextAsync(car.CarId); await RefreshSelectedCarLocationAsync(showEmptyMessage: false); }
-        catch { StopDemoTracking(); } finally { _isDemoTickRunning = false; }
-    }
-
-    private async Task UpdateMapMarkerAsync(VehicleLocation location, string label)
-    {
-        if (!_mapReady || _mapWebView.CoreWebView2 is null) return;
-        string script = FormattableString.Invariant($"window.setVehicleLocation({location.Latitude}, {location.Longitude}, {JsonSerializer.Serialize(label)});");
-        await _mapWebView.ExecuteScriptAsync(script);
-    }
-
-    private async Task ClearMapMarkerAsync() { if (_mapReady && _mapWebView.CoreWebView2 is not null) await _mapWebView.ExecuteScriptAsync("window.clearVehicleMarker();"); }
-
+    // WEBVIEW MAP COMMUNICATIONS
     private async void MapWebView_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e) { _mapReady = e.IsSuccess; await RefreshSelectedCarLocationAsync(showEmptyMessage: false); }
 
-    private void UpdateLocationDisplay(CarOption car, VehicleLocation location)
+    private async Task HandleCarSelectionChangedAsync()
     {
-        _selectedCarValueLabel.Text = car.CarName; _plateNumberValueLabel.Text = car.PlateNumber;
-        _latitudeValueLabel.Text = $"{location.Latitude:N7}"; _longitudeValueLabel.Text = $"{location.Longitude:N7}";
-        _lastUpdatedValueLabel.Text = $"{location.RecordedAt:MMM d, yyyy h:mm tt}"; _sourceValueLabel.Text = location.Source;
+        await RefreshSelectedCarLocationAsync();
     }
 
-    private async Task ClearLocationDisplayAsync(CarOption car)
+    private async Task RefreshSelectedCarLocationAsync(bool showEmptyMessage = true)
     {
-        _selectedCarValueLabel.Text = car.CarName; _plateNumberValueLabel.Text = car.PlateNumber;
-        _latitudeValueLabel.Text = "-"; _longitudeValueLabel.Text = "-"; _lastUpdatedValueLabel.Text = "-"; _sourceValueLabel.Text = "-";
-        await ClearMapMarkerAsync();
+        if (!_mapReady || _carSelector.SelectedItem is not CarOption car) return;
+
+        try
+        {
+            var location = await _trackingService.GetLatestLocationAsync(car.CarId);
+            if (location != null)
+            {
+                UpdateCarInfoDisplay(car, location);
+                await UpdateMapMarkerAsync(location, car);
+            }
+            else
+            {
+                ResetCarInfoDisplay(car);
+                if (showEmptyMessage) MessageBoxHelper.ShowInfo($"No tracking data available for {car.CarName}.", "Vehicle Tracking");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Tracking Error: {ex.Message}");
+        }
+    }
+
+    private async Task PopulateCarSelector()
+    {
+        try
+        {
+            var cars = await _trackingService.GetTrackableCarsAsync();
+            _carSelector.Items.Clear();
+            foreach (var car in cars)
+            {
+                _carSelector.Items.Add(new CarOption(car.CarId, car.CarName, car.PlateNumber));
+            }
+
+            if (_carSelector.Items.Count > 0) _carSelector.SelectedIndex = 0;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Car Selector Error: {ex.Message}");
+        }
+    }
+
+    private void UpdateCarInfoDisplay(CarOption car, VehicleLocation loc)
+    {
+        _selectedCarNameLabel.Text = car.CarName;
+        _selectedCarPlateLabel.Text = car.PlateNumber;
+        _selectedCarLocationLabel.Text = $"{loc.Latitude:F6}, {loc.Longitude:F6}";
+        _lastSeenCard.SetMetric(IconChar.Clock, "Last Seen", loc.RecordedAt.ToString("h:mm tt"), "Last update time", ThemeHelper.Primary);
+        _statusCard.SetMetric(IconChar.CircleDot, "Engine Status", "Active", "Real-time state", ThemeHelper.Success);
+        _speedCard.SetMetric(IconChar.GaugeHigh, "Current Speed", $"{loc.SpeedKph:F1} km/h", "Movement velocity", (loc.SpeedKph ?? 0) > 0 ? ThemeHelper.Success : ThemeHelper.GrayIcon);
+    }
+
+    private void ResetCarInfoDisplay(CarOption car)
+    {
+        _selectedCarNameLabel.Text = car.CarName;
+        _selectedCarPlateLabel.Text = car.PlateNumber;
+        _selectedCarLocationLabel.Text = "Location unknown or tracking disabled.";
+        _lastSeenCard.SetMetric(IconChar.Clock, "Last Seen", "N/A", "Last update time", ThemeHelper.GrayIcon);
+        _statusCard.SetMetric(IconChar.CircleDot, "Engine Status", "Unknown", "Real-time state", ThemeHelper.GrayIcon);
+        _speedCard.SetMetric(IconChar.GaugeHigh, "Current Speed", "0 km/h", "Movement velocity", ThemeHelper.GrayIcon);
+    }
+
+    private async Task UpdateMapMarkerAsync(VehicleLocation loc, CarOption car)
+    {
+        if (!_mapReady) return;
+
+        var data = new { lat = loc.Latitude, lng = loc.Longitude, title = car.CarName, plate = car.PlateNumber };
+        string json = JsonSerializer.Serialize(data);
+        await _mapWebView.CoreWebView2.ExecuteScriptAsync($"updateMarker({json})");
+    }
+
+    private async Task ClearMapMarkerAsync()
+    {
+        if (!_mapReady) return;
+        await _mapWebView.CoreWebView2.ExecuteScriptAsync("clearMarker()");
     }
 
     private sealed record CarOption(int CarId, string CarName, string PlateNumber) { public string Label => $"{CarName} ({PlateNumber})"; public override string ToString() => Label; }

@@ -8,6 +8,32 @@ public static class DataGridViewHelper
 {
     private const float StatusPillHeight = 26F;
 
+    public static void ApplyStandardStyle(DataGridView grid)
+    {
+        grid.AllowUserToAddRows = false;
+        grid.AllowUserToDeleteRows = false;
+        grid.AllowUserToResizeRows = false;
+        grid.AllowUserToResizeColumns = false;
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        grid.BackgroundColor = ThemeHelper.Surface;
+        grid.BorderStyle = BorderStyle.FixedSingle;
+        grid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
+        grid.ColumnHeadersHeight = 38;
+        grid.EnableHeadersVisualStyles = false;
+        grid.GridColor = ThemeHelper.TableGridLine;
+        grid.ReadOnly = true;
+        grid.RowHeadersVisible = false;
+        grid.RowTemplate.Height = 38;
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface;
+        grid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
+        grid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary;
+        grid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F);
+        grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+    }
+
     public static void SetupStatusPills(DataGridView grid, params string[] columnNames)
     {
         SetupStatusPills(grid, ContentAlignment.MiddleLeft, columnNames);
@@ -15,12 +41,22 @@ public static class DataGridViewHelper
 
     public static void SetupStatusPills(DataGridView grid, ContentAlignment alignment, params string[] columnNames)
     {
+        if (columnNames.Length == 0) return;
+
+        var configuredColumns = grid.Tag as HashSet<string> ?? [];
+        bool alreadyHasHandler = configuredColumns.Count > 0;
+
+        foreach (var col in columnNames) configuredColumns.Add(col);
+        grid.Tag = configuredColumns;
+
+        if (alreadyHasHandler) return;
+
         grid.CellPainting += (s, e) =>
         {
-            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Tag is not HashSet<string> columns) return;
             
             string columnName = grid.Columns[e.ColumnIndex].Name;
-            if (!columnNames.Contains(columnName)) return;
+            if (!columns.Contains(columnName)) return;
 
             e.PaintBackground(e.CellBounds, true);
             string text = e.Value?.ToString() ?? string.Empty;
@@ -32,79 +68,164 @@ public static class DataGridViewHelper
         };
     }
 
-    public static void RenderStatusPill(DataGridViewCellPaintingEventArgs e, string text, ContentAlignment alignment = ContentAlignment.MiddleCenter)
+    public static void SetupActionButtons(DataGridView grid, string columnName = "Actions")
     {
-        if (e.Graphics == null) return;
+        grid.CellPainting += (s, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (grid.Columns[e.ColumnIndex].Name != columnName) return;
 
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
-        Color color = GetStatusColor(text);
+            e.PaintBackground(e.CellBounds, true);
+            string text = e.Value?.ToString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text) || e.Graphics is null) return;
 
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(9F);
+
+            string[] actions = text.Split('|');
+            var layout = GetActionButtonsLayout(e.Graphics, e.CellBounds, font, actions);
+
+            foreach (var entry in layout)
+            {
+                Color color = GetActionColor(entry.Action);
+                using GraphicsPath path = CreateRoundedRectanglePath(entry.Bounds, entry.Bounds.Height / 2);
+                using SolidBrush background = new(color);
+                using SolidBrush foreground = new(ThemeHelper.GetContrastTextColor(color));
+
+                e.Graphics.FillPath(background, path);
+
+                using StringFormat format = new()
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    FormatFlags = StringFormatFlags.NoWrap,
+                    Trimming = StringTrimming.EllipsisCharacter
+                };
+                e.Graphics.DrawString(entry.Action, font, foreground, entry.Bounds, format);
+            }
+
+            e.Handled = true;
+        };
+    }
+
+    public static string? GetClickedAction(DataGridView grid, int rowIndex, int columnIndex, int x, int y, string columnName = "Actions")
+    {
+        if (rowIndex < 0 || columnIndex < 0 || grid.Columns[columnIndex].Name != columnName) return null;
+
+        string text = grid.Rows[rowIndex].Cells[columnIndex].Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        using Graphics graphics = grid.CreateGraphics();
+        Font font = grid.DefaultCellStyle.Font ?? FontHelper.SemiBold(9F);
+        
+        string[] actions = text.Split('|');
+        float currentX = 4F;
+        float yOffset = (grid.Rows[rowIndex].Height - StatusPillHeight) / 2F;
+
+        foreach (string action in actions)
+        {
+            float width = graphics.MeasureString(action, font).Width + 22F;
+            RectangleF rect = new(currentX, yOffset, width, StatusPillHeight);
+            if (rect.Contains(x, y)) return action;
+            currentX += width + 6F;
+        }
+
+        return null;
+    }
+
+    private static List<(string Action, RectangleF Bounds)> GetActionButtonsLayout(Graphics g, Rectangle cellBounds, Font font, string[] actions)
+    {
+        List<(string Action, RectangleF Bounds)> result = [];
+        float currentX = cellBounds.X + 4;
         float height = StatusPillHeight;
-        float width = Math.Min(100F, e.CellBounds.Width - 16); // Slightly smaller standard pill width
-        
-        float x;
-        if (alignment == ContentAlignment.MiddleLeft)
-            x = e.CellBounds.X + 8; // Align with typical grid text padding
-        else if (alignment == ContentAlignment.MiddleRight)
-            x = e.CellBounds.Right - width - 8;
-        else
-            x = e.CellBounds.X + (e.CellBounds.Width - width) / 2F;
+        float y = cellBounds.Y + (cellBounds.Height - height) / 2;
 
-        float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2F;
+        foreach (string action in actions)
+        {
+            float width = g.MeasureString(action, font).Width + 22F;
+            result.Add((action, new RectangleF(currentX, y, width, height)));
+            currentX += width + 6;
+        }
+        return result;
+    }
 
-        RectangleF rect = new(x, y, width, height);
-        
-        using GraphicsPath path = CreateRoundedRect(rect, height / 2);
-        using SolidBrush background = new(color);
-        using SolidBrush foreground = new(Color.White);
+    private static Color GetActionColor(string action)
+    {
+        return action switch
+        {
+            "View" or "Details" => ThemeHelper.Primary,
+            "Edit" or "Payment" or "Start Rental" or "Remove Blacklist" or "Restore" or "Complete" => ThemeHelper.Success,
+            "Cancel" or "Archive" or "Blacklist" => ThemeHelper.Danger,
+            "Extend" => ThemeHelper.Warning,
+            "Mark as Read" => ThemeHelper.Secondary,
+            _ => ThemeHelper.GrayIcon
+        };
+    }
 
-        e.Graphics.FillPath(background, path);
+    public static Color GetStatusColor(string status)
+    {
+        return status switch
+        {
+            "Active" or "Available" or "Paid" or "Rented" or "Ongoing" or "High" => ThemeHelper.Success,
+            "Reserved" or "Pending" or "Medium" => ThemeHelper.Warning,
+            "Cancelled" or "Maintenance" or "Blacklisted" or "Unpaid" or "Overdue" or "OVERDUE" or "Danger" => ThemeHelper.Danger,
+            "Completed" or "Archived" or "Partial" or "Low" => ThemeHelper.GrayIcon,
+            _ => ThemeHelper.Primary
+        };
+    }
+
+    private static void RenderStatusPill(DataGridViewCellPaintingEventArgs e, string text, ContentAlignment alignment)
+    {
+        if (e.Graphics is null) return;
+
+        Color backColor = GetStatusColor(text);
+        Color foreColor = ThemeHelper.GetContrastTextColor(backColor);
+        Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(8.5F);
+
+        SizeF textSize = e.Graphics.MeasureString(text, font);
+        float width = Math.Min(textSize.Width + 24, e.CellBounds.Width - 8);
+        float height = StatusPillHeight;
+
+        float x = alignment switch
+        {
+            ContentAlignment.MiddleRight => e.CellBounds.Right - width - 8,
+            ContentAlignment.MiddleCenter => e.CellBounds.X + (e.CellBounds.Width - width) / 2,
+            _ => e.CellBounds.X + 8
+        };
+        float y = e.CellBounds.Y + (e.CellBounds.Height - height) / 2;
+
+        RectangleF pillRect = new(x, y, width, height);
+        using GraphicsPath path = CreateRoundedRectanglePath(pillRect, height / 2);
+        using SolidBrush backBrush = new(backColor);
+        using SolidBrush foreBrush = new(foreColor);
+
+        e.Graphics.FillPath(backBrush, path);
 
         using StringFormat format = new()
         {
             Alignment = StringAlignment.Center,
             LineAlignment = StringAlignment.Center,
-            FormatFlags = StringFormatFlags.NoWrap,
-            Trimming = StringTrimming.EllipsisCharacter
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap
         };
-        
-        e.Graphics.DrawString(text, font, foreground, rect, format);
+        e.Graphics.DrawString(text, font, foreBrush, pillRect, format);
     }
 
-    public static Color GetStatusColor(string status)
-    {
-        return status.ToUpperInvariant() switch
-        {
-            "PAID" or "ACTIVE" or "RENTED" or "SUCCESS" or "ONGOING" or "AVAILABLE" => ThemeHelper.Success,
-            "PENDING" or "PARTIAL" or "DUE" or "RESERVED" or "MAINTENANCE" => ThemeHelper.Warning,
-            "UNPAID" or "CANCELLED" or "OVERDUE" or "BLACKLISTED" or "DANGER" or "HIGH" => ThemeHelper.Danger,
-            "COMPLETED" or "ARCHIVED" or "CLOSED" or "N/A" or "LOW" or "MEDIUM" => ThemeHelper.GrayIcon,
-            _ => ThemeHelper.Primary
-        };
-    }
-
-    public static Panel CreateBorderedContainer(Control control, int padding = 16)
-    {
-        BorderedPanel container = new()
-        {
-            Dock = control.Dock,
-            Height = control.Height,
-            Padding = new Padding(padding),
-            BackColor = ThemeHelper.Surface,
-            BorderColor = ThemeHelper.Border
-        };
-        
-        control.Dock = DockStyle.Fill;
-        container.Controls.Add(control);
-        return container;
-    }
-
-    private static GraphicsPath CreateRoundedRect(RectangleF rect, float radius)
+    public static GraphicsPath CreateRoundedRectanglePath(RectangleF rect, float radius)
     {
         GraphicsPath path = new();
         float diameter = radius * 2;
+        if (diameter > rect.Width) diameter = rect.Width;
+        if (diameter > rect.Height) diameter = rect.Height;
+        
         RectangleF arc = new(rect.Location, new SizeF(diameter, diameter));
+
+        if (radius <= 0)
+        {
+            path.AddRectangle(rect);
+            return path;
+        }
+
         path.AddArc(arc, 180, 90);
         arc.X = rect.Right - diameter;
         path.AddArc(arc, 270, 90);
@@ -114,5 +235,18 @@ public static class DataGridViewHelper
         path.AddArc(arc, 90, 90);
         path.CloseFigure();
         return path;
+    }
+
+    public static Panel CreateBorderedContainer(Control control)
+    {
+        BorderedPanel container = new()
+        {
+            Padding = new Padding(1),
+            BorderColor = ThemeHelper.Border,
+            BackColor = ThemeHelper.Border
+        };
+        control.Dock = DockStyle.Fill;
+        container.Controls.Add(control);
+        return container;
     }
 }
