@@ -23,7 +23,7 @@ public static class FleetScheduleConstants
 
         public static readonly string[] ReservationOptions = [Pending, Scheduled, Cancelled];
         public static readonly string[] RentalOptions = [Rented, Completed, Cancelled];
-        public static readonly string[] MaintenanceOptions = [Scheduled, Maintenance, Completed, Cancelled];
+        public static readonly string[] MaintenanceOptions = [Pending, Scheduled, Maintenance, Completed, Cancelled];
         public static readonly string[] Operational = [Pending, Scheduled, Rented, Ongoing, Maintenance];
         public static readonly string[] All = [Pending, Scheduled, Rented, Ongoing, Maintenance, Completed, Cancelled];
     }

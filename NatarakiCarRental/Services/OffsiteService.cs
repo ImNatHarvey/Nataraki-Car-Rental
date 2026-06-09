@@ -118,7 +118,7 @@ public sealed class OffsiteService
                 {
                     CarId = request.CarId,
                     ScheduleType = FleetScheduleConstants.Type.Maintenance,
-                    Status = FleetScheduleConstants.Status.Maintenance,
+                    Status = FleetScheduleConstants.Status.Scheduled,
                     StartDate = request.StartDate,
                     EndDate = request.ExpectedReturnDate ?? request.StartDate,
                     Notes = $"Operational Offsite: {request.OffsiteType}"
@@ -141,8 +141,8 @@ public sealed class OffsiteService
                     throw new ValidationException([new ValidationFailure("FleetScheduleId", "Only pending maintenance schedules can be started.")]);
                 }
 
-                // Update the existing schedule status to Maintenance
-                existingSchedule.Status = FleetScheduleConstants.Status.Maintenance;
+                // Update the existing schedule status to Scheduled
+                existingSchedule.Status = FleetScheduleConstants.Status.Scheduled;
                 await _fleetScheduleService.UpdateFromInternalAsync(existingSchedule, transaction);
             }
 

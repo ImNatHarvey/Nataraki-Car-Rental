@@ -319,7 +319,25 @@ public sealed class OffsiteControl : UserControl
     }
 
     private async Task ViewTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null) new MaintenanceTransactionDetailsForm(_currentUserId, txn, true).ShowDialog(); }
-    private async Task StartMaintenanceAsync(int id) { try { await _transactionService.StartMaintenanceTransactionAsync(id, _currentUserId); MessageBoxHelper.ShowSuccess("Maintenance started successfully."); await LoadRecordsAsync(); } catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to start maintenance: {ex.Message}"); } }
+    private async Task StartMaintenanceAsync(int id) 
+    { 
+        try 
+        { 
+            Transaction? txn = await _transactionService.GetByIdAsync(id);
+            if (txn != null && txn.StartDate.Date > DateTime.Today)
+            {
+                MessageBoxHelper.ShowError("Cannot start maintenance before its scheduled start date.");
+                return;
+            }
+            await _transactionService.StartMaintenanceTransactionAsync(id, _currentUserId); 
+            MessageBoxHelper.ShowSuccess("Maintenance started successfully."); 
+            await LoadRecordsAsync(); 
+        } 
+        catch (Exception ex) 
+        { 
+            MessageBoxHelper.ShowError($"Failed to start maintenance: {ex.Message}"); 
+        } 
+    }
     private async Task ExtendTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionExtendRentalForm(txn).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
     private async Task CompleteTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionReturnInspectionForm(txn).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
     private async Task CancelTransactionAsync(int id) { if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel maintenance") && MessageBoxHelper.ShowConfirmWarning("Cancel maintenance transaction?", "Cancel")) { await _transactionService.CancelTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); } }

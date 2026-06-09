@@ -617,7 +617,7 @@ public static class DatabaseInitializer
                 ADD CONSTRAINT CK_FleetSchedules_TypeStatus_Valid CHECK (
                     (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Scheduled', N'Cancelled'))
                     OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
-                    OR (ScheduleType = N'Maintenance' AND Status IN (N'Scheduled', N'Maintenance', N'Completed', N'Cancelled'))
+                    OR (ScheduleType = N'Maintenance' AND Status IN (N'Pending', N'Scheduled', N'Maintenance', N'Completed', N'Cancelled'))
                 );
             END;
             """, connection, transaction);
