@@ -510,7 +510,30 @@ public sealed class TransactionService
             decimal finalPaid = transaction.AmountPaid;
             decimal actualAdditionalCharge = request.AdditionalCharge;
 
-            if (actualAdditionalCharge > 0)
+            if (isMaintenance)
+            {
+                finalTotal = actualAdditionalCharge; // Total cost is exactly what was finalized
+                
+                decimal amountToPay = request.AmountPaid ?? 0;
+                if (request.ChargePaid && amountToPay > 0)
+                {
+                    await _transactionPaymentRepository.AddAsync(new TransactionPayment
+                    {
+                        TransactionId = request.TransactionId,
+                        PaymentDate = DateTime.Now,
+                        Amount = amountToPay,
+                        ModeOfPayment = request.ModeOfPayment ?? TransactionConstants.ModeOfPayment.Cash,
+                        ReceiptFilePath = request.ReceiptFilePath,
+                        Notes = "Maintenance fee paid during completion.",
+                        CreatedByUserId = currentUserId
+                    }, dbTransaction);
+                    
+                    finalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(request.TransactionId, dbTransaction);
+                }
+                
+                actualAdditionalCharge = 0; // Not used as an 'inspection additional charge' for maintenance
+            }
+            else if (actualAdditionalCharge > 0)
             {
                 finalTotal += actualAdditionalCharge;
                 
@@ -523,7 +546,7 @@ public sealed class TransactionService
                         Amount = actualAdditionalCharge,
                         ModeOfPayment = request.ModeOfPayment ?? TransactionConstants.ModeOfPayment.Cash,
                         ReceiptFilePath = request.ReceiptFilePath,
-                        Notes = isMaintenance ? "Maintenance fee paid during completion." : $"Additional charge for {request.ReturnCondition} paid during inspection.",
+                        Notes = $"Additional charge for {request.ReturnCondition} paid during inspection.",
                         CreatedByUserId = currentUserId
                     }, dbTransaction);
                     

@@ -457,7 +457,6 @@ public sealed class TransactionDetailsForm : Form
         _paymentsGrid.Columns.Add("Date", "Date");
         _paymentsGrid.Columns.Add("Amount", "Amount");
         _paymentsGrid.Columns.Add("Type", "Type");
-        _paymentsGrid.Columns.Add("Mode", "Mode");
         _paymentsGrid.Columns.Add("Proof", "Proof");
         _paymentsGrid.Columns.Add("ReceiptFilePath", "ReceiptFilePath");
         if (_paymentsGrid.Columns["ReceiptFilePath"] is DataGridViewColumn col) col.Visible = false;
@@ -465,7 +464,6 @@ public sealed class TransactionDetailsForm : Form
         SetFillWeight(_paymentsGrid, "Date", 110);
         SetFillWeight(_paymentsGrid, "Amount", 100);
         SetFillWeight(_paymentsGrid, "Type", 120);
-        SetFillWeight(_paymentsGrid, "Mode", 90);
         SetFillWeight(_paymentsGrid, "Proof", 70);
 
         _paymentsGrid.CellPainting += PaymentsGrid_CellPainting;

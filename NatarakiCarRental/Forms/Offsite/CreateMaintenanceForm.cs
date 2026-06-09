@@ -28,7 +28,6 @@ public sealed class CreateMaintenanceForm : Form
     private readonly ComboBox _maintenanceClientComboBox = CreateComboBox();
     private readonly DateTimePicker _maintenanceStartDatePicker = CreateDatePicker();
     private readonly DateTimePicker _maintenanceEndDatePicker = CreateDatePicker();
-    private readonly NumericUpDown _estimatedCostInput = CreateMoneyInput();
 
     private IReadOnlyList<FleetScheduleModel> _eligibleMaintenance = [];
     private IReadOnlyList<Car> _cars = [];
@@ -120,7 +119,7 @@ public sealed class CreateMaintenanceForm : Form
             Location = new Point(18, 10),
             Size = new Size(900, 300),
             ColumnCount = 2,
-            RowCount = 3
+            RowCount = 2
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -129,7 +128,6 @@ public sealed class CreateMaintenanceForm : Form
         layout.Controls.Add(CreateInputPanel("Offsite Client *", _maintenanceClientComboBox), 1, 0);
         layout.Controls.Add(CreateInputPanel("Start Date *", _maintenanceStartDatePicker), 0, 1);
         layout.Controls.Add(CreateInputPanel("End Date *", _maintenanceEndDatePicker), 1, 1);
-        layout.Controls.Add(CreateInputPanel("Estimated Cost (₱)", _estimatedCostInput), 0, 2);
         
         tab.Controls.Add(layout);
         return tab;
@@ -260,7 +258,7 @@ public sealed class CreateMaintenanceForm : Form
                     MaintenanceType = "Maintenance",
                     StartDate = _maintenanceStartDatePicker.Value.Date,
                     EndDate = _maintenanceEndDatePicker.Value.Date,
-                    EstimatedCost = _estimatedCostInput.Value
+                    EstimatedCost = 0
                 });
             }
 

@@ -290,7 +290,7 @@ public sealed class OffsiteControl : UserControl
         private void UpdateGridColumnLayout()
         {
         if (_maintenanceGrid.Columns.Count == 0) return;
-        SetColumnSizing("Code", 10F, 100); SetColumnSizing("Vehicle", 10F, 110); SetColumnSizing("Client", 15F, 140); SetColumnSizing("Status", 10F, 90); SetColumnSizing("Dates", 12F, 120); SetColumnSizing("Cost", 10F, 100); SetColumnSizing("Paid", 10F, 100); SetColumnSizing("Balance", 10F, 100);
+        SetColumnSizing("Code", 10F, 100); SetColumnSizing("Vehicle", 7F, 80); SetColumnSizing("Client", 15F, 140); SetColumnSizing("Status", 15F, 130); SetColumnSizing("Dates", 12F, 120); SetColumnSizing("Cost", 10F, 100); SetColumnSizing("Paid", 10F, 100); SetColumnSizing("Balance", 10F, 100);
         if (_maintenanceGrid.Columns["Actions"] is DataGridViewColumn col) { col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None; col.Width = 350; col.MinimumWidth = 350; }
         }
 
@@ -383,6 +383,7 @@ public sealed class OffsiteControl : UserControl
                     ReturnCondition = form.ReturnCondition,
                     AdditionalCharge = form.MaintenanceFee,
                     ChargePaid = true,
+                    AmountPaid = form.AmountPaid,
                     ModeOfPayment = form.ModeOfPayment,
                     ReceiptFilePath = form.InvoiceFilePath
                 }, _currentUserId);

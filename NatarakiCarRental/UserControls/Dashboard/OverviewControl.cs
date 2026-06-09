@@ -181,7 +181,6 @@ public sealed class OverviewControl : UserControl
         AddQuickAction(actions, IconChar.Walking, "Add Walk-In", "Transactions.Create", () => ShowAddTransaction(1));
         AddQuickAction(actions, IconChar.UserPlus, "Add Customer", "Customers.Create", () => ShowAddCustomer());
         AddQuickAction(actions, IconChar.CalendarDay, "Add Schedule", "FleetSchedule.Create", () => ShowAddSchedule());
-        AddQuickAction(actions, IconChar.LocationDot, "Add Offsite", "Offsite.Create", () => ShowAddOffsite());
         AddQuickAction(actions, IconChar.CalendarAlt, "Fleet Calendar", "FleetSchedule.View", () => NavigateTo("Fleet Schedule"));
         AddQuickAction(actions, IconChar.ChartPie, "Open Reports", "Reports.View", () => NavigateTo("Reports & Analytics"));
         AddQuickAction(actions, IconChar.History, "Open Activity Log", "ActivityLog.View", () => NavigateTo("Activity Log"));
@@ -432,19 +431,7 @@ public sealed class OverviewControl : UserControl
             );
         }
 
-        // 3. Ongoing offsite
-        foreach (var o in data.OngoingOffsite)
-        {
-            _insightsTable.Rows.Add(
-                "Offsite",
-                o.OffsiteType,
-                o.LocationName ?? "N/A",
-                $"{o.CarName} ({o.PlateNumber})",
-                o.Status,
-                o.ExpectedReturnDate?.ToString("MMM dd") ?? "N/A",
-                "Medium"
-            );
-        }
+        // 3. Ongoing offsite removed (now handled as maintenance via schedules)
 
         // 4. Maintenance (Handled via schedules if typed, but let's ensure high priority activities are visible if needed)
         // Actually the prompt said: Upcoming schedules, Due returns, Ongoing offsite operations, Maintenance schedules, Overdue transactions.
@@ -486,12 +473,6 @@ public sealed class OverviewControl : UserControl
     private void ShowAddSchedule()
     {
         using FleetScheduleDetailsForm form = new(FleetScheduleFormMode.Add, AccessControlService.CurrentUser?.UserId ?? 0);
-        if (form.ShowDialog(this) == DialogResult.OK) _ = RefreshDashboardAsync();
-    }
-
-    private void ShowAddOffsite()
-    {
-        using OffsiteRecordDetailsForm form = new(AccessControlService.CurrentUser?.UserId ?? 0);
         if (form.ShowDialog(this) == DialogResult.OK) _ = RefreshDashboardAsync();
     }
 

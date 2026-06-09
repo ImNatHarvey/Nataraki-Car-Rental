@@ -130,7 +130,10 @@ public sealed class DashboardRepository
         var data = await multi.ReadSingleOrDefaultAsync<DashboardOperationalData>() ?? new DashboardOperationalData();
         data.UpcomingSchedules = (await multi.ReadAsync<FleetSchedule>()).ToList();
         data.VehiclesDueToday = (await multi.ReadAsync<OperationsReturnItem>()).ToList();
-        data.OngoingOffsite = (await multi.ReadAsync<OffsiteRecordListItem>()).ToList();
+        
+        // Skip reading OngoingOffsite results
+        await multi.ReadAsync<dynamic>();
+        
         data.HighPriorityActivities = (await multi.ReadAsync<ActivityLog>()).ToList();
 
         return data;

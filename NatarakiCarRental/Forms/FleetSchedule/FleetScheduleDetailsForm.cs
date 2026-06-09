@@ -39,16 +39,12 @@ public sealed class FleetScheduleDetailsForm : Form
     private readonly Label _validationLabel = new();
     private readonly Label _codingDayLabel = new();
     private readonly Label _codingDayWarningLabel = new();
-    private readonly OffsiteService _offsiteService;
     private Label? _titleLabel;
     private Label? _transactionManagedNoteLabel;
     private Button? _cancelButton;
     private Button? _saveButton;
     private Button? _archiveButton;
     
-    // Maintenance execution buttons
-    private Button? _viewRecordButton;
-
     // Transaction action button
     private Button? _viewTransactionButton;
 
@@ -68,7 +64,6 @@ public sealed class FleetScheduleDetailsForm : Form
     {
         _currentUserId = currentUserId;
         _scheduleService = new FleetScheduleService(currentUserId);
-        _offsiteService = new OffsiteService(currentUserId);
         _mode = mode;
         _sourceSchedule = schedule;
         _prefilledCarId = prefilledCarId;
@@ -196,11 +191,6 @@ public sealed class FleetScheduleDetailsForm : Form
             _archiveButton.Location = new Point(32, 590);
             _archiveButton.Click += ArchiveButton_Click;
 
-            _viewRecordButton = CreateSecondaryButton("View Offsite Record", 160, 38);
-            _viewRecordButton.Location = new Point(32, 590); // Aligned to left
-            _viewRecordButton.Visible = false;
-            _viewRecordButton.Click += ViewRecordButton_Click;
-
             // Transaction action
             _viewTransactionButton = CreateSecondaryButton("View Transaction", 160, 38);
             _viewTransactionButton.Location = new Point(32, 590); // Aligned to left
@@ -215,7 +205,6 @@ public sealed class FleetScheduleDetailsForm : Form
         Controls.Add(_saveButton);
         
         if (_archiveButton is not null) Controls.Add(_archiveButton);
-        if (_viewRecordButton is not null) Controls.Add(_viewRecordButton);
         if (_viewTransactionButton is not null) Controls.Add(_viewTransactionButton);
 
         // Add blank area click handler to remove focus from inputs
@@ -230,20 +219,15 @@ public sealed class FleetScheduleDetailsForm : Form
             return;
         }
 
+        bool hasOperationalExecution = false;
+
         if (_sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Maintenance)
         {
-            bool isPending = _sourceSchedule.Status == FleetScheduleConstants.Status.Pending;
-            bool hasOperationalExecution = _sourceSchedule.Status == FleetScheduleConstants.Status.Maintenance ||
-                                           _sourceSchedule.Status == FleetScheduleConstants.Status.Completed ||
-                                           _sourceSchedule.Status == FleetScheduleConstants.Status.Cancelled;
+            hasOperationalExecution = _sourceSchedule.Status == FleetScheduleConstants.Status.Maintenance ||
+                                      _sourceSchedule.Status == FleetScheduleConstants.Status.Completed ||
+                                      _sourceSchedule.Status == FleetScheduleConstants.Status.Cancelled;
 
-            if (hasOperationalExecution && _viewRecordButton != null)
-            {
-                OffsiteRecord? record = await _offsiteService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
-                _viewRecordButton.Visible = record is not null;
-            }
-
-            // Hide normal save/archive if operational execution started (execution record handles it)
+            // Hide normal save/archive if operational execution started
             if (hasOperationalExecution)
             {
                 if (_saveButton != null) _saveButton.Visible = false;
@@ -252,28 +236,15 @@ public sealed class FleetScheduleDetailsForm : Form
         }
         else if (_sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Rental)
         {
-            if (_viewTransactionButton != null)
-            {
-                var transactionService = new TransactionService(_currentUserId);
-                Transaction? linkedTransaction = await transactionService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
-                _viewTransactionButton.Visible = linkedTransaction is not null;
-            }
+            hasOperationalExecution = true;
         }
-    }
 
-    private async void ViewRecordButton_Click(object? sender, EventArgs e)
-    {
-        if (_sourceSchedule is null) return;
-        
-        OffsiteRecord? record = await _offsiteService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
-        if (record is null)
+        if (hasOperationalExecution && _viewTransactionButton != null)
         {
-            MessageBoxHelper.ShowWarning("No execution record found for this schedule.");
-            return;
+            var transactionService = new TransactionService(_currentUserId);
+            Transaction? linkedTransaction = await transactionService.GetByFleetScheduleIdAsync(_sourceSchedule.ScheduleId);
+            _viewTransactionButton.Visible = linkedTransaction is not null;
         }
-
-        using NatarakiCarRental.Forms.Offsite.OffsiteRecordDetailsForm form = new(_currentUserId, record.OffsiteRecordId, isViewOnly: true);
-        form.ShowDialog(this);
     }
 
     private async void ViewTransactionButton_Click(object? sender, EventArgs e)
@@ -289,8 +260,16 @@ public sealed class FleetScheduleDetailsForm : Form
             return;
         }
 
-        using NatarakiCarRental.Forms.Transactions.TransactionDetailsForm form = new(linkedTransaction);
-        form.ShowDialog(this);
+        if (_sourceSchedule.ScheduleType == FleetScheduleConstants.Type.Maintenance)
+        {
+            using NatarakiCarRental.Forms.Offsite.MaintenanceTransactionDetailsForm form = new(_currentUserId, linkedTransaction);
+            form.ShowDialog(this);
+        }
+        else
+        {
+            using NatarakiCarRental.Forms.Transactions.TransactionDetailsForm form = new(linkedTransaction);
+            form.ShowDialog(this);
+        }
     }
 
     private async void FleetScheduleDetailsForm_Load(object? sender, EventArgs e)

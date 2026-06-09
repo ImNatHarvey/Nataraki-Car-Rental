@@ -7,7 +7,6 @@ public sealed class DashboardOperationalData
     // Lists for Today's Operational Insights
     public IReadOnlyList<FleetSchedule> UpcomingSchedules { get; set; } = [];
     public IReadOnlyList<OperationsReturnItem> VehiclesDueToday { get; set; } = [];
-    public IReadOnlyList<OffsiteRecordListItem> OngoingOffsite { get; set; } = [];
     public IReadOnlyList<ActivityLog> HighPriorityActivities { get; set; } = [];
 
     // Smart Status Panels

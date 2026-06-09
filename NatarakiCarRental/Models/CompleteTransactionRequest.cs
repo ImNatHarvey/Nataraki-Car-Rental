@@ -7,6 +7,7 @@ public sealed class CompleteTransactionRequest
     public int? DaysLate { get; set; }
     public decimal AdditionalCharge { get; set; }
     public bool ChargePaid { get; set; }
+    public decimal? AmountPaid { get; set; }
     public string? ReceiptFilePath { get; set; }
     public string? ModeOfPayment { get; set; }
     public bool BlacklistCustomer { get; set; }

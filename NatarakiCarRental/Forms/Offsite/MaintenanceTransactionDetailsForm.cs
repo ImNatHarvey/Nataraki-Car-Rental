@@ -13,20 +13,10 @@ public sealed class MaintenanceTransactionDetailsForm : Form
     private readonly Transaction _transaction;
     private readonly int _currentUserId;
     private readonly TransactionService _transactionService;
-    private readonly TransactionDocumentExportService _documentExportService = new();
     private readonly ErrorProvider _errorProvider = new();
     private readonly Label _validationLabel = new();
     private readonly TableLayoutPanel _viewLayout = new();
     private readonly DataGridView _paymentsGrid = new();
-    private readonly ComboBox _documentFormatComboBox = CreateComboBox(150);
-    private readonly Panel _addPaymentPanel = new();
-    private readonly NumericUpDown _newPaymentAmountInput = CreateMoneyInput();
-    private readonly ComboBox _newPaymentModeComboBox = CreateComboBox();
-    private readonly Label _paymentProofPathLabel = CreatePathLabel();
-    private readonly Button _paymentProofBrowseButton = CreateSecondaryButton("Browse", 90, 30);
-    private readonly Button _paymentProofOpenButton = CreateSecondaryButton("Open File", 90, 30);
-    private readonly Button _submitPaymentButton = ControlFactory.CreatePrimaryButton("Submit Payment", 148, 38);
-    private string? _selectedReceiptSourcePath;
 
     public MaintenanceTransactionDetailsForm(int currentUserId, Transaction transaction, bool viewOnly = false)
     {
@@ -42,7 +32,7 @@ public sealed class MaintenanceTransactionDetailsForm : Form
     private void InitializeForm()
     {
         Text = "Maintenance Details";
-        ClientSize = new Size(1060, 852);
+        ClientSize = new Size(1060, 680);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -58,29 +48,11 @@ public sealed class MaintenanceTransactionDetailsForm : Form
 
         CreateViewLayout();
         CreatePaymentsGrid(new Point(32, 376), new Size(996, 222));
-        CreateAddPaymentSection();
-
-        _submitPaymentButton.Location = new Point(868, 786);
-        _submitPaymentButton.Click += AddPaymentButton_Click;
-        Controls.Add(_submitPaymentButton);
 
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
-        closeButton.Location = new Point(746, 786);
+        closeButton.Location = new Point(918, 620);
         closeButton.Click += (_, _) => Close();
         Controls.Add(closeButton);
-
-        ConfigureDocumentFormatComboBox();
-        _documentFormatComboBox.Location = new Point(32, 790);
-        Button invoiceButton = ControlFactory.CreatePrimaryButton("Invoice", 110, 38);
-        invoiceButton.Location = new Point(190, 786);
-        invoiceButton.Click += async (_, _) => await ExportDocumentAsync(invoiceButton, false);
-        Button receiptButton = ControlFactory.CreatePrimaryButton("Receipt", 110, 38);
-        receiptButton.Location = new Point(312, 786);
-        receiptButton.Click += async (_, _) => await ExportDocumentAsync(receiptButton, true);
-
-        Controls.Add(_documentFormatComboBox);
-        Controls.Add(invoiceButton);
-        Controls.Add(receiptButton);
 
         Click += (_, _) => ActiveControl = null;
     }
@@ -99,30 +71,20 @@ public sealed class MaintenanceTransactionDetailsForm : Form
     {
         Panel p = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.Surface };
         _paymentsGrid.Dock = DockStyle.Fill; _paymentsGrid.AllowUserToAddRows = false; _paymentsGrid.AllowUserToDeleteRows = false; _paymentsGrid.AllowUserToResizeRows = false; _paymentsGrid.ReadOnly = true; _paymentsGrid.RowHeadersVisible = false; _paymentsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _paymentsGrid.BackgroundColor = ThemeHelper.Surface; _paymentsGrid.BorderStyle = BorderStyle.FixedSingle; _paymentsGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single; _paymentsGrid.GridColor = ThemeHelper.TableGridLine; _paymentsGrid.EnableHeadersVisualStyles = false; _paymentsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _paymentsGrid.ColumnHeadersHeight = 38; _paymentsGrid.RowTemplate.Height = 38;
-        _paymentsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary; _paymentsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White; _paymentsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F); _paymentsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-        _paymentsGrid.DefaultCellStyle.BackColor = ThemeHelper.Surface; _paymentsGrid.DefaultCellStyle.ForeColor = ThemeHelper.TextPrimary;
-        _paymentsGrid.Columns.Add("Date", "Date"); _paymentsGrid.Columns.Add("Amount", "Amount Paid"); _paymentsGrid.Columns.Add("Mode", "Mode"); _paymentsGrid.Columns.Add("Proof", "Proof"); _paymentsGrid.Columns.Add("Path", "Path"); _paymentsGrid.Columns["Path"]!.Visible = false;
+        _paymentsGrid.ColumnHeadersDefaultCellStyle.BackColor = ThemeHelper.Primary; _paymentsGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White; _paymentsGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = ThemeHelper.Primary; _paymentsGrid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White; _paymentsGrid.ColumnHeadersDefaultCellStyle.Font = FontHelper.SemiBold(9F); _paymentsGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        _paymentsGrid.DefaultCellStyle.BackColor = ThemeHelper.Surface; _paymentsGrid.DefaultCellStyle.ForeColor = ThemeHelper.TextPrimary; _paymentsGrid.DefaultCellStyle.SelectionBackColor = ThemeHelper.Surface; _paymentsGrid.DefaultCellStyle.SelectionForeColor = ThemeHelper.TextPrimary;
+        _paymentsGrid.Font = FontHelper.Regular(9F);
+        _paymentsGrid.Columns.Add("Date", "Date"); _paymentsGrid.Columns.Add("Amount", "Amount Paid"); _paymentsGrid.Columns.Add("Type", "Type"); _paymentsGrid.Columns.Add("Proof", "Proof"); _paymentsGrid.Columns.Add("Path", "Path"); _paymentsGrid.Columns["Path"]!.Visible = false;
         _paymentsGrid.CellPainting += PaymentsGrid_CellPainting; _paymentsGrid.CellMouseClick += PaymentsGrid_CellMouseClick;
         p.Controls.Add(_paymentsGrid); GroupBox section = CreateSection("Payment Ledger", p); section.Location = location; section.Size = size; Controls.Add(section);
-    }
-
-    private void CreateAddPaymentSection()
-    {
-        _addPaymentPanel.Dock = DockStyle.Fill; _addPaymentPanel.BackColor = ThemeHelper.Surface;
-        _newPaymentModeComboBox.Width = 420; _newPaymentModeComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All.Cast<object>().ToArray()); _newPaymentModeComboBox.SelectedItem = TransactionConstants.ModeOfPayment.Cash;
-        _newPaymentAmountInput.Width = 420; ConfigureProofPicker(_paymentProofBrowseButton, _paymentProofOpenButton, _paymentProofPathLabel);
-        _addPaymentPanel.Controls.Add(CreateInputPanel("Amount to Pay *", _newPaymentAmountInput, new Point(0, 0))); _addPaymentPanel.Controls.Add(CreateInputPanel("Mode *", _newPaymentModeComboBox, new Point(492, 0)));
-        Panel proofPanel = CreateProofPickerPanel("Payment Proof", _paymentProofPathLabel, _paymentProofBrowseButton, _paymentProofOpenButton); proofPanel.Location = new Point(0, 52); proofPanel.Size = new Size(920, 56); _addPaymentPanel.Controls.Add(proofPanel);
-        GroupBox section = CreateSection("Record New Payment", _addPaymentPanel); section.Location = new Point(32, 610); section.Size = new Size(996, 160); Controls.Add(section);
     }
 
     private void LoadMaintenanceData(Transaction t)
     {
         _viewLayout.Controls.Clear();
         AddViewCell(0, 0, "Code", t.TransactionCode); AddViewCell(1, 0, "Vehicle", $"{t.CarName} ({t.PlateNumber})"); AddViewCell(2, 0, "Duration", $"{t.StartDate:MMM d, yyyy} - {t.EndDate:MMM d, yyyy}"); AddViewCell(3, 0, "Total Cost", FormatPeso(t.TotalAmount));
-        AddViewCell(0, 1, "Client / Partner", t.CustomerName); AddViewCell(1, 1, "Ref #", $"#{t.FleetScheduleId}"); AddViewCell(2, 1, "Recorded", t.CreatedAt.ToString("MMM d, yyyy h:mm tt")); AddViewCell(3, 1, "Mode of Pay", t.ModeOfPayment);
+        AddViewCell(0, 1, "Client / Partner", t.CustomerName); AddViewCell(1, 1, "Ref #", $"#{t.FleetScheduleId}"); AddViewCell(2, 1, "Recorded", t.CreatedAt.ToString("MMM d, yyyy h:mm tt")); AddViewCell(3, 1, "Mode of Payment", t.ModeOfPayment);
         AddViewCell(0, 2, "Paid Amount", FormatPeso(t.AmountPaid)); AddViewCell(1, 2, "Balance", FormatPeso(t.BalanceAmount)); AddViewCell(2, 2, "Pay Status", t.PaymentStatus); AddViewCell(3, 2, "Overall Status", t.TransactionStatus);
-        _newPaymentAmountInput.Maximum = t.BalanceAmount;
     }
 
     private async void MaintenanceTransactionDetailsForm_Load(object? sender, EventArgs e) => await LoadPaymentsAsync();
@@ -132,44 +94,50 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         try {
             var payments = await _transactionService.GetPaymentsAsync(_transaction.TransactionId);
             _paymentsGrid.Rows.Clear();
-            foreach (var p in payments) _paymentsGrid.Rows.Add(p.PaymentDate.ToString("yyyy-MM-dd HH:mm"), FormatPeso(p.Amount), p.ModeOfPayment, string.IsNullOrWhiteSpace(p.ReceiptFilePath) ? "-" : "View", p.ReceiptFilePath);
+            foreach (var p in payments) _paymentsGrid.Rows.Add(p.PaymentDate.ToString("yyyy-MM-dd HH:mm"), FormatPeso(p.Amount), p.ModeOfPayment, string.IsNullOrWhiteSpace(p.ReceiptFilePath) ? "-" : "View", p.ReceiptFilePath ?? string.Empty);
         } catch { }
     }
 
-    private async void AddPaymentButton_Click(object? sender, EventArgs e)
-    {
-        if (_newPaymentAmountInput.Value <= 0) return;
-        string? path = null; try {
-            path = UploadPathHelper.SavePaymentReceiptIfSelected(_selectedReceiptSourcePath, null);
-            await _transactionService.AddPaymentAsync(new AddTransactionPaymentRequest { TransactionId = _transaction.TransactionId, Amount = _newPaymentAmountInput.Value, ModeOfPayment = _newPaymentModeComboBox.SelectedItem?.ToString() ?? "Cash", ReceiptFilePath = path }, _currentUserId);
-            MessageBoxHelper.ShowSuccess("Payment recorded."); await LoadPaymentsAsync();
-            Transaction? updated = await _transactionService.GetByIdAsync(_transaction.TransactionId);
-            if (updated != null) LoadMaintenanceData(updated);
-            _newPaymentAmountInput.Value = 0; _selectedReceiptSourcePath = null; _paymentProofPathLabel.Text = "No file selected";
-        } catch (Exception ex) { MessageBoxHelper.ShowError(ex.Message); }
-    }
+    private void DisableActions() { }
 
-    private void DisableActions() { _addPaymentPanel.Enabled = false; _submitPaymentButton.Visible = false; }
-
-    private async Task ExportDocumentAsync(Button b, bool isReceipt)
-    {
-        using SaveFileDialog sfd = new() { Filter = "PDF|*.pdf", FileName = $"{(isReceipt ? "Receipt" : "Invoice")}_{_transaction.TransactionCode}.pdf" };
-        if (sfd.ShowDialog() == DialogResult.OK) {
-            try {
-                if (isReceipt) await _documentExportService.ExportReceiptAsync(_transaction.TransactionId, sfd.FileName, GetSelectedDocumentFormat(), "System");
-                else await _documentExportService.ExportInvoiceAsync(_transaction.TransactionId, sfd.FileName, GetSelectedDocumentFormat(), "System");
-                if (MessageBoxHelper.ShowConfirmWarning("Open file?")) Process.Start(new ProcessStartInfo(sfd.FileName) { UseShellExecute = true });
-            } catch (Exception ex) { MessageBoxHelper.ShowError(ex.Message); }
-        }
-    }
-
-    private TransactionDocumentFormat GetSelectedDocumentFormat() => _documentFormatComboBox.SelectedItem?.ToString() switch { "Thermal 80mm" => TransactionDocumentFormat.Thermal80, "Thermal 57mm" => TransactionDocumentFormat.Thermal57, _ => TransactionDocumentFormat.StandardA4 };
-    private void ConfigureDocumentFormatComboBox() { _documentFormatComboBox.Items.AddRange(["Standard A4", "Thermal 80mm", "Thermal 57mm"]); _documentFormatComboBox.SelectedIndex = 0; }
     private void AddViewCell(int r, int c, string l, string v) => _viewLayout.Controls.Add(CreateReadOnlyValue(l, v), c, r);
-    private void ConfigureProofPicker(Button b, Button o, Label l) { o.Enabled = false; b.Click += (_, _) => { using OpenFileDialog ofd = new() { Filter = "Files|*.*" }; if (ofd.ShowDialog() == DialogResult.OK) { _selectedReceiptSourcePath = ofd.FileName; l.Text = Path.GetFileName(ofd.FileName); o.Enabled = true; } }; o.Click += (_, _) => OpenProof(_selectedReceiptSourcePath, null); }
     private static void OpenProof(string? s, string? t) { string? p = !string.IsNullOrWhiteSpace(s) && File.Exists(s) ? s : UploadPathHelper.ResolvePaymentReceiptPath(t); if (!string.IsNullOrWhiteSpace(p)) Process.Start(new ProcessStartInfo(p) { UseShellExecute = true }); }
-    private void PaymentsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e) { if (e.RowIndex >= 0 && _paymentsGrid.Columns[e.ColumnIndex].Name == "Proof" && e.Value?.ToString() == "View") { e.PaintBackground(e.CellBounds, true); float h = 22, w = 50, x = e.CellBounds.X + (e.CellBounds.Width - w) / 2, y = e.CellBounds.Y + (e.CellBounds.Height - h) / 2; using GraphicsPath path = CreateRoundedRect(new RectangleF(x, y, w, h), h / 2); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; using SolidBrush b = new(ThemeHelper.Primary); e.Graphics.FillPath(b, path); e.Graphics.DrawString("View", FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(x, y, w, h), new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center }); e.Handled = true; } }
-    private void PaymentsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e) { if (e.RowIndex >= 0 && _paymentsGrid.Columns[e.ColumnIndex].Name == "Proof" && _paymentsGrid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() == "View") OpenProof(null, _paymentsGrid.Rows[e.RowIndex].Cells["Path"].Value?.ToString()); }
+    private void PaymentsGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e) 
+    { 
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Graphics == null) return;
+        
+        if (_paymentsGrid.Columns[e.ColumnIndex].Name == "Proof" && e.Value?.ToString() == "View") 
+        { 
+            e.PaintBackground(e.CellBounds, true); 
+            float h = 22, w = 50;
+            float x = e.CellBounds.X + (e.CellBounds.Width - w) / 2;
+            float y = e.CellBounds.Y + (e.CellBounds.Height - h) / 2; 
+            
+            using GraphicsPath path = CreateRoundedRect(new RectangleF(x, y, w, h), h / 2); 
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; 
+            
+            using SolidBrush b = new(ThemeHelper.Primary); 
+            e.Graphics.FillPath(b, path); 
+            e.Graphics.DrawString("View", FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(x, y, w, h), new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center }); 
+            e.Handled = true; 
+        } 
+    }
+
+    private void PaymentsGrid_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e) 
+    { 
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || sender is not DataGridView grid) return;
+        
+        if (e.ColumnIndex >= grid.Columns.Count) return;
+        
+        var column = grid.Columns[e.ColumnIndex];
+        var row = grid.Rows[e.RowIndex];
+        
+        if (column.Name == "Proof" && row.Cells[e.ColumnIndex].Value?.ToString() == "View") 
+        { 
+            var pathValue = row.Cells["Path"].Value?.ToString();
+            OpenProof(null, pathValue); 
+        } 
+    }
     private static Panel CreateReadOnlyValue(string l, string v) { Panel p = new() { Dock = DockStyle.Fill }; p.Controls.Add(new Label { Text = l, AutoSize = false, Location = new Point(0, 0), Size = new Size(292, 18), Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary }); p.Controls.Add(new Label { Text = v, AutoSize = false, Location = new Point(0, 19), Size = new Size(292, 26), Font = FontHelper.Regular(10F), ForeColor = ThemeHelper.TextPrimary, AutoEllipsis = true }); return p; }
     private static Panel CreateInputPanel(string l, Control i, Point p) { Panel pan = new() { Location = p, Size = new Size(i.Width, i.Height + 24) }; Label lbl = ControlFactory.CreateInputLabel(l); lbl.Location = new Point(0, 0); i.Location = new Point(0, 22); pan.Controls.Add(lbl); pan.Controls.Add(i); return pan; }
     private static Panel CreateProofPickerPanel(string l, Label pl, Button b, Button o) { Panel p = new(); Label tl = ControlFactory.CreateInputLabel(l); tl.Location = new Point(0, 0); b.Location = new Point(0, 24); o.Location = new Point(96, 24); pl.Location = new Point(204, 29); p.Controls.AddRange([tl, b, o, pl]); return p; }

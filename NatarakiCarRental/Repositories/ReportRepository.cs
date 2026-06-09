@@ -1029,14 +1029,15 @@ public sealed class ReportRepository
                 FROM dbo.TransactionPayments tp
                 JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
                 WHERE tp.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
+                  AND t.TransactionType <> N'Maintenance'
                   AND tp.PaymentDate >= @From AND tp.PaymentDate <= @To
             );
 
             DECLARE @TotalOffsiteCost decimal(18,2) = (
-                SELECT ISNULL(SUM(ActualCost), 0)
-                FROM dbo.OffsiteRecords
-                WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}'
-                  AND CompletedDate >= @From AND CompletedDate <= @To
+                SELECT ISNULL(SUM(TotalAmount), 0)
+                FROM dbo.Transactions
+                WHERE IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
+                  AND CreatedAt >= @From AND CreatedAt <= @To
             );
 
             SELECT 
@@ -1044,9 +1045,9 @@ public sealed class ReportRepository
                 TotalOffsiteCost = @TotalOffsiteCost,
                 NetAfterOffsiteCost = @TotalRevenue - @TotalOffsiteCost,
                 CostToRevenueRatio = CASE WHEN @TotalRevenue > 0 THEN (@TotalOffsiteCost / @TotalRevenue) * 100 ELSE 0 END,
-                MaintenanceCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}' AND OffsiteType = N'{OffsiteConstants.Type.Maintenance}' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
-                RepairCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}' AND OffsiteType = N'{OffsiteConstants.Type.Repair}' AND CompletedDate >= @From AND CompletedDate <= @To), 0),
-                CleaningCost = ISNULL((SELECT SUM(ActualCost) FROM dbo.OffsiteRecords WHERE IsArchived = 0 AND [Status] = N'{OffsiteConstants.Status.Completed}' AND OffsiteType = N'{OffsiteConstants.Type.Cleaning}' AND CompletedDate >= @From AND CompletedDate <= @To), 0);
+                MaintenanceCost = @TotalOffsiteCost,
+                RepairCost = 0,
+                CleaningCost = 0;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -1061,10 +1062,10 @@ public sealed class ReportRepository
                 c.CarId,
                 CarDisplayName = c.CarName,
                 c.PlateNumber,
-                MaintenanceCount = COUNT(CASE WHEN o.OffsiteType = N'{OffsiteConstants.Type.Maintenance}' THEN 1 END),
-                RepairCount = COUNT(CASE WHEN o.OffsiteType = N'{OffsiteConstants.Type.Repair}' THEN 1 END),
-                CleaningCount = COUNT(CASE WHEN o.OffsiteType = N'{OffsiteConstants.Type.Cleaning}' THEN 1 END),
-                TotalOffsiteCost = SUM(ISNULL(o.ActualCost, 0)),
+                MaintenanceCount = COUNT(o.TransactionId),
+                RepairCount = 0,
+                CleaningCount = 0,
+                TotalOffsiteCost = SUM(ISNULL(o.TotalAmount, 0)),
                 RevenueGenerated = ISNULL((
                     SELECT SUM(tp.Amount)
                     FROM dbo.TransactionPayments tp
@@ -1073,6 +1074,7 @@ public sealed class ReportRepository
                       AND tp.IsArchived = 0 
                       AND t.IsArchived = 0 
                       AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
+                      AND t.TransactionType <> N'Maintenance'
                       AND tp.PaymentDate >= @From 
                       AND tp.PaymentDate <= @To
                 ), 0),
@@ -1084,18 +1086,20 @@ public sealed class ReportRepository
                       AND tp.IsArchived = 0 
                       AND t.IsArchived = 0 
                       AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
+                      AND t.TransactionType <> N'Maintenance'
                       AND tp.PaymentDate >= @From 
                       AND tp.PaymentDate <= @To
-                ), 0) - SUM(ISNULL(o.ActualCost, 0))
+                ), 0) - SUM(ISNULL(o.TotalAmount, 0))
             FROM dbo.Cars c
-            LEFT JOIN dbo.OffsiteRecords o ON o.CarId = c.CarId 
+            LEFT JOIN dbo.Transactions o ON o.CarId = c.CarId 
                 AND o.IsArchived = 0 
-                AND o.[Status] = N'{OffsiteConstants.Status.Completed}'
-                AND o.CompletedDate >= @From 
-                AND o.CompletedDate <= @To
+                AND o.TransactionType = N'Maintenance'
+                AND o.TransactionStatus = N'{TransactionConstants.Status.Completed}'
+                AND o.CreatedAt >= @From 
+                AND o.CreatedAt <= @To
             WHERE c.IsArchived = 0
             GROUP BY c.CarId, c.CarName, c.PlateNumber
-            HAVING SUM(ISNULL(o.ActualCost, 0)) > 0 OR (
+            HAVING SUM(ISNULL(o.TotalAmount, 0)) > 0 OR (
                 SELECT COUNT(1) 
                 FROM dbo.TransactionPayments tp
                 JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
@@ -1103,6 +1107,7 @@ public sealed class ReportRepository
                   AND tp.IsArchived = 0 
                   AND t.IsArchived = 0 
                   AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
+                  AND t.TransactionType <> N'Maintenance'
                   AND tp.PaymentDate >= @From 
                   AND tp.PaymentDate <= @To
             ) > 0
