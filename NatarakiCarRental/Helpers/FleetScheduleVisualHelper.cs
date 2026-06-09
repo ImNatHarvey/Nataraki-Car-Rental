@@ -52,8 +52,7 @@ public static class FleetScheduleVisualHelper
             return CompletedColor;
         }
 
-        if (status == FleetScheduleConstants.Status.Ongoing
-            || scheduleType == FleetScheduleConstants.Type.Maintenance)
+        if (status == FleetScheduleConstants.Status.Ongoing || status == FleetScheduleConstants.Status.Maintenance)
         {
             return MaintenanceColor;
         }

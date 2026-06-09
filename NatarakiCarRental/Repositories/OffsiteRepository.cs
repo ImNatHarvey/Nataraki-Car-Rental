@@ -165,14 +165,16 @@ public sealed class OffsiteRepository
             (
                 CarId, FleetScheduleId, OffsiteType, Status, LocationName,
                 ContactPerson, ContactNumber, StartDate, ExpectedReturnDate,
-                EstimatedCost, ActualCost, Notes, CreatedByUserId, ProofFilePath
+                EstimatedCost, ActualCost, AmountPaid, BalanceAmount, ModeOfPayment, PaymentStatus,
+                Notes, CreatedByUserId, ProofFilePath
             )
             OUTPUT INSERTED.OffsiteRecordId
             VALUES
             (
                 @CarId, @FleetScheduleId, @OffsiteType, @Status, @LocationName,
                 @ContactPerson, @ContactNumber, @StartDate, @ExpectedReturnDate,
-                @EstimatedCost, @ActualCost, @Notes, @CreatedByUserId, @ProofFilePath
+                @EstimatedCost, @ActualCost, @AmountPaid, @BalanceAmount, @ModeOfPayment, @PaymentStatus,
+                @Notes, @CreatedByUserId, @ProofFilePath
             );
             """;
 
@@ -200,6 +202,10 @@ public sealed class OffsiteRepository
                 ExpectedReturnDate = @ExpectedReturnDate,
                 EstimatedCost = @EstimatedCost,
                 ActualCost = @ActualCost,
+                AmountPaid = @AmountPaid,
+                BalanceAmount = @BalanceAmount,
+                ModeOfPayment = @ModeOfPayment,
+                PaymentStatus = @PaymentStatus,
                 Notes = @Notes,
                 ProofFilePath = @ProofFilePath,
                 UpdatedAt = sysdatetime()

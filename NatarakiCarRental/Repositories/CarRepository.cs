@@ -25,11 +25,7 @@ public sealed class CarRepository
             SELECT 
                 c.*,
                 CASE 
-                    WHEN EXISTS (
-                        SELECT 1 FROM dbo.OffsiteRecords o 
-                        WHERE o.CarId = c.CarId AND o.Status = N'{OffsiteConstants.Status.Ongoing}' AND o.IsArchived = 0
-                          AND o.OffsiteType IN @MaintenanceTypes
-                    ) THEN N'{CarConstants.Status.Maintenance}'
+                    WHEN c.IsArchived = 1 THEN N'{CarConstants.Status.Archived}'
                     WHEN EXISTS (
                         SELECT 1 FROM dbo.Transactions t 
                         WHERE t.CarId = c.CarId AND t.TransactionStatus = N'{TransactionConstants.Status.Active}' AND t.IsArchived = 0
@@ -37,6 +33,11 @@ public sealed class CarRepository
                         SELECT 1 FROM dbo.FleetSchedules s 
                         WHERE s.CarId = c.CarId AND s.ScheduleType = N'{FleetScheduleConstants.Type.Rental}' AND s.Status IN @ActiveRentalStatuses AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
                     ) THEN N'{CarConstants.Status.Rented}'
+                    WHEN EXISTS (
+                        SELECT 1 FROM dbo.OffsiteRecords o 
+                        WHERE o.CarId = c.CarId AND o.Status = N'{OffsiteConstants.Status.Ongoing}' AND o.IsArchived = 0
+                          AND o.OffsiteType IN @MaintenanceTypes AND o.StartDate <= @ReferenceDate AND ISNULL(o.ExpectedReturnDate, @ReferenceDate) >= @ReferenceDate
+                    ) THEN N'{CarConstants.Status.Maintenance}'
                     WHEN EXISTS (
                         SELECT 1 FROM dbo.FleetSchedules s 
                         WHERE s.CarId = c.CarId AND s.ScheduleType = N'{FleetScheduleConstants.Type.Reservation}' AND s.Status IN @ActiveReservationStatuses AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate

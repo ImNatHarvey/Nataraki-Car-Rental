@@ -244,6 +244,11 @@ public sealed class TransactionService
 
         decimal totalAmount = CalculateTotalAmount(request.StartDate.Date, request.EndDate.Date, dailyRate);
 
+        if (transactionType == FleetScheduleConstants.Type.Rental && request.StartDate.Date > DateTime.Today)
+        {
+            throw Validation(nameof(CreateWalkInTransactionRequest.StartDate), "Cannot start a direct rental for a future date. Create a reservation instead.");
+        }
+
         if (transactionType == FleetScheduleConstants.Type.Rental && request.AmountPaid < totalAmount)
         {
             throw Validation(nameof(CreateWalkInTransactionRequest.AmountPaid), "Direct rental requires full payment before the car can be released.");
@@ -618,10 +623,6 @@ public sealed class TransactionService
                 throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found.");
             }
 
-            schedule.EndDate = newEndDate.Date;
-
-            await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
-
             if (amountPaid > 0)
             {
                 await _transactionPaymentRepository.AddAsync(new TransactionPayment
@@ -639,6 +640,13 @@ public sealed class TransactionService
 
             decimal finalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transactionId, dbTransaction);
             string finalPaymentStatus = GetPaymentStatus(finalPaid, finalTotal);
+
+            if (finalPaymentStatus == TransactionConstants.PaymentStatus.Paid)
+            {
+                schedule.EndDate = newEndDate.Date;
+                await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
+                await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
+            }
 
             // Optimized: Update Transaction with new end date and commercial summary
             // (Values already recalculated above, no need for separate summary fetch)
@@ -787,6 +795,7 @@ public sealed class TransactionService
             // Optimized: Passing transaction object to avoid re-fetch in recalculation
             await RecalculatePaymentSummaryInternalAsync(request.TransactionId, transaction, dbTransaction);
             await SyncReservationTransactionPaymentStatusAsync(transaction, dbTransaction);
+            await SyncRentalTransactionScheduleAsync(transaction, dbTransaction);
 
             await _activityLogService.LogAsync(
                 action: "Updated",
@@ -1184,6 +1193,26 @@ public sealed class TransactionService
         schedule.Status = scheduleStatus;
         await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
         await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
+    }
+
+    private async Task SyncRentalTransactionScheduleAsync(Transaction transaction, SqlTransaction dbTransaction)
+    {
+        if (transaction.TransactionStatus != TransactionConstants.Status.Active)
+            return;
+
+        decimal totalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transaction.TransactionId, dbTransaction);
+        string paymentStatus = GetPaymentStatus(totalPaid, transaction.TotalAmount);
+
+        if (paymentStatus == TransactionConstants.PaymentStatus.Paid)
+        {
+            FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
+            if (schedule != null && !schedule.IsArchived && schedule.EndDate.Date != transaction.EndDate.Date)
+            {
+                schedule.EndDate = transaction.EndDate.Date;
+                await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
+                await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
+            }
+        }
     }
 
     private async Task<string> GenerateTransactionCodeAsync(SqlTransaction dbTransaction)

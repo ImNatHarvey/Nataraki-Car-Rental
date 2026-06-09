@@ -153,20 +153,26 @@ public sealed class OffsiteService
                 finalProofPath = await UploadPathHelper.SaveOffsiteProofAsync(request.ProofFilePath);
             }
 
+            string initialStatus = request.AmountPaid > 0 ? OffsiteConstants.Status.Reserved : OffsiteConstants.Status.Pending;
+
             // 3. Create OffsiteRecord
             OffsiteRecord record = new()
             {
                 CarId = request.CarId,
                 FleetScheduleId = scheduleId,
                 OffsiteType = request.OffsiteType,
-                Status = "Ongoing",
+                Status = initialStatus,
                 LocationName = request.LocationName,
                 ContactPerson = request.ContactPerson,
                 ContactNumber = request.ContactNumber,
                 StartDate = request.StartDate,
                 ExpectedReturnDate = request.ExpectedReturnDate,
                 EstimatedCost = 0,
-                ActualCost = request.AmountPaid,
+                ActualCost = 0,
+                AmountPaid = request.AmountPaid,
+                BalanceAmount = 0 - request.AmountPaid, // Balance will be calculated at completion when actual cost is known
+                ModeOfPayment = request.ModeOfPayment,
+                PaymentStatus = request.AmountPaid > 0 ? "Partial" : "Unpaid",
                 ProofFilePath = finalProofPath,
                 CreatedByUserId = _currentUserId
             };

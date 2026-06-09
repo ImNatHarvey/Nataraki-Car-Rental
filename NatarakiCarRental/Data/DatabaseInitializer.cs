@@ -1317,9 +1317,24 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.OffsiteRecords ADD ProofFilePath nvarchar(500) NULL;
                 END;
 
-                IF COL_LENGTH(N'dbo.OffsiteRecords', N'WorkResult') IS NULL
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'AmountPaid') IS NULL
                 BEGIN
-                    ALTER TABLE dbo.OffsiteRecords ADD WorkResult nvarchar(50) NULL;
+                    ALTER TABLE dbo.OffsiteRecords ADD AmountPaid decimal(18,2) NOT NULL CONSTRAINT DF_OffsiteRecords_AmountPaid DEFAULT 0;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'BalanceAmount') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD BalanceAmount decimal(18,2) NOT NULL CONSTRAINT DF_OffsiteRecords_BalanceAmount DEFAULT 0;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'ModeOfPayment') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD ModeOfPayment nvarchar(50) NOT NULL CONSTRAINT DF_OffsiteRecords_ModeOfPayment DEFAULT N'None / Not Applicable';
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'PaymentStatus') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD PaymentStatus nvarchar(50) NOT NULL CONSTRAINT DF_OffsiteRecords_PaymentStatus DEFAULT N'Unpaid';
                 END;
 
                 IF COL_LENGTH(N'dbo.OffsiteRecords', N'FollowUpRequired') IS NULL

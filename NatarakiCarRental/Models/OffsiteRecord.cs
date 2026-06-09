@@ -15,6 +15,10 @@ public sealed class OffsiteRecord
     public DateTime? CompletedDate { get; set; }
     public decimal EstimatedCost { get; set; }
     public decimal ActualCost { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal BalanceAmount { get; set; }
+    public string ModeOfPayment { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
     public string? ProofFilePath { get; set; }
     public string? WorkResult { get; set; }
     public bool FollowUpRequired { get; set; }

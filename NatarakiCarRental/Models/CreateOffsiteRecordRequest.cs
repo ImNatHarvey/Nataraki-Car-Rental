@@ -10,6 +10,7 @@ public sealed class CreateOffsiteRecordRequest
     public DateTime StartDate { get; set; }
     public DateTime? ExpectedReturnDate { get; set; }
     public decimal AmountPaid { get; set; }
+    public string ModeOfPayment { get; set; } = string.Empty;
     public string? ProofFilePath { get; set; }
     public int? FleetScheduleId { get; set; }
 }

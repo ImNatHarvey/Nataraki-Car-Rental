@@ -10,5 +10,6 @@ public sealed class UpdateOffsiteRecordRequest
     public DateTime StartDate { get; set; }
     public DateTime? ExpectedReturnDate { get; set; }
     public decimal AmountPaid { get; set; }
+    public string ModeOfPayment { get; set; } = string.Empty;
     public string? ProofFilePath { get; set; }
 }

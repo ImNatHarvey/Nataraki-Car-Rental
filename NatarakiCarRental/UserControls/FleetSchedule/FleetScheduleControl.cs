@@ -113,12 +113,28 @@ public sealed class FleetScheduleControl : UserControl
             Padding = new Padding(0, 7, 0, 0)
         };
 
+        // Reservation Category
+        Label resLabel = new() { Text = "Reservation:", Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
+        panel.Controls.Add(resLabel);
         AddLegendItem(panel, "Pending", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Pending));
         AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Reserved));
         AddLegendItem(panel, "Rented", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Rented));
-        AddLegendItem(panel, "Maintenance", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Type.Maintenance));
         AddLegendItem(panel, "Completed", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Completed));
         AddLegendItem(panel, "Cancelled", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Cancelled));
+
+        // Separator
+        Label sep = new() { Text = " | ", Font = FontHelper.Regular(9F), ForeColor = ThemeHelper.Border, AutoSize = true, Margin = new Padding(8, 4, 8, 0) };
+        panel.Controls.Add(sep);
+
+        // Maintenance Category
+        Label maintLabel = new() { Text = "Maintenance:", Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
+        panel.Controls.Add(maintLabel);
+        AddLegendItem(panel, "Pending", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Pending));
+        AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Reserved));
+        AddLegendItem(panel, "Maintenance", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Maintenance));
+        AddLegendItem(panel, "Completed", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Completed));
+        AddLegendItem(panel, "Cancelled", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Cancelled));
+        
         return panel;
     }
 

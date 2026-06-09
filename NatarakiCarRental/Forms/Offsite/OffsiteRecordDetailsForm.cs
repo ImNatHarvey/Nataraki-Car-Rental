@@ -40,6 +40,7 @@ public sealed class OffsiteRecordDetailsForm : Form
     private readonly TextBox _scheduleLocationTextBox = ControlFactory.CreateTextBox(InputWidth);
     private readonly TextBox _scheduleContactPersonTextBox = ControlFactory.CreateTextBox(InputWidth);
     private readonly TextBox _scheduleContactNumberTextBox = ControlFactory.CreateTextBox(InputWidth);
+    private readonly ComboBox _scheduleModeOfPaymentComboBox = CreateComboBox();
     private readonly NumericUpDown _scheduleAmountPaidInput = CreateMoneyInput();
     private readonly Label _scheduleProofPathLabel = CreatePathLabel();
     private readonly Button _scheduleBrowseProofButton = CreateSecondaryButton("Browse", 90, InputHeight);
@@ -52,6 +53,7 @@ public sealed class OffsiteRecordDetailsForm : Form
     private readonly TextBox _contactNumberTextBox = ControlFactory.CreateTextBox(InputWidth);
     private readonly DateTimePicker _startDatePicker = CreateDatePicker();
     private readonly DateTimePicker _expectedReturnPicker = CreateDatePicker();
+    private readonly ComboBox _modeOfPaymentComboBox = CreateComboBox();
     private readonly NumericUpDown _amountPaidInput = CreateMoneyInput();
     private readonly NumericUpDown _actualCostInput = CreateMoneyInput();
     private readonly DateTimePicker _completedDatePicker = CreateDatePicker();
@@ -200,7 +202,8 @@ public sealed class OffsiteRecordDetailsForm : Form
             (_scheduleLocationTextBox, _scheduleContactNumberTextBox, null));
         GroupBox payment = CreatePaymentSection(
             new Point(left, 449),
-            new Size(width, 128),
+            new Size(width, 146),
+            _scheduleModeOfPaymentComboBox,
             _scheduleAmountPaidInput,
             _scheduleProofPathLabel,
             _scheduleBrowseProofButton,
@@ -230,7 +233,8 @@ public sealed class OffsiteRecordDetailsForm : Form
             (_locationTextBox, _contactNumberTextBox, _expectedReturnPicker));
         GroupBox payment = CreatePaymentSection(
             new Point(left, 343),
-            new Size(width, includeCompletionFields ? 160 : 128),
+            new Size(width, includeCompletionFields ? 204 : 146),
+            _modeOfPaymentComboBox,
             _amountPaidInput,
             _proofPathLabel,
             _browseProofButton,
@@ -243,7 +247,7 @@ public sealed class OffsiteRecordDetailsForm : Form
 
         if (_mode == FormMode.View)
         {
-            layout.Controls.Add(CreateAuditSection(new Point(left, 517), new Size(width, 176)));
+            layout.Controls.Add(CreateAuditSection(new Point(left, 560), new Size(width, 176)));
         }
 
         return layout;
@@ -258,7 +262,7 @@ public sealed class OffsiteRecordDetailsForm : Form
         if (includeCompletionFields)
         {
             layout.Controls.Add(CreateInputPanel("Completed Date *", _completedDatePicker), 0, 1);
-            layout.Controls.Add(CreateInputPanel("Amount Paid (₱) *", _actualCostInput), 1, 1);
+            layout.Controls.Add(CreateInputPanel("Actual Cost (₱) *", _actualCostInput), 1, 1);
         }
 
         return layout;
@@ -322,6 +326,7 @@ public sealed class OffsiteRecordDetailsForm : Form
     private GroupBox CreatePaymentSection(
         Point location,
         Size size,
+        ComboBox modeOfPaymentComboBox,
         NumericUpDown costInput,
         Label pathLabel,
         Button browseButton,
@@ -329,13 +334,14 @@ public sealed class OffsiteRecordDetailsForm : Form
         bool includeCompletionFields)
     {
         GroupBox group = CreateBaseSection("Payment Information", location, size);
-        AddPositionedInput(group, "Amount Paid (₱)", costInput, new Point(24, 30), InputWidth);
-        AddPositionedProof(group, "Proof / Receipt", pathLabel, browseButton, openButton, new Point(486, 30));
+        AddPositionedInput(group, "Mode of Payment *", modeOfPaymentComboBox, new Point(24, 30), InputWidth);
+        AddPositionedInput(group, "Amount Paid (₱)", costInput, new Point(486, 30), InputWidth);
+        AddPositionedProof(group, "Proof / Receipt", pathLabel, browseButton, openButton, new Point(24, 88));
 
         if (includeCompletionFields)
         {
-            AddPositionedInput(group, "Completed Date *", _completedDatePicker, new Point(24, 88), InputWidth);
-            AddPositionedInput(group, "Amount Paid (₱) *", _actualCostInput, new Point(486, 88), InputWidth);
+            AddPositionedInput(group, "Completed Date *", _completedDatePicker, new Point(486, 88), InputWidth);
+            AddPositionedInput(group, "Actual Cost (₱) *", _actualCostInput, new Point(24, 146), InputWidth);
         }
 
         return group;
@@ -422,6 +428,12 @@ public sealed class OffsiteRecordDetailsForm : Form
     {
         _typeComboBox.Items.AddRange(["Maintenance", "Repair", "Cleaning"]);
         _scheduleTypeComboBox.Items.AddRange(["Maintenance", "Repair", "Cleaning"]);
+        
+        string[] modes = ["Cash", "GCash", "Bank Transfer", "Other"];
+        _modeOfPaymentComboBox.Items.AddRange(modes);
+        _scheduleModeOfPaymentComboBox.Items.AddRange(modes);
+        _modeOfPaymentComboBox.SelectedIndex = 0;
+        _scheduleModeOfPaymentComboBox.SelectedIndex = 0;
 
         foreach (Control input in GetInputControls())
         {
@@ -580,7 +592,12 @@ public sealed class OffsiteRecordDetailsForm : Form
         _contactNumberTextBox.Text = record.ContactNumber;
         _startDatePicker.Value = record.StartDate;
         _expectedReturnPicker.Value = record.ExpectedReturnDate ?? record.StartDate;
-        _amountPaidInput.Value = record.ActualCost;
+        _amountPaidInput.Value = record.AmountPaid;
+
+        if (!string.IsNullOrWhiteSpace(record.ModeOfPayment))
+        {
+            _modeOfPaymentComboBox.SelectedItem = record.ModeOfPayment;
+        }
 
         if (!string.IsNullOrWhiteSpace(record.ProofFilePath))
         {
@@ -711,6 +728,7 @@ public sealed class OffsiteRecordDetailsForm : Form
                     StartDate = _startDatePicker.Value.Date,
                     ExpectedReturnDate = _expectedReturnPicker.Value.Date,
                     AmountPaid = _amountPaidInput.Value,
+                    ModeOfPayment = _modeOfPaymentComboBox.SelectedItem?.ToString() ?? "Cash",
                     ProofFilePath = _selectedProofPath ?? _record?.ProofFilePath
                 });
             }
@@ -761,6 +779,7 @@ public sealed class OffsiteRecordDetailsForm : Form
                 StartDate = schedule.Start.Date,
                 ExpectedReturnDate = schedule.End.Date,
                 AmountPaid = _scheduleAmountPaidInput.Value,
+                ModeOfPayment = _scheduleModeOfPaymentComboBox.SelectedItem?.ToString() ?? "Cash",
                 ProofFilePath = _selectedProofPath
             };
         }
@@ -780,6 +799,7 @@ public sealed class OffsiteRecordDetailsForm : Form
             StartDate = _startDatePicker.Value.Date,
             ExpectedReturnDate = _expectedReturnPicker.Value.Date,
             AmountPaid = _amountPaidInput.Value,
+            ModeOfPayment = _modeOfPaymentComboBox.SelectedItem?.ToString() ?? "Cash",
             ProofFilePath = _selectedProofPath
         };
     }
