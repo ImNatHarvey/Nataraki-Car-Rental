@@ -154,10 +154,10 @@ public sealed class TransactionControl : UserControl
         {
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
         }
-        AddMetricCard(grid, _totalTransactionsCard, IconChar.Receipt, "Total Transactions", 0, "Active records", ThemeHelper.Primary);
-        AddMetricCard(grid, _activeRentalsCard, IconChar.Key, "Active Rentals", 1, "Currently open", ThemeHelper.Success);
-        AddMetricCard(grid, _unpaidTransactionsCard, IconChar.Wallet, "Unpaid Transactions", 2, "Needs settlement", ThemeHelper.Warning);
-        AddMetricCard(grid, _completedThisMonthCard, IconChar.CircleCheck, "Completed This Month", 3, "Closed rentals", ThemeHelper.GrayIcon);
+        AddMetricCard(grid, _totalTransactionsCard, IconChar.Receipt, "Total Transactions", 0, "Active records", StatusColorHelper.GetStatusIconColor("Scheduled"));
+        AddMetricCard(grid, _activeRentalsCard, IconChar.Key, "Active Rentals", 1, "Currently open", StatusColorHelper.GetStatusIconColor("Active"));
+        AddMetricCard(grid, _unpaidTransactionsCard, IconChar.Wallet, "Unpaid Transactions", 2, "Needs settlement", StatusColorHelper.GetStatusIconColor("Unpaid"));
+        AddMetricCard(grid, _completedThisMonthCard, IconChar.CircleCheck, "Completed This Month", 3, "Closed rentals", StatusColorHelper.GetStatusIconColor("Completed"));
         return grid;
     }
 
@@ -407,10 +407,10 @@ public sealed class TransactionControl : UserControl
 
     private void UpdateMetricCards(TransactionMetrics metrics)
     {
-        _totalTransactionsCard.SetMetric(IconChar.Receipt, "Total Transactions", metrics.TotalTransactions.ToString(), "Active records", ThemeHelper.Primary);
-        _activeRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveTransactions.ToString(), "Currently open", ThemeHelper.Success);
-        _unpaidTransactionsCard.SetMetric(IconChar.Wallet, "Unpaid Transactions", metrics.UnpaidTransactions.ToString(), "Needs settlement", ThemeHelper.Warning);
-        _completedThisMonthCard.SetMetric(IconChar.CircleCheck, "Completed This Month", metrics.CompletedTransactions.ToString(), "Closed rentals", ThemeHelper.GrayIcon);
+        _totalTransactionsCard.SetMetric(IconChar.Receipt, "Total Transactions", metrics.TotalTransactions.ToString(), "Active records", StatusColorHelper.GetStatusIconColor("Scheduled"));
+        _activeRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveTransactions.ToString(), "Currently open", StatusColorHelper.GetStatusIconColor("Active"));
+        _unpaidTransactionsCard.SetMetric(IconChar.Wallet, "Unpaid Transactions", metrics.UnpaidTransactions.ToString(), "Needs settlement", StatusColorHelper.GetStatusIconColor("Unpaid"));
+        _completedThisMonthCard.SetMetric(IconChar.CircleCheck, "Completed This Month", metrics.CompletedTransactions.ToString(), "Closed rentals", StatusColorHelper.GetStatusIconColor("Completed"));
     }
 
     private void PopulateGrid(IReadOnlyList<TransactionListItem> allTransactions)
@@ -445,7 +445,6 @@ public sealed class TransactionControl : UserControl
             }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Reserved)
             {
-                actions += "|Edit";
                 if (!isPaid) actions += "|Payment";
                 if (transaction.StartDate.Date <= DateTime.Today) actions += "|Start Rental";
                 actions += "|Cancel";

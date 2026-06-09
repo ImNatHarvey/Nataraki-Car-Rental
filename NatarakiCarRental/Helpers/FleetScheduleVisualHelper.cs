@@ -5,9 +5,6 @@ namespace NatarakiCarRental.Helpers;
 
 public static class FleetScheduleVisualHelper
 {
-    private static readonly Color MaintenanceColor = Color.FromArgb(234, 88, 12);
-    private static readonly Color CompletedColor = Color.FromArgb(71, 85, 105);
-
     public static IReadOnlyList<StatusDisplayOption> StatusOptions { get; } =
         FleetScheduleConstants.Status.All.Select(status => new StatusDisplayOption(status, status)).ToList();
 
@@ -42,28 +39,7 @@ public static class FleetScheduleVisualHelper
 
     public static Color GetColor(string status, string? scheduleType = null)
     {
-        if (status == FleetScheduleConstants.Status.Cancelled)
-        {
-            return ThemeHelper.Danger;
-        }
-
-        if (status == FleetScheduleConstants.Status.Completed)
-        {
-            return CompletedColor;
-        }
-
-        if (status == FleetScheduleConstants.Status.Ongoing || status == FleetScheduleConstants.Status.Maintenance)
-        {
-            return MaintenanceColor;
-        }
-
-        return status switch
-        {
-            FleetScheduleConstants.Status.Pending => ThemeHelper.Warning,
-            FleetScheduleConstants.Status.Reserved => ThemeHelper.Primary,
-            FleetScheduleConstants.Status.Rented => ThemeHelper.Success,
-            _ => ThemeHelper.GrayIcon
-        };
+        return StatusColorHelper.GetStatusColor(status);
     }
 
     public static GraphicsPath CreateRoundedRectanglePath(Rectangle rect, int radius)

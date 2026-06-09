@@ -133,14 +133,14 @@ public sealed class OverviewControl : UserControl
         for (int i = 0; i < 2; i++) _metricGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
 
         AddMetricCard(_metricGrid, _totalCarsCard, IconChar.Car, "Total Cars", 0, 0, "All active vehicles");
-        AddMetricCard(_metricGrid, _availableCarsCard, IconChar.CircleCheck, "Available Cars", 1, 0, "Ready for rental", ThemeHelper.Success);
-        AddMetricCard(_metricGrid, _maintenanceCarsCard, IconChar.ScrewdriverWrench, "Under Maintenance", 2, 0, "Cars in repair", ThemeHelper.Danger);
-        AddMetricCard(_metricGrid, _activeCustomersCard, IconChar.Users, "Active Customers", 3, 0, "Non-blacklisted", ThemeHelper.Primary);
+        AddMetricCard(_metricGrid, _availableCarsCard, IconChar.CircleCheck, "Available Cars", 1, 0, "Ready for rental", StatusColorHelper.GetStatusIconColor("Available"));
+        AddMetricCard(_metricGrid, _maintenanceCarsCard, IconChar.ScrewdriverWrench, "Under Maintenance", 2, 0, "Cars in repair", StatusColorHelper.GetStatusIconColor("Maintenance"));
+        AddMetricCard(_metricGrid, _activeCustomersCard, IconChar.Users, "Active Customers", 3, 0, "Non-blacklisted", StatusColorHelper.GetStatusIconColor("Active"));
         
-        AddMetricCard(_metricGrid, _blacklistedCustomersCard, IconChar.UserSlash, "Blacklisted", 0, 1, "Customers in blacklist", ThemeHelper.Danger);
-        AddMetricCard(_metricGrid, _todaysSchedulesCard, IconChar.CalendarDay, "Today's Schedules", 1, 1, "Operations for today", ThemeHelper.Warning);
-        AddMetricCard(_metricGrid, _upcomingSchedulesCard, IconChar.CalendarWeek, "Upcoming Schedules", 2, 1, "Next 7 days", ThemeHelper.Primary);
-        AddMetricCard(_metricGrid, _activeMaintenanceCard, IconChar.Tools, "Active Maintenance", 3, 1, "Currently ongoing", ThemeHelper.Secondary);
+        AddMetricCard(_metricGrid, _blacklistedCustomersCard, IconChar.UserSlash, "Blacklisted", 0, 1, "Customers in blacklist", StatusColorHelper.GetStatusIconColor("Blacklisted"));
+        AddMetricCard(_metricGrid, _todaysSchedulesCard, IconChar.CalendarDay, "Today's Schedules", 1, 1, "Operations for today", StatusColorHelper.GetStatusIconColor("Pending"));
+        AddMetricCard(_metricGrid, _upcomingSchedulesCard, IconChar.CalendarWeek, "Upcoming Schedules", 2, 1, "Next 7 days", StatusColorHelper.GetStatusIconColor("Scheduled"));
+        AddMetricCard(_metricGrid, _activeMaintenanceCard, IconChar.Tools, "Active Maintenance", 3, 1, "Currently ongoing", StatusColorHelper.GetStatusIconColor("Maintenance"));
 
         return _metricGrid;
     }
@@ -389,14 +389,14 @@ public sealed class OverviewControl : UserControl
     private void UpdateTopKPICards(CarCounts cars, CustomerCounts customers, FleetScheduleOverviewCounts schedules)
     {
         _totalCarsCard.SetMetric(IconChar.Car, "Total Cars", cars.TotalCars.ToString(), "All active vehicles");
-        _availableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", cars.AvailableCars.ToString(), "Ready for rental", ThemeHelper.Success);
-        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Under Maintenance", cars.MaintenanceCars.ToString(), "Cars in repair", ThemeHelper.Danger);
-        _activeCustomersCard.SetMetric(IconChar.Users, "Active Customers", customers.ActiveCustomers.ToString(), "Non-blacklisted", ThemeHelper.Primary);
+        _availableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", cars.AvailableCars.ToString(), "Ready for rental", StatusColorHelper.GetStatusIconColor("Available"));
+        _maintenanceCarsCard.SetMetric(IconChar.ScrewdriverWrench, "Under Maintenance", cars.MaintenanceCars.ToString(), "Cars in repair", StatusColorHelper.GetStatusIconColor("Maintenance"));
+        _activeCustomersCard.SetMetric(IconChar.Users, "Active Customers", customers.ActiveCustomers.ToString(), "Non-blacklisted", StatusColorHelper.GetStatusIconColor("Active"));
         
-        _blacklistedCustomersCard.SetMetric(IconChar.UserSlash, "Blacklisted", customers.BlacklistedCustomers.ToString(), "In blacklist", ThemeHelper.Danger);
-        _todaysSchedulesCard.SetMetric(IconChar.CalendarDay, "Today's Schedules", schedules.TodaysSchedules.ToString(), "Due for today", ThemeHelper.Warning);
-        _upcomingSchedulesCard.SetMetric(IconChar.CalendarWeek, "Upcoming Schedules", schedules.UpcomingSchedules.ToString(), "Next 7 days", ThemeHelper.Primary);
-        _activeMaintenanceCard.SetMetric(IconChar.Tools, "Active Maintenance", schedules.ActiveMaintenanceSchedules.ToString(), "Currently ongoing", ThemeHelper.Secondary);
+        _blacklistedCustomersCard.SetMetric(IconChar.UserSlash, "Blacklisted", customers.BlacklistedCustomers.ToString(), "In blacklist", StatusColorHelper.GetStatusIconColor("Blacklisted"));
+        _todaysSchedulesCard.SetMetric(IconChar.CalendarDay, "Today's Schedules", schedules.TodaysSchedules.ToString(), "Due for today", StatusColorHelper.GetStatusIconColor("Pending"));
+        _upcomingSchedulesCard.SetMetric(IconChar.CalendarWeek, "Upcoming Schedules", schedules.UpcomingSchedules.ToString(), "Next 7 days", StatusColorHelper.GetStatusIconColor("Scheduled"));
+        _activeMaintenanceCard.SetMetric(IconChar.Tools, "Active Maintenance", schedules.ActiveMaintenanceSchedules.ToString(), "Currently ongoing", StatusColorHelper.GetStatusIconColor("Maintenance"));
     }
 
     private void PopulateInsightsTable(DashboardOperationalData data)

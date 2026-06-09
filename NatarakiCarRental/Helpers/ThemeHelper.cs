@@ -70,7 +70,8 @@ public static class ThemeHelper
     public static Color GetDialogButtonColor(string type) => GetDialogAccentColor(type);
     public static Color GetDialogIconColor(string type) => GetDialogAccentColor(type);
 
-    public static readonly Color Secondary = Color.FromArgb(219, 234, 254);
+    public static readonly Color Secondary = Color.FromArgb(219, 234, 254); // Light Blue (Original Navigation Accent)
+    public static readonly Color StatusGray = Color.FromArgb(71, 85, 105); // Dark Gray (Slate-600) for Completed/Archived
     public static readonly Color Purple = Color.FromArgb(124, 58, 237);
     public static readonly Color GrayIcon = Color.FromArgb(100, 116, 139);
     public static readonly Color TextPrimary = Color.FromArgb(30, 41, 59);

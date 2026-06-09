@@ -157,29 +157,22 @@ public static class DataGridViewHelper
             "Edit" or "Payment" or "Start Rental" or "Remove Blacklist" or "Restore" or "Complete" => ThemeHelper.Success,
             "Cancel" or "Archive" or "Blacklist" => ThemeHelper.Danger,
             "Extend" => ThemeHelper.Warning,
-            "Mark as Read" => ThemeHelper.Secondary,
+            "Mark as Read" => ThemeHelper.StatusGray,
             _ => ThemeHelper.GrayIcon
         };
     }
 
     public static Color GetStatusColor(string status)
     {
-        return status switch
-        {
-            "Active" or "Available" or "Paid" or "Rented" or "Ongoing" or "High" => ThemeHelper.Success,
-            "Reserved" or "Pending" or "Medium" => ThemeHelper.Warning,
-            "Cancelled" or "Maintenance" or "Blacklisted" or "Unpaid" or "Overdue" or "OVERDUE" or "Danger" => ThemeHelper.Danger,
-            "Completed" or "Archived" or "Partial" or "Low" => ThemeHelper.GrayIcon,
-            _ => ThemeHelper.Primary
-        };
+        return StatusColorHelper.GetStatusColor(status);
     }
 
     private static void RenderStatusPill(DataGridViewCellPaintingEventArgs e, string text, ContentAlignment alignment)
     {
         if (e.Graphics is null) return;
 
-        Color backColor = GetStatusColor(text);
-        Color foreColor = ThemeHelper.GetContrastTextColor(backColor);
+        Color backColor = StatusColorHelper.GetStatusColor(text);
+        Color foreColor = StatusColorHelper.GetStatusForeColor(text);
         Font font = e.CellStyle?.Font ?? FontHelper.SemiBold(8.5F);
 
         SizeF textSize = e.Graphics.MeasureString(text, font);
