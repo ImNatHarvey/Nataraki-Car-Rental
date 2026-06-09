@@ -224,7 +224,7 @@ public sealed class FleetScheduleRepository
             new
             {
                 MaintenanceType = FleetScheduleConstants.Type.Maintenance,
-                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Scheduled }
+                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Pending }
             });
 
         return (schedules ?? Enumerable.Empty<FleetSchedule>()).ToList();

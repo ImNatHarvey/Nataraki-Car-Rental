@@ -112,6 +112,21 @@ public sealed class OffsiteControl : UserControl
         _demoTimer.Interval = (int)DemoInterval.TotalMilliseconds;
         _demoTimer.Tick += async (_, _) => await InsertDemoLocationAsync();
         _recordsSearchTimer.Tick += RecordsSearchTimer_Tick;
+
+        // Wire up events once
+        _mapTrackingTabButton.Click += (_, _) => ShowMapTrackingView();
+        _maintenanceTabButton.Click += async (_, _) => await ShowMaintenanceViewAsync();
+        _carComboBox.SelectedIndexChanged += async (_, _) => await RefreshSelectedCarLocationAsync(true);
+        _refreshButton.Click += async (_, _) => await RefreshSelectedCarLocationAsync(true);
+        _startTrackingButton.Click += async (_, _) => await StartDemoTrackingAsync();
+        _stopTrackingButton.Click += (_, _) => StopDemoTracking();
+        _createTransactionButton.Click += CreateTransactionButton_Click;
+        _recordsSubTabButton.Click += RecordsSubTabButton_Click;
+        _archivedSubTabButton.Click += ArchivedSubTabButton_Click;
+        _prevPageButton.Click += PrevPageButton_Click;
+        _nextPageButton.Click += NextPageButton_Click;
+        _statusFilter.SelectedIndexChanged += StatusFilter_SelectedIndexChanged;
+        _searchBox.TextChanged += SearchBox_TextChanged;
     }
 
     private Panel CreateMainTabSwitcher()
@@ -119,8 +134,6 @@ public sealed class OffsiteControl : UserControl
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
         ConfigureTabButton(_maintenanceTabButton, "Operational Maintenance", IconChar.ClipboardList, new Point(0, 10), 220);
         ConfigureTabButton(_mapTrackingTabButton, "Live Map Tracking", IconChar.MapLocationDot, new Point(228, 10), 200);
-        _mapTrackingTabButton.Click += (_, _) => ShowMapTrackingView();
-        _maintenanceTabButton.Click += async (_, _) => await ShowMaintenanceViewAsync();
         panel.Controls.Add(_maintenanceTabButton); panel.Controls.Add(_mapTrackingTabButton);
         return panel;
     }
@@ -164,16 +177,12 @@ public sealed class OffsiteControl : UserControl
         FlowLayoutPanel flow = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
         Label label = new() { Text = "Tracking Vehicle", AutoSize = true, Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, Margin = new Padding(0, 9, 8, 0) };
         _carComboBox.Width = 220; _carComboBox.DropDownStyle = ComboBoxStyle.DropDownList; _carComboBox.Font = FontHelper.Regular(10F); _carComboBox.Margin = new Padding(0, 2, 12, 0);
-        _carComboBox.SelectedIndexChanged += async (_, _) => await RefreshSelectedCarLocationAsync(true);
-        _refreshButton.Click += async (_, _) => await RefreshSelectedCarLocationAsync(true);
-        _startTrackingButton.Click += async (_, _) => await StartDemoTrackingAsync();
-        _stopTrackingButton.Click += (_, _) => StopDemoTracking();
         _autoRefreshLabel.Text = "Refresh: 10m"; _autoRefreshLabel.AutoSize = true; _autoRefreshLabel.Font = FontHelper.SemiBold(9F); _autoRefreshLabel.ForeColor = ThemeHelper.TextSecondary; _autoRefreshLabel.Margin = new Padding(0, 10, 0, 0);
         flow.Controls.AddRange([label, _carComboBox, _refreshButton, _startTrackingButton, _stopTrackingButton, _autoRefreshLabel]);
         panel.Controls.Add(flow); return panel;
     }
 
-    private Control CreateMapContainer() { Panel card = ControlFactory.CreateCardPanel(new Size(0, 0)); card.Dock = DockStyle.Fill; card.Padding = new Padding(2); _mapWebView.Dock = DockStyle.Fill; _mapWebView.NavigationCompleted += MapWebView_NavigationCompleted; card.Controls.Add(_mapWebView); return card; }
+    private Control CreateMapContainer() { Panel card = ControlFactory.CreateCardPanel(new Size(0, 0)); card.Dock = DockStyle.Fill; card.Padding = new Padding(2); _mapWebView.Dock = DockStyle.Fill; card.Controls.Add(_mapWebView); return card; }
 
     private Control CreateSelectedCarInfoCard()
     {
@@ -198,16 +207,15 @@ public sealed class OffsiteControl : UserControl
         Panel searchRow = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
         BorderedPanel searchContainer = new() { Size = new Size(280, 32), Location = new Point(0, 8), BackColor = ThemeHelper.Surface, BorderColor = ThemeHelper.Border, Cursor = Cursors.IBeam };
         IconPictureBox searchIcon = new() { IconChar = IconChar.MagnifyingGlass, IconColor = ThemeHelper.TextSecondary, IconSize = 18, BackColor = ThemeHelper.Surface, Location = new Point(8, 7), Size = new Size(20, 20) };
-        _searchBox.BorderStyle = BorderStyle.None; _searchBox.PlaceholderText = "Search code, car, client..."; _searchBox.BackColor = ThemeHelper.Surface; _searchBox.Font = FontHelper.Regular(10F); _searchBox.ForeColor = ThemeHelper.TextPrimary; _searchBox.Location = new Point(34, 7); _searchBox.Width = 230; _searchBox.TextChanged += SearchBox_TextChanged;
+        _searchBox.BorderStyle = BorderStyle.None; _searchBox.PlaceholderText = "Search code, car, client..."; _searchBox.BackColor = ThemeHelper.Surface; _searchBox.Font = FontHelper.Regular(10F); _searchBox.ForeColor = ThemeHelper.TextPrimary; _searchBox.Location = new Point(34, 7); _searchBox.Width = 230;
         searchContainer.Controls.Add(searchIcon); searchContainer.Controls.Add(_searchBox); ConfigureFilters();
-        _createTransactionButton.Location = new Point(0, 6); _createTransactionButton.Click += CreateTransactionButton_Click;
+        _createTransactionButton.Location = new Point(0, 6);
         searchRow.Resize += (_, _) => _createTransactionButton.Left = Math.Max(0, searchRow.Width - _createTransactionButton.Width);
         searchRow.Controls.AddRange([searchContainer, _statusFilter, _createTransactionButton]);
         layout.Controls.Add(searchRow, 0, 1);
 
         Panel subTabRow = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
         ConfigureTabButton(_recordsSubTabButton, "Active Records", IconChar.ListUl, new Point(0, 10), 160); ConfigureTabButton(_archivedSubTabButton, "Archived", IconChar.BoxArchive, new Point(168, 10), 120);
-        _recordsSubTabButton.Click += RecordsSubTabButton_Click; _archivedSubTabButton.Click += ArchivedSubTabButton_Click;
         UpdateSubTabStyles(); subTabRow.Controls.AddRange([_recordsSubTabButton, _archivedSubTabButton]);
         layout.Controls.Add(subTabRow, 0, 2);
 
@@ -220,15 +228,15 @@ public sealed class OffsiteControl : UserControl
     private Panel CreatePaginationPanel()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        _prevPageButton.Location = new Point(0, 8); _prevPageButton.Click += PrevPageButton_Click;
-        _nextPageButton.Location = new Point(90, 8); _nextPageButton.Click += NextPageButton_Click;
+        _prevPageButton.Location = new Point(0, 8);
+        _nextPageButton.Location = new Point(90, 8);
         _paginationLabel.AutoSize = false; _paginationLabel.Location = new Point(180, 8); _paginationLabel.Size = new Size(300, 32); _paginationLabel.TextAlign = ContentAlignment.MiddleLeft; _paginationLabel.Font = FontHelper.Regular(9.5F); _paginationLabel.ForeColor = ThemeHelper.TextSecondary;
         panel.Controls.AddRange([_prevPageButton, _nextPageButton, _paginationLabel]); return panel;
     }
 
     private void ConfigureFilters()
     {
-        _isInitializingFilters = true; _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList; _statusFilter.Font = FontHelper.Regular(10F); _statusFilter.Items.Clear(); _statusFilter.Items.AddRange(["All Status", "Scheduled", "Maintenance", "Completed", "Cancelled"]); _statusFilter.SelectedIndex = 0; _statusFilter.Size = new Size(180, 30); _statusFilter.Location = new Point(292, 8); _isInitializingFilters = false; _statusFilter.SelectedIndexChanged += StatusFilter_SelectedIndexChanged;
+        _isInitializingFilters = true; _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList; _statusFilter.Font = FontHelper.Regular(10F); _statusFilter.Items.Clear(); _statusFilter.Items.AddRange(["All Status", "Scheduled", "Maintenance", "Completed", "Cancelled"]); _statusFilter.SelectedIndex = 0; _statusFilter.Size = new Size(180, 30); _statusFilter.Location = new Point(292, 8); _isInitializingFilters = false;
     }
 
     private async Task LoadRecordsAsync()

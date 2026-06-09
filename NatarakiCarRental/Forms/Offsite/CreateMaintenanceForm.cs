@@ -14,27 +14,19 @@ public sealed class CreateMaintenanceForm : Form
     private readonly OffsiteService _offsiteService;
     private readonly FleetScheduleService _scheduleService;
     private readonly CarService _carService = new();
+    private readonly CustomerService _customerService = new();
     private readonly ErrorProvider _errorProvider = new();
     private readonly Label _validationLabel = new();
     private readonly TabControl _flowTabs = new();
     
     // Tab 1: Maintenance from Schedule
-    private readonly ComboBox _reservationComboBox = CreateComboBox(920);
+    private readonly ComboBox _reservationComboBox = CreateComboBox(880);
     private readonly Label _reservationSummaryLabel = CreateSummaryLabel();
     
     // Tab 2: Direct Maintenance
     private readonly ComboBox _maintenanceCarComboBox = CreateComboBox();
-    private readonly ComboBox _maintenanceTypeComboBox = CreateComboBox();
     private readonly DateTimePicker _maintenanceStartDatePicker = CreateDatePicker();
     private readonly DateTimePicker _maintenanceEndDatePicker = CreateDatePicker();
-    private readonly TextBox _notesTextBox = new()
-    {
-        Width = 920,
-        Height = 86,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        Font = FontHelper.Regular(10F)
-    };
 
     private IReadOnlyList<FleetScheduleModel> _eligibleMaintenance = [];
     private IReadOnlyList<Car> _cars = [];
@@ -55,7 +47,7 @@ public sealed class CreateMaintenanceForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(1000, 600);
+        ClientSize = new Size(1000, 520);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -83,18 +75,19 @@ public sealed class CreateMaintenanceForm : Form
 
         _flowTabs.Dock = DockStyle.None;
         _flowTabs.Location = new Point(32, 100);
-        _flowTabs.Size = new Size(936, 400);
+        _flowTabs.Size = new Size(936, 320);
         _flowTabs.Font = FontHelper.SemiBold(9F);
         _flowTabs.TabPages.Add(CreateScheduleTab());
         _flowTabs.TabPages.Add(CreateDirectTab());
         Controls.Add(_flowTabs);
 
-        Button cancelButton = CreateSecondaryButton("Cancel", 110, 38);
-        cancelButton.Location = new Point(718, 530);
+        Button cancelButton = ControlFactory.CreateSecondaryButton("Cancel", 110, 38);
+        cancelButton.Location = new Point(560, 450);
         cancelButton.DialogResult = DialogResult.Cancel;
+        cancelButton.Margin = new Padding(0, 0, 10, 0);
 
         Button saveButton = ControlFactory.CreatePrimaryButton("Create Maintenance", 180, 38);
-        saveButton.Location = new Point(844, 530);
+        saveButton.Location = new Point(680, 450);
         saveButton.Click += SaveButton_Click;
 
         Controls.Add(cancelButton);
@@ -105,12 +98,26 @@ public sealed class CreateMaintenanceForm : Form
 
     private TabPage CreateScheduleTab()
     {
-        TabPage tab = new("From Schedule") { BackColor = ThemeHelper.Surface };
+        TabPage tab = new("Create from Maintenance Schedule") { BackColor = ThemeHelper.Surface };
         tab.Controls.Add(CreateInputPanel("Eligible Maintenance Schedule *", _reservationComboBox, new Point(18, 16)));
-        _reservationSummaryLabel.Location = new Point(18, 82);
-        _reservationSummaryLabel.Size = new Size(900, 260);
+        
+        // Bordered details preview box
+        GroupBox detailsBox = new()
+        {
+            Text = "Maintenance Details",
+            Location = new Point(18, 82),
+            Size = new Size(900, 190),
+            Font = FontHelper.SemiBold(9.5F),
+            ForeColor = ThemeHelper.TextPrimary,
+            BackColor = ThemeHelper.Surface
+        };
+        
+        _reservationSummaryLabel.Location = new Point(16, 26);
+        _reservationSummaryLabel.Size = new Size(868, 150);
         _reservationSummaryLabel.Text = "Select a pending maintenance schedule to view its details.";
-        tab.Controls.Add(_reservationSummaryLabel);
+        detailsBox.Controls.Add(_reservationSummaryLabel);
+        
+        tab.Controls.Add(detailsBox);
         _reservationComboBox.SelectedIndexChanged += (_, _) => UpdateSummary();
         return tab;
     }
@@ -121,23 +128,17 @@ public sealed class CreateMaintenanceForm : Form
         TableLayoutPanel layout = new()
         {
             Location = new Point(18, 10),
-            Size = new Size(900, 320),
+            Size = new Size(900, 200),
             ColumnCount = 2,
-            RowCount = 3
+            RowCount = 2
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         
         layout.Controls.Add(CreateInputPanel("Car *", _maintenanceCarComboBox), 0, 0);
-        layout.Controls.Add(CreateInputPanel("Maintenance Type *", _maintenanceTypeComboBox), 1, 0);
         layout.Controls.Add(CreateInputPanel("Start Date *", _maintenanceStartDatePicker), 0, 1);
         layout.Controls.Add(CreateInputPanel("End Date *", _maintenanceEndDatePicker), 1, 1);
         
-        Panel notesPanel = CreateInputPanel("Notes", _notesTextBox);
-        notesPanel.Size = new Size(900, 110);
-        layout.Controls.Add(notesPanel, 0, 2);
-        layout.SetColumnSpan(notesPanel, 2);
-
         tab.Controls.Add(layout);
         return tab;
     }
@@ -175,12 +176,9 @@ public sealed class CreateMaintenanceForm : Form
             .Cast<object>()
             .ToArray());
         _maintenanceCarComboBox.SelectedIndex = 0;
-
-        _maintenanceTypeComboBox.Items.Clear();
-        _maintenanceTypeComboBox.Items.AddRange(OffsiteConstants.Type.MaintenanceCategory.Cast<object>().ToArray());
     }
 
-    private void UpdateSummary()
+    private async void UpdateSummary()
     {
         int? id = GetSelectedLookupId(_reservationComboBox);
         var schedule = _eligibleMaintenance.FirstOrDefault(s => s.ScheduleId == id);
@@ -190,11 +188,35 @@ public sealed class CreateMaintenanceForm : Form
             return;
         }
 
+        string customerInfo = "N/A";
+        if (schedule.CustomerId.HasValue)
+        {
+            try
+            {
+                var customer = await _customerService.GetCustomerByIdAsync(schedule.CustomerId.Value);
+                if (customer != null)
+                {
+                    string fullName = $"{customer.FirstName} {customer.LastName}".Trim();
+                    string address = $"{customer.StreetAddress}, {customer.Barangay}, {customer.City}, {customer.Province}".Trim(',', ' ');
+                    customerInfo = $"Offsite Client: {fullName}{Environment.NewLine}" +
+                                   $"Email: {customer.Email ?? "N/A"}{Environment.NewLine}" +
+                                   $"Address: {address}";
+                }
+            }
+            catch
+            {
+                customerInfo = "Error loading customer details.";
+            }
+        }
+        else
+        {
+            customerInfo = "Offsite Client: Walk-In / No customer";
+        }
+
         _reservationSummaryLabel.Text =
-            $"Title: {schedule.Title}{Environment.NewLine}" +
+            customerInfo + $"{Environment.NewLine}" +
             $"Car: {schedule.CarName} ({schedule.PlateNumber}){Environment.NewLine}" +
-            $"Dates: {schedule.StartDate:MMM d, yyyy} - {schedule.EndDate:MMM d, yyyy}{Environment.NewLine}" +
-            $"Notes: {schedule.Notes ?? "-"}";
+            $"Dates: {schedule.StartDate:MMM d, yyyy} - {schedule.EndDate:MMM d, yyyy}";
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)
@@ -224,12 +246,11 @@ public sealed class CreateMaintenanceForm : Form
             {
                 int? carId = GetSelectedLookupId(_maintenanceCarComboBox);
                 if (carId is null) throw Validation(nameof(_maintenanceCarComboBox), "Please select a car.");
-                if (_maintenanceTypeComboBox.SelectedItem is null) throw Validation(nameof(_maintenanceTypeComboBox), "Please select maintenance type.");
                 
                 await _offsiteService.CreateAsync(new CreateOffsiteRecordRequest
                 {
                     CarId = carId.Value,
-                    OffsiteType = _maintenanceTypeComboBox.SelectedItem.ToString()!,
+                    OffsiteType = "Maintenance",
                     StartDate = _maintenanceStartDatePicker.Value.Date,
                     ExpectedReturnDate = _maintenanceEndDatePicker.Value.Date
                 });
@@ -285,11 +306,6 @@ public sealed class CreateMaintenanceForm : Form
     private static Label CreateSummaryLabel()
     {
         return new Label { AutoSize = false, Font = FontHelper.Regular(10F), ForeColor = ThemeHelper.TextPrimary, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(12), BackColor = Color.FromArgb(248, 250, 252) };
-    }
-
-    private static Button CreateSecondaryButton(string text, int width, int height)
-    {
-        return new Button { Text = text, Size = new Size(width, height), BackColor = ThemeHelper.Surface, ForeColor = ThemeHelper.TextPrimary, Font = FontHelper.SemiBold(), FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand };
     }
 
     private static int? GetSelectedLookupId(ComboBox comboBox) => comboBox.SelectedItem is LookupOption option ? option.Id : null;
