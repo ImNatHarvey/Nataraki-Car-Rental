@@ -1658,6 +1658,11 @@ public sealed class ManageSystemControl : UserControl
             return;
         }
 
+        if (userId == null && !await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Add new user"))
+        {
+            return;
+        }
+
         using var form = new UserDetailsForm(_currentUserId, userId, isViewOnly);
         if (form.ShowDialog() == DialogResult.OK)
         {
@@ -1906,6 +1911,11 @@ public sealed class ManageSystemControl : UserControl
             return;
         }
 
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Update system settings"))
+        {
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_businessNameInput.Text))
         {
             MessageBoxHelper.ShowWarning("Business Name is required.");
@@ -1913,11 +1923,6 @@ public sealed class ManageSystemControl : UserControl
         }
 
         if (!ConfirmSaveChanges())
-        {
-            return;
-        }
-
-        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Update system settings"))
         {
             return;
         }
@@ -1958,6 +1963,11 @@ public sealed class ManageSystemControl : UserControl
 
     private async Task SaveBrandingAsync()
     {
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Update branding and theme"))
+        {
+            return;
+        }
+
         try
         {
             string colorHex = _themeHexInput.Text.Trim();

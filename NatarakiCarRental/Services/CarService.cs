@@ -78,13 +78,13 @@ public sealed class CarService
 
     public async Task<IReadOnlyList<Car>> SearchCarsAsync(string searchText, bool includeArchived, string? status = null, int pageNumber = 1, int pageSize = 50)
     {
-        AccessControlService.EnforcePermission("CarGarage.View");
+        AccessControlService.EnforcePermission("Cars.View");
         return await _carRepository.SearchCarsAsync(searchText, includeArchived, DateTime.Today, status, pageNumber, pageSize);
     }
 
     public Task<int> CountCarsAsync(string searchText, bool includeArchived, string? status = null)
     {
-        AccessControlService.EnforcePermission("CarGarage.View");
+        AccessControlService.EnforcePermission("Cars.View");
         return _carRepository.CountCarsAsync(searchText, includeArchived, DateTime.Today, status);
     }
 

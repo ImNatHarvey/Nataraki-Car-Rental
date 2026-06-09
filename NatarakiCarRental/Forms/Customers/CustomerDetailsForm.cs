@@ -19,6 +19,8 @@ public sealed class CustomerDetailsForm : Form
     private const string NotApplicableProvinceCode = "__NA__";
     private const string NotApplicableProvinceName = "N/A";
     private readonly CustomerService _customerService;
+    private readonly SecurityVerificationService _verificationService = new();
+    private readonly int _currentUserId;
     private readonly LocalAddressService _addressService = new();
     private readonly CustomerFormMode _mode;
     private readonly Customer? _sourceCustomer;
@@ -59,6 +61,7 @@ public sealed class CustomerDetailsForm : Form
     public CustomerDetailsForm(CustomerFormMode mode, Customer? customer = null, int? currentUserId = null, string defaultType = "Rental")
     {
         _customerService = new CustomerService(currentUserId);
+        _currentUserId = currentUserId ?? 0;
         _mode = mode;
         _sourceCustomer = customer;
         _customerType = customer?.CustomerType ?? defaultType;
@@ -490,6 +493,18 @@ public sealed class CustomerDetailsForm : Form
         if (sender is not Button saveButton)
         {
             return;
+        }
+
+        if (_mode == CustomerFormMode.Edit)
+        {
+            string currentCustomerName = string.IsNullOrWhiteSpace(_companyNameTextBox.Text) 
+                ? $"{_firstNameTextBox.Text} {_lastNameTextBox.Text}".Trim()
+                : _companyNameTextBox.Text.Trim();
+
+            if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Update customer: {currentCustomerName}"))
+            {
+                return;
+            }
         }
 
         string? newDriverLicensePath = null;

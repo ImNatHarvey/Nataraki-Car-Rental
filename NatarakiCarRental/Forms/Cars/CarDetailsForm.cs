@@ -23,6 +23,8 @@ public sealed class CarDetailsForm : Form
     private static readonly string[] CodingDayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "None / Not Applicable"];
 
     private readonly CarService _carService;
+    private readonly SecurityVerificationService _verificationService = new();
+    private readonly int _currentUserId;
     private readonly CarFormMode _mode;
     private readonly Car? _sourceCar;
     private readonly ErrorProvider _errorProvider = new();
@@ -63,6 +65,7 @@ public sealed class CarDetailsForm : Form
     public CarDetailsForm(CarFormMode mode, Car? car = null, int? currentUserId = null)
     {
         _carService = new CarService(currentUserId);
+        _currentUserId = currentUserId ?? 0;
         _mode = mode;
         _sourceCar = car;
         InitializeForm();
@@ -566,6 +569,11 @@ public sealed class CarDetailsForm : Form
     private async void SaveButton_Click(object? sender, EventArgs e)
     {
         if (sender is not Button saveButton)
+        {
+            return;
+        }
+
+        if (_mode == CarFormMode.Edit && !await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Update car: {_carNameTextBox.Text} ({_plateNumberTextBox.Text})"))
         {
             return;
         }

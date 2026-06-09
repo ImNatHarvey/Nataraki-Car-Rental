@@ -396,9 +396,43 @@ public sealed class OffsiteControl : UserControl
             }
         }
     }
-    private async Task CancelTransactionAsync(int id) { if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel maintenance") && MessageBoxHelper.ShowConfirmWarning("Cancel maintenance transaction?", "Cancel")) { await _transactionService.CancelTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); } }
-    private async Task ArchiveTransactionAsync(int id) { await _transactionService.ArchiveTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); }
-    private async Task RestoreTransactionAsync(int id) { await _transactionService.RestoreTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); }
+    private async Task CancelTransactionAsync(int id) 
+    { 
+        Transaction? txn = await _transactionService.GetByIdAsync(id);
+        if (txn == null) return;
+
+        if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Cancel maintenance: {txn.TransactionCode}") && 
+            MessageBoxHelper.ShowConfirmWarning($"Cancel maintenance transaction {txn.TransactionCode}?", "Cancel Maintenance")) 
+        { 
+            await _transactionService.CancelTransactionAsync(id, _currentUserId); 
+            await LoadRecordsAsync(); 
+        } 
+    }
+    private async Task ArchiveTransactionAsync(int id) 
+    { 
+        Transaction? txn = await _transactionService.GetByIdAsync(id);
+        if (txn == null) return;
+
+        if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Archive maintenance: {txn.TransactionCode}") && 
+            MessageBoxHelper.ShowConfirmWarning($"Archive maintenance transaction {txn.TransactionCode}?", "Archive Maintenance")) 
+        { 
+            await _transactionService.ArchiveTransactionAsync(id, _currentUserId); 
+            await LoadRecordsAsync(); 
+        } 
+    }
+
+    private async Task RestoreTransactionAsync(int id) 
+    { 
+        Transaction? txn = await _transactionService.GetByIdAsync(id);
+        if (txn == null) return;
+
+        if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Restore maintenance: {txn.TransactionCode}") && 
+            MessageBoxHelper.ShowConfirmWarning($"Restore maintenance transaction {txn.TransactionCode} to the active list?", "Restore Maintenance")) 
+        { 
+            await _transactionService.RestoreTransactionAsync(id, _currentUserId); 
+            await LoadRecordsAsync(); 
+        } 
+    }
 
     private void SearchBox_TextChanged(object? sender, EventArgs e) { if (!_isInitializingFilters) { _currentPage = 1; _recordsSearchTimer.Stop(); _recordsSearchTimer.Start(); } }
     private async void RecordsSearchTimer_Tick(object? sender, EventArgs e) { _recordsSearchTimer.Stop(); await LoadRecordsAsync(); }
