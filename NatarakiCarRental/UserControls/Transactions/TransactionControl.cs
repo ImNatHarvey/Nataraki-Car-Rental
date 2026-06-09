@@ -396,7 +396,7 @@ public sealed class TransactionControl : UserControl
             UpdateMetricCards(metrics);
             string? status = _statusFilterComboBox.SelectedIndex <= 0 ? null : _statusFilterComboBox.SelectedItem?.ToString();
             string? payment = _paymentFilterComboBox.SelectedIndex <= 0 ? null : _paymentFilterComboBox.SelectedItem?.ToString();
-            IReadOnlyList<TransactionListItem> transactions = await _transactionService.SearchTransactionsAsync(_searchTextBox.Text, status, payment, _showArchived);
+            IReadOnlyList<TransactionListItem> transactions = await _transactionService.SearchTransactionsAsync(_searchTextBox.Text, status, payment, _showArchived, "Rental");
             PopulateGrid(transactions);
         }
         catch (Exception exception)

@@ -132,7 +132,7 @@ public sealed class OffsiteControl : UserControl
     private Panel CreateMainTabSwitcher()
     {
         Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
-        ConfigureTabButton(_maintenanceTabButton, "Operational Maintenance", IconChar.ClipboardList, new Point(0, 10), 220);
+        ConfigureTabButton(_maintenanceTabButton, "Maintenance Records", IconChar.ClipboardList, new Point(0, 10), 220);
         ConfigureTabButton(_mapTrackingTabButton, "Live Map Tracking", IconChar.MapLocationDot, new Point(228, 10), 200);
         panel.Controls.Add(_maintenanceTabButton); panel.Controls.Add(_mapTrackingTabButton);
         return panel;
@@ -273,26 +273,26 @@ public sealed class OffsiteControl : UserControl
             actions.Add("Cancel");
             return actions;
         }
-        if (item.TransactionStatus == TransactionConstants.Status.Maintenance) return ["View", "Payment", "Extend", "Complete", "Cancel"]; 
-        return ["View", "Archive"]; 
-    }
+        if (item.TransactionStatus == TransactionConstants.Status.Maintenance) return ["View", "Extend", "Complete", "Cancel"];
+        return ["View", "Archive"];
+        }
 
-    private void SetupGrid()
-    {
+        private void SetupGrid()
+        {
         DataGridViewHelper.ApplyStandardStyle(_maintenanceGrid); _maintenanceGrid.Dock = DockStyle.Fill;
         _maintenanceGrid.CellMouseClick += Grid_CellMouseClick; _maintenanceGrid.CellMouseMove += Grid_CellMouseMove; _maintenanceGrid.CellMouseLeave += (_, _) => _maintenanceGrid.Cursor = Cursors.Default;
         DataGridViewHelper.SetupStatusPills(_maintenanceGrid, "Status"); DataGridViewHelper.SetupActionButtons(_maintenanceGrid);
         _emptyStateLabel.Text = "No maintenance transactions found."; _emptyStateLabel.Dock = DockStyle.Bottom; _emptyStateLabel.Height = 42; _emptyStateLabel.Font = FontHelper.Regular(10F); _emptyStateLabel.ForeColor = ThemeHelper.TextSecondary; _emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter; _emptyStateLabel.Visible = false;
         _maintenanceGrid.Columns.Clear(); _maintenanceGrid.Columns.Add("Code", "Code"); _maintenanceGrid.Columns.Add("Vehicle", "Vehicle / Plate"); _maintenanceGrid.Columns.Add("Client", "Client / Partner"); _maintenanceGrid.Columns.Add("Status", "Status"); _maintenanceGrid.Columns.Add("Dates", "Duration"); _maintenanceGrid.Columns.Add("Cost", "Cost"); _maintenanceGrid.Columns.Add("Paid", "Paid"); _maintenanceGrid.Columns.Add("Balance", "Balance"); _maintenanceGrid.Columns.Add("Actions", "Actions");
         UpdateGridColumnLayout();
-    }
+        }
 
-    private void UpdateGridColumnLayout()
-    {
+        private void UpdateGridColumnLayout()
+        {
         if (_maintenanceGrid.Columns.Count == 0) return;
-        SetColumnSizing("Code", 10F, 100); SetColumnSizing("Vehicle", 15F, 140); SetColumnSizing("Client", 15F, 140); SetColumnSizing("Status", 10F, 90); SetColumnSizing("Dates", 12F, 120); SetColumnSizing("Cost", 10F, 100); SetColumnSizing("Paid", 10F, 100); SetColumnSizing("Balance", 10F, 100);
+        SetColumnSizing("Code", 10F, 100); SetColumnSizing("Vehicle", 10F, 110); SetColumnSizing("Client", 15F, 140); SetColumnSizing("Status", 10F, 90); SetColumnSizing("Dates", 12F, 120); SetColumnSizing("Cost", 10F, 100); SetColumnSizing("Paid", 10F, 100); SetColumnSizing("Balance", 10F, 100);
         if (_maintenanceGrid.Columns["Actions"] is DataGridViewColumn col) { col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None; col.Width = 350; col.MinimumWidth = 350; }
-    }
+        }
 
     private void SetColumnSizing(string name, float weight, int min) { if (_maintenanceGrid.Columns[name] is DataGridViewColumn c) { c.FillWeight = weight; c.MinimumWidth = min; c.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; } }
 
@@ -346,8 +346,55 @@ public sealed class OffsiteControl : UserControl
             MessageBoxHelper.ShowError($"Failed to start maintenance: {ex.Message}"); 
         } 
     }
-    private async Task ExtendTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionExtendRentalForm(txn).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
-    private async Task CompleteTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionReturnInspectionForm(txn).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
+    private async Task ExtendTransactionAsync(int id)
+    {
+        Transaction? txn = await _transactionService.GetByIdAsync(id);
+        if (txn == null) return;
+        
+        using var form = new MaintenanceExtendForm(txn);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            try
+            {
+                await _transactionService.ExtendRentalAsync(id, form.NewEndDate, TransactionConstants.ModeOfPayment.Cash, 0, null, _currentUserId);
+                MessageBoxHelper.ShowSuccess("Maintenance extended successfully.");
+                await LoadRecordsAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBoxHelper.ShowError($"Failed to extend maintenance: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task CompleteTransactionAsync(int id)
+    {
+        Transaction? txn = await _transactionService.GetByIdAsync(id);
+        if (txn == null) return;
+
+        using var form = new MaintenanceCompleteForm(txn);
+        if (form.ShowDialog() == DialogResult.OK)
+        {
+            try
+            {
+                await _transactionService.CompleteTransactionAsync(new CompleteTransactionRequest
+                {
+                    TransactionId = id,
+                    ReturnCondition = form.ReturnCondition,
+                    AdditionalCharge = form.MaintenanceFee,
+                    ChargePaid = true,
+                    ModeOfPayment = form.ModeOfPayment,
+                    ReceiptFilePath = form.InvoiceFilePath
+                }, _currentUserId);
+                MessageBoxHelper.ShowSuccess("Maintenance completed successfully.");
+                await LoadRecordsAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBoxHelper.ShowError($"Failed to complete maintenance: {ex.Message}");
+            }
+        }
+    }
     private async Task CancelTransactionAsync(int id) { if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel maintenance") && MessageBoxHelper.ShowConfirmWarning("Cancel maintenance transaction?", "Cancel")) { await _transactionService.CancelTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); } }
     private async Task ArchiveTransactionAsync(int id) { await _transactionService.ArchiveTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); }
     private async Task RestoreTransactionAsync(int id) { await _transactionService.RestoreTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); }
@@ -355,7 +402,7 @@ public sealed class OffsiteControl : UserControl
     private void SearchBox_TextChanged(object? sender, EventArgs e) { if (!_isInitializingFilters) { _currentPage = 1; _recordsSearchTimer.Stop(); _recordsSearchTimer.Start(); } }
     private async void RecordsSearchTimer_Tick(object? sender, EventArgs e) { _recordsSearchTimer.Stop(); await LoadRecordsAsync(); }
     private async void StatusFilter_SelectedIndexChanged(object? sender, EventArgs e) { if (!_isInitializingFilters) { _currentPage = 1; await LoadRecordsAsync(); } }
-    private async void CreateTransactionButton_Click(object? sender, EventArgs e) { if (AccessControlService.HasPermission("Offsite.Create") && new MaintenanceTransactionDetailsForm(_currentUserId).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
+    private async void CreateTransactionButton_Click(object? sender, EventArgs e) { if (AccessControlService.HasPermission("Offsite.Create") && new CreateMaintenanceForm(_currentUserId).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
     private async void PrevPageButton_Click(object? sender, EventArgs e) { if (_currentPage > 1) { _currentPage--; await LoadRecordsAsync(); } }
     private async void NextPageButton_Click(object? sender, EventArgs e) { if (_currentPage < Math.Ceiling(_totalItems / (double)_pageSize)) { _currentPage++; await LoadRecordsAsync(); } }
     private async void RecordsSubTabButton_Click(object? sender, EventArgs e) { _showArchived = false; _currentPage = 1; UpdateSubTabStyles(); await LoadRecordsAsync(); }

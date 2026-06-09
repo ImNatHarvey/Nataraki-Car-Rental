@@ -104,27 +104,43 @@ public sealed class TransactionService
 
         ValidateMaintenanceDates(request.StartDate.Date, request.EndDate.Date);
 
-        FleetSchedule schedule = new()
-        {
-            CarId = car.CarId,
-            CustomerId = customer.CustomerId,
-            Title = $"Maintenance: {request.MaintenanceType}",
-            ScheduleType = FleetScheduleConstants.Type.Maintenance,
-            Status = FleetScheduleConstants.Status.Scheduled,
-            StartDate = request.StartDate.Date,
-            EndDate = request.EndDate.Date,
-            Notes = request.Notes,
-            CreatedByUserId = _currentUserId
-        };
-
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
-            await _scheduleService.PrepareForSaveAsync(schedule, null, false, dbTransaction);
-            schedule.CreatedByUserId = _currentUserId;
-            int scheduleId = await _scheduleRepository.CreateAsync(schedule, dbTransaction);
+            int scheduleId;
+
+            if (request.FleetScheduleId.HasValue)
+            {
+                scheduleId = request.FleetScheduleId.Value;
+                FleetSchedule? existingSchedule = await _scheduleRepository.GetByIdAsync(scheduleId);
+                if (existingSchedule == null)
+                    throw Validation(nameof(CreateMaintenanceTransactionRequest.FleetScheduleId), "Maintenance schedule not found.");
+                
+                existingSchedule.Status = FleetScheduleConstants.Status.Scheduled;
+                existingSchedule.UpdatedAt = DateTime.UtcNow;
+                await _scheduleRepository.UpdateAsync(existingSchedule, dbTransaction);
+            }
+            else
+            {
+                FleetSchedule schedule = new()
+                {
+                    CarId = car.CarId,
+                    CustomerId = customer.CustomerId,
+                    Title = $"Maintenance: {request.MaintenanceType}",
+                    ScheduleType = FleetScheduleConstants.Type.Maintenance,
+                    Status = FleetScheduleConstants.Status.Scheduled,
+                    StartDate = request.StartDate.Date,
+                    EndDate = request.EndDate.Date,
+                    Notes = request.Notes,
+                    CreatedByUserId = _currentUserId
+                };
+
+                await _scheduleService.PrepareForSaveAsync(schedule, null, false, dbTransaction);
+                schedule.CreatedByUserId = _currentUserId;
+                scheduleId = await _scheduleRepository.CreateAsync(schedule, dbTransaction);
+            }
 
             Transaction transaction = new()
             {
@@ -457,19 +473,21 @@ public sealed class TransactionService
         AccessControlService.EnforcePermission("Transactions.Complete");
         Transaction transaction = await GetActiveTransactionAsync(request.TransactionId);
 
-        if (transaction.TransactionStatus != TransactionConstants.Status.Active)
+        bool isMaintenance = transaction.TransactionType == "Maintenance";
+        
+        if (!isMaintenance && transaction.TransactionStatus != TransactionConstants.Status.Active)
         {
             throw Validation(nameof(Transaction.TransactionStatus), "Only active transactions can be completed.");
         }
 
-        if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid)
+        if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid && !isMaintenance)
         {
             throw Validation(nameof(Transaction.PaymentStatus), "Initial payment must be settled before completion.");
         }
 
         if (request.AdditionalCharge > 0 && !request.ChargePaid)
         {
-            throw Validation(nameof(CompleteTransactionRequest.ChargePaid), "Additional charges must be settled before completing this transaction.");
+            throw Validation(nameof(CompleteTransactionRequest.ChargePaid), isMaintenance ? "Maintenance fee must be fully paid before completion." : "Additional charges must be settled before completing this transaction.");
         }
 
         FleetSchedule? schedule = await _scheduleRepository.GetByIdAsync(transaction.FleetScheduleId);
@@ -478,7 +496,7 @@ public sealed class TransactionService
             throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found or is archived.");
         }
 
-        schedule.ScheduleType = FleetScheduleConstants.Type.Rental;
+        schedule.ScheduleType = isMaintenance ? FleetScheduleConstants.Type.Maintenance : FleetScheduleConstants.Type.Rental;
         schedule.Status = FleetScheduleConstants.Status.Completed;
 
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
@@ -490,7 +508,7 @@ public sealed class TransactionService
 
             decimal finalTotal = transaction.TotalAmount;
             decimal finalPaid = transaction.AmountPaid;
-            decimal actualAdditionalCharge = request.ReturnCondition == "Good" ? 0 : request.AdditionalCharge;
+            decimal actualAdditionalCharge = request.AdditionalCharge;
 
             if (actualAdditionalCharge > 0)
             {
@@ -503,9 +521,9 @@ public sealed class TransactionService
                         TransactionId = request.TransactionId,
                         PaymentDate = DateTime.Now,
                         Amount = actualAdditionalCharge,
-                        ModeOfPayment = "Other",
+                        ModeOfPayment = request.ModeOfPayment ?? TransactionConstants.ModeOfPayment.Cash,
                         ReceiptFilePath = request.ReceiptFilePath,
-                        Notes = $"Additional charge for {request.ReturnCondition} paid during inspection.",
+                        Notes = isMaintenance ? "Maintenance fee paid during completion." : $"Additional charge for {request.ReturnCondition} paid during inspection.",
                         CreatedByUserId = currentUserId
                     }, dbTransaction);
                     
@@ -537,21 +555,21 @@ public sealed class TransactionService
                 actualAdditionalCharge,
                 dbTransaction);
 
-            if (request.ReturnCondition == "Late Return" && request.DaysLate > 0)
+            if (!isMaintenance && request.ReturnCondition == "Late Return" && request.DaysLate > 0)
             {
                 schedule.EndDate = schedule.EndDate.AddDays(request.DaysLate.Value);
             }
 
             await _scheduleRepository.UpdateAsync(schedule, dbTransaction);
 
-            string description = $"Completed transaction {transaction.TransactionCode}. Condition: {request.ReturnCondition}";
-            if (request.ReturnCondition == "Late Return" && request.DaysLate.HasValue)
+            string description = isMaintenance ? $"Completed maintenance {transaction.TransactionCode}. Condition: {request.ReturnCondition}" : $"Completed transaction {transaction.TransactionCode}. Condition: {request.ReturnCondition}";
+            if (!isMaintenance && request.ReturnCondition == "Late Return" && request.DaysLate.HasValue)
             {
                 description += $" ({request.DaysLate.Value} days)";
             }
             if (actualAdditionalCharge > 0)
             {
-                description += $". Additional charge: ₱{actualAdditionalCharge:N2}";
+                description += $". {(isMaintenance ? "Fee" : "Additional charge")}: ₱{actualAdditionalCharge:N2}";
             }
             else
             {
@@ -693,9 +711,15 @@ public sealed class TransactionService
         AccessControlService.EnforcePermission("Transactions.Edit");
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
 
-        if (transaction.TransactionStatus != TransactionConstants.Status.Active)
+        bool isMaintenance = transaction.TransactionType == "Maintenance";
+
+        if (!isMaintenance && transaction.TransactionStatus != TransactionConstants.Status.Active)
         {
             throw Validation(nameof(Transaction.TransactionStatus), "Only active transactions can be extended.");
+        }
+        else if (isMaintenance && transaction.TransactionStatus != TransactionConstants.Status.Maintenance)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only ongoing maintenance records can be extended.");
         }
 
         if (newEndDate.Date <= transaction.EndDate.Date)

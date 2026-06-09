@@ -74,7 +74,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -116,7 +116,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -149,7 +149,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -198,7 +198,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -239,7 +239,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -412,7 +412,7 @@ public sealed class FleetScheduleRepository
               AND IsArchived = 0
               AND Status IN @OperationalStatuses
               AND (@ExcludedScheduleId IS NULL OR ScheduleId <> @ExcludedScheduleId)
-              AND (@CurrentScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}' OR ScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}')
+              AND (ISNULL(@CurrentScheduleType, '') <> N'{FleetScheduleConstants.Type.Maintenance}' OR ScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}')
               AND StartDate <= @EndDate
               AND EndDate >= @StartDate;
             """;
@@ -460,7 +460,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -478,7 +478,7 @@ public sealed class FleetScheduleRepository
               AND schedules.IsArchived = 0
               AND schedules.Status IN @OperationalStatuses
               AND (@ExcludedScheduleId IS NULL OR schedules.ScheduleId <> @ExcludedScheduleId)
-              AND (@CurrentScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}' OR schedules.ScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}')
+              AND (ISNULL(@CurrentScheduleType, '') <> N'{FleetScheduleConstants.Type.Maintenance}' OR schedules.ScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}')
               AND schedules.StartDate <= @EndDate
               AND schedules.EndDate >= @StartDate
             ORDER BY schedules.StartDate, schedules.ScheduleId;
@@ -519,7 +519,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -560,7 +560,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,
@@ -601,7 +601,7 @@ public sealed class FleetScheduleRepository
                 schedules.CustomerId,
                 cars.CarName,
                 cars.PlateNumber,
-                CustomerName = NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N''),
+                CustomerName = COALESCE(NULLIF(LTRIM(RTRIM(customers.CompanyName)), N''), NULLIF(LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))), N'')),
                 schedules.Title,
                 schedules.ScheduleType,
                 schedules.Status,

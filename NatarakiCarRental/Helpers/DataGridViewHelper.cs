@@ -154,7 +154,7 @@ public static class DataGridViewHelper
         return action switch
         {
             "View" or "Details" => ThemeHelper.Primary,
-            "Edit" or "Payment" or "Start Rental" or "Remove Blacklist" or "Restore" or "Complete" => ThemeHelper.Success,
+            "Edit" or "Payment" or "Start Rental" or "Start" or "Remove Blacklist" or "Restore" or "Complete" => ThemeHelper.Success,
             "Cancel" or "Archive" or "Blacklist" => ThemeHelper.Danger,
             "Extend" => ThemeHelper.Warning,
             "Mark as Read" => ThemeHelper.StatusGray,

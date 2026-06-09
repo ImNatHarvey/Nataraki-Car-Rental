@@ -2,6 +2,7 @@ namespace NatarakiCarRental.Models;
 
 public sealed class CreateMaintenanceTransactionRequest
 {
+    public int? FleetScheduleId { get; set; }
     public int CarId { get; set; }
     public int CustomerId { get; set; } // Points to Offsite Client (CustomerType='Maintenance')
     public string MaintenanceType { get; set; } = "Maintenance"; // Maintenance, Repair, Cleaning, etc.
