@@ -26,31 +26,6 @@ public sealed class ReportRepository
                 WHERE IsArchived = 0 AND PaymentDate >= @From AND PaymentDate <= @To
             );
 
-            DECLARE @MaintenanceRevenue decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments
-                WHERE IsArchived = 0 AND PaymentCategory = N'Maintenance Payment' AND PaymentDate >= @From AND PaymentDate <= @To
-            );
-
-            DECLARE @RentalRevenue decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments
-                WHERE IsArchived = 0 AND PaymentCategory = N'Rental Payment' AND PaymentDate >= @From AND PaymentDate <= @To
-            );
-            
-            DECLARE @ExtensionFees decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
-                WHERE IsArchived = 0 AND PaymentCategory = N'Extension Fee' AND PaymentDate >= @From AND PaymentDate <= @To
-            );
-            
-            DECLARE @DamageFees decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
-                WHERE IsArchived = 0 AND PaymentCategory = N'Damage Fee' AND PaymentDate >= @From AND PaymentDate <= @To
-            );
-            
-            DECLARE @LateReturnFees decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
-                WHERE IsArchived = 0 AND PaymentCategory = N'Late Fee' AND PaymentDate >= @From AND PaymentDate <= @To
-            );
-
             DECLARE @OutstandingBalance decimal(18,2) = (
                 SELECT ISNULL(SUM(BalanceAmount), 0) FROM dbo.Transactions
                 WHERE IsArchived = 0 AND CreatedAt >= @From AND CreatedAt <= @To
@@ -91,11 +66,6 @@ public sealed class ReportRepository
             -- Car Performance
             SELECT 
                 TotalRevenue = @TotalRevenue,
-                RentalRevenue = @RentalRevenue,
-                MaintenanceRevenue = @MaintenanceRevenue,
-                ExtensionFees = @ExtensionFees,
-                DamageFees = @DamageFees,
-                LateReturnFees = @LateReturnFees,
                 OutstandingBalance = @OutstandingBalance,
                 PaidTransactions = @PaidTransactions,
                 PartialTransactions = @PartialTransactions,
@@ -490,10 +460,6 @@ public sealed class ReportRepository
             SELECT
                 cars.CarName,
                 cars.PlateNumber,
-                RentalRevenue = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Rental Payment' THEN payments.Amount ELSE 0 END), 0),
-                ExtensionFees = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Extension Fee' THEN payments.Amount ELSE 0 END), 0),
-                DamageFees = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Damage Fee' THEN payments.Amount ELSE 0 END), 0),
-                LateFees = ISNULL(SUM(CASE WHEN payments.PaymentCategory = N'Late Fee' THEN payments.Amount ELSE 0 END), 0),
                 TotalRevenue = ISNULL(SUM(payments.Amount), 0),
                 AverageRevenuePerRental = CASE
                     WHEN COUNT(DISTINCT transactions.TransactionId) > 0
@@ -901,7 +867,6 @@ public sealed class ReportRepository
                     INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
                     WHERE transactions.IsArchived = 0
                       AND payments.IsArchived = 0
-                      AND payments.PaymentCategory = N'Damage Fee'
                       AND payments.PaymentDate >= @From
                       AND payments.PaymentDate <= @To
                 ),
@@ -1026,35 +991,6 @@ public sealed class ReportRepository
 
         using var connection = _connectionFactory.CreateConnection();
         var results = await connection.QueryAsync<CustomerLateReturnReportItem>(sql, new { Today = today.Date });
-        return results.ToList();
-    }
-
-    public async Task<IReadOnlyList<CustomerDamageFeeReportItem>> GetCustomersWithDamageFeesAsync(DateTime from, DateTime to)
-    {
-        const string sql = """
-            SELECT
-                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
-                Contact = customers.PhoneNumber,
-                transactions.TransactionCode,
-                cars.CarName,
-                cars.PlateNumber,
-                DamageFee = payments.Amount,
-                payments.PaymentDate
-            FROM dbo.TransactionPayments AS payments
-            INNER JOIN dbo.Transactions AS transactions ON transactions.TransactionId = payments.TransactionId
-            INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
-            INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
-            WHERE customers.IsWalkIn = 0
-              AND transactions.IsArchived = 0
-              AND payments.IsArchived = 0
-              AND payments.PaymentCategory = N'Damage Fee'
-              AND payments.PaymentDate >= @From
-              AND payments.PaymentDate <= @To
-            ORDER BY payments.PaymentDate DESC, DamageFee DESC;
-            """;
-
-        using var connection = _connectionFactory.CreateConnection();
-        var results = await connection.QueryAsync<CustomerDamageFeeReportItem>(sql, new { From = from, To = to });
         return results.ToList();
     }
 

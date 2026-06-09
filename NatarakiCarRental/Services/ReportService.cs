@@ -164,12 +164,6 @@ public sealed class ReportService
         return _reportRepository.GetCustomersWithLateReturnsAsync(today);
     }
 
-    public Task<IReadOnlyList<CustomerDamageFeeReportItem>> GetCustomersWithDamageFeesAsync(DateTime from, DateTime to)
-    {
-        AccessControlService.EnforcePermission("Reports.View");
-        return _reportRepository.GetCustomersWithDamageFeesAsync(from, to);
-    }
-
     public Task<IReadOnlyList<BlacklistedCustomerReportItem>> GetBlacklistedCustomersReportAsync(DateTime from, DateTime to)
     {
         AccessControlService.EnforcePermission("Reports.View");

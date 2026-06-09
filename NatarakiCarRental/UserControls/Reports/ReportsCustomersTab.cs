@@ -19,14 +19,12 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
     private readonly MetricCardControl _topRentalsCard = new();
     private readonly MetricCardControl _blacklistedCard = new();
     private readonly MetricCardControl _lateReturnsCard = new();
-    private readonly MetricCardControl _damageFeesCard = new();
     private readonly MetricCardControl _averageRevenueCard = new();
 
     private readonly DataGridView _revenueGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _rentalCountGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _outstandingGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _lateReturnsGrid = ReportLayoutHelper.CreateSummaryGrid();
-    private readonly DataGridView _damageFeesGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _blacklistedGrid = ReportLayoutHelper.CreateSummaryGrid();
 
     public ReportsCustomersTab()
@@ -47,7 +45,6 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
             PopulateTopCustomersByRentalCount(await _reportService.GetTopCustomersByRentalCountAsync(from, to, 10));
             PopulateCustomerOutstandingBalances(await _reportService.GetCustomersWithOutstandingBalancesAsync(from, to));
             PopulateCustomerLateReturns(await _reportService.GetCustomersWithLateReturnsAsync(DateTime.Today));
-            PopulateCustomerDamageFees(await _reportService.GetCustomersWithDamageFeesAsync(from, to));
             PopulateBlacklistedCustomers(await _reportService.GetBlacklistedCustomersReportAsync(from, to));
             LayoutCards();
         }
@@ -91,7 +88,6 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
         // Risk Group
         ReportLayoutHelper.AddMetricCard(_riskMetricsPanel, _blacklistedCard, IconChar.UserSlash, "Blacklisted", "0", "Current blocked list", ThemeHelper.Danger);
         ReportLayoutHelper.AddMetricCard(_riskMetricsPanel, _lateReturnsCard, IconChar.Clock, "Late Returners", "0", "Currently overdue", ThemeHelper.Warning);
-        ReportLayoutHelper.AddMetricCard(_riskMetricsPanel, _damageFeesCard, IconChar.Hammer, "Damage Claims", "0", "In range", ThemeHelper.Danger);
         ReportLayoutHelper.AddMetricCard(_riskMetricsPanel, _averageRevenueCard, IconChar.ChartLine, "Avg / Customer", "₱0.00", "Combined avg", ThemeHelper.Success);
     }
 
@@ -107,18 +103,16 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
 
     private TableLayoutPanel CreateRiskTablesLayout()
     {
-        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 374, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 12, 0, 4) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        TableLayoutPanel grid = new() { Dock = DockStyle.Top, Height = 374, ColumnCount = 1, RowCount = 1, Padding = new Padding(0, 12, 0, 4) };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         grid.Controls.Add(ReportLayoutHelper.CreateGridCard("Recent Late Returns Detail", _lateReturnsGrid), 0, 0);
-        grid.Controls.Add(ReportLayoutHelper.CreateGridCard("Recent Damage Fee Detail", _damageFeesGrid), 1, 0);
         return grid;
     }
 
     private void LayoutCards()
     {
         ReportLayoutHelper.LayoutMetricCards(_growthMetricsPanel, [_activeCard, _newCard, _topRevenueCard, _topRentalsCard]);
-        ReportLayoutHelper.LayoutMetricCards(_riskMetricsPanel, [_blacklistedCard, _lateReturnsCard, _damageFeesCard, _averageRevenueCard]);
+        ReportLayoutHelper.LayoutMetricCards(_riskMetricsPanel, [_blacklistedCard, _lateReturnsCard, _averageRevenueCard]);
     }
 
     private void UpdateSummaryCards(CustomerAnalyticsMetrics metrics)
@@ -129,7 +123,6 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
         _topRentalsCard.SetMetric(IconChar.Star, "Frequent Renter", metrics.TopCustomerByRentals ?? "-", $"{metrics.TopCustomerRentalCount} rental(s)", ThemeHelper.Primary);
         _blacklistedCard.SetMetric(IconChar.UserSlash, "Blacklisted", metrics.BlacklistedCustomers.ToString(), "Current blocked list", ThemeHelper.Danger);
         _lateReturnsCard.SetMetric(IconChar.Clock, "Late Returners", metrics.CustomersWithLateReturns.ToString(), "Currently overdue", ThemeHelper.Warning);
-        _damageFeesCard.SetMetric(IconChar.Hammer, "Damage Claims", metrics.CustomersWithDamageFees.ToString(), "In range", ThemeHelper.Danger);
         _averageRevenueCard.SetMetric(IconChar.ChartLine, "Avg / Customer", ReportLayoutHelper.FormatPeso(metrics.AverageRevenuePerCustomer), "Combined avg", ThemeHelper.Success);
     }
 
@@ -180,18 +173,6 @@ public sealed class ReportsCustomersTab : UserControl, IReportTab
         _lateReturnsGrid.Columns.Add("LateFee", "Late Fee");
         foreach (CustomerLateReturnReportItem item in items) _lateReturnsGrid.Rows.Add(item.CustomerName, item.TransactionCode, $"{item.CarName} ({item.PlateNumber})", item.DaysLate, ReportLayoutHelper.FormatPeso(item.EstimatedLateFee));
         ReportLayoutHelper.AddEmptyRow(_lateReturnsGrid);
-    }
-
-    private void PopulateCustomerDamageFees(IReadOnlyList<CustomerDamageFeeReportItem> items)
-    {
-        _damageFeesGrid.Columns.Clear(); _damageFeesGrid.Rows.Clear();
-        _damageFeesGrid.Columns.Add("Customer", "Customer");
-        _damageFeesGrid.Columns.Add("Code", "Code");
-        _damageFeesGrid.Columns.Add("Car", "Car / Plate");
-        _damageFeesGrid.Columns.Add("Damage", "Damage Fee");
-        _damageFeesGrid.Columns.Add("Date", "Payment Date");
-        foreach (CustomerDamageFeeReportItem item in items) _damageFeesGrid.Rows.Add(item.CustomerName, item.TransactionCode, $"{item.CarName} ({item.PlateNumber})", ReportLayoutHelper.FormatPeso(item.DamageFee), ReportLayoutHelper.FormatDate(item.PaymentDate));
-        ReportLayoutHelper.AddEmptyRow(_damageFeesGrid);
     }
 
     private void PopulateBlacklistedCustomers(IReadOnlyList<BlacklistedCustomerReportItem> items)
