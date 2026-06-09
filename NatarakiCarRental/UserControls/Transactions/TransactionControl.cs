@@ -443,7 +443,7 @@ public sealed class TransactionControl : UserControl
                 if (!isPaid) actions += "|Payment";
                 actions += "|Cancel";
             }
-            else if (transaction.TransactionStatus == TransactionConstants.Status.Reserved)
+            else if (transaction.TransactionStatus == TransactionConstants.Status.Scheduled)
             {
                 if (!isPaid) actions += "|Payment";
                 if (transaction.StartDate.Date <= DateTime.Today) actions += "|Start Rental";
@@ -729,7 +729,7 @@ public sealed class TransactionControl : UserControl
     {
         Transaction? transaction = await GetTransactionOrRefreshAsync(transactionId);
         if (transaction is null
-            || transaction.TransactionStatus is not (TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved or TransactionConstants.Status.Active))
+            || transaction.TransactionStatus is not (TransactionConstants.Status.Pending or TransactionConstants.Status.Scheduled or TransactionConstants.Status.Active))
         {
             return;
         }

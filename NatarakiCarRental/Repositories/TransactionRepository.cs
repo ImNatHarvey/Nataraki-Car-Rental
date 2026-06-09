@@ -346,7 +346,10 @@ public sealed class TransactionRepository
                      AND YEAR(ISNULL(UpdatedAt, CreatedAt)) = YEAR(@ReferenceDate)
                      AND MONTH(ISNULL(UpdatedAt, CreatedAt)) = MONTH(@ReferenceDate)
                     THEN 1 END),
-                MaintenanceTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'Maintenance' THEN 1 END)
+                TotalMaintenance = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Maintenance' THEN 1 END),
+                ActiveMaintenance = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'{TransactionConstants.Status.Maintenance}' THEN 1 END),
+                UpcomingMaintenance = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'{TransactionConstants.Status.Scheduled}' THEN 1 END),
+                CompletedMaintenance = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'{TransactionConstants.Status.Completed}' THEN 1 END)
             FROM dbo.Transactions;
             """;
 

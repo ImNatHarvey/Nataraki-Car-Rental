@@ -153,7 +153,7 @@ public sealed class OffsiteService
                 finalProofPath = await UploadPathHelper.SaveOffsiteProofAsync(request.ProofFilePath);
             }
 
-            string initialStatus = request.AmountPaid > 0 ? OffsiteConstants.Status.Reserved : OffsiteConstants.Status.Pending;
+            string initialStatus = request.AmountPaid > 0 ? OffsiteConstants.Status.Scheduled : OffsiteConstants.Status.Pending;
 
             // 3. Create OffsiteRecord
             OffsiteRecord record = new()

@@ -5,12 +5,13 @@ public static class TransactionConstants
     public static class Status
     {
         public const string Pending = "Pending";
-        public const string Reserved = "Reserved";
+        public const string Scheduled = "Scheduled";
         public const string Active = "Active";
+        public const string Maintenance = "Maintenance";
         public const string Completed = "Completed";
         public const string Cancelled = "Cancelled";
 
-        public static readonly string[] All = [Pending, Reserved, Active, Completed, Cancelled];
+        public static readonly string[] All = [Pending, Scheduled, Active, Maintenance, Completed, Cancelled];
     }
 
     public static class PaymentStatus

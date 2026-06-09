@@ -110,7 +110,7 @@ public sealed class TransactionService
             CustomerId = customer.CustomerId,
             Title = $"Maintenance: {request.MaintenanceType}",
             ScheduleType = FleetScheduleConstants.Type.Maintenance,
-            Status = FleetScheduleConstants.Status.Maintenance,
+            Status = FleetScheduleConstants.Status.Scheduled,
             StartDate = request.StartDate.Date,
             EndDate = request.EndDate.Date,
             Notes = request.Notes,
@@ -138,41 +138,22 @@ public sealed class TransactionService
                 DailyRate = 1, // Not used but required by DB constraints for now
                 TotalDays = Math.Max(1, (request.EndDate.Date - request.StartDate.Date).Days + 1),
                 TotalAmount = request.EstimatedCost,
-                AmountPaid = request.AmountPaid,
-                BalanceAmount = request.EstimatedCost - request.AmountPaid,
-                ModeOfPayment = request.ModeOfPayment,
-                PaymentStatus = GetPaymentStatus(request.AmountPaid, request.EstimatedCost),
-                TransactionStatus = FleetScheduleConstants.Status.Maintenance,
+                AmountPaid = 0,
+                BalanceAmount = request.EstimatedCost,
+                ModeOfPayment = "N/A",
+                PaymentStatus = TransactionConstants.PaymentStatus.Unpaid,
+                TransactionStatus = TransactionConstants.Status.Scheduled,
                 Notes = request.Notes,
                 CreatedByUserId = _currentUserId
             };
 
             int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
 
-            if (request.AmountPaid > 0)
-            {
-                await _transactionPaymentRepository.AddAsync(
-                    new TransactionPayment
-                    {
-                        TransactionId = transactionId,
-                        PaymentDate = DateTime.Now,
-                        Amount = request.AmountPaid,
-                        ModeOfPayment = request.ModeOfPayment.Trim(),
-                        PaymentCategory = "Maintenance Payment",
-                        ReceiptFilePath = request.ReceiptFilePath,
-                        Notes = "Initial maintenance payment",
-                        CreatedByUserId = _currentUserId
-                    },
-                    dbTransaction);
-            }
-
-            await _carRepository.UpdateStatusAsync(car.CarId, CarConstants.Status.Maintenance, dbTransaction);
-
             await _activityLogService.LogAsync(
                 action: "Created",
                 module: "Maintenance",
                 entityId: transactionId,
-                description: $"Created maintenance transaction {transaction.TransactionCode} for car {car.PlateNumber}.",
+                description: $"Scheduled maintenance transaction {transaction.TransactionCode} for car {car.PlateNumber}.",
                 userId: _currentUserId,
                 entityName: transaction.TransactionCode,
                 transaction: dbTransaction);
@@ -185,6 +166,33 @@ public sealed class TransactionService
             RollbackQuietly(dbTransaction);
             throw;
         }
+    }
+
+    public async Task StartMaintenanceTransactionAsync(int transactionId, int currentUserId)
+    {
+        AccessControlService.EnforcePermission("Offsite.Edit");
+        Transaction transaction = await GetActiveTransactionAsync(transactionId);
+
+        if (transaction.TransactionStatus != TransactionConstants.Status.Scheduled)
+        {
+            throw Validation(nameof(Transaction.TransactionStatus), "Only scheduled maintenance can be started.");
+        }
+
+        if (transaction.StartDate.Date > DateTime.Today)
+        {
+            throw Validation(nameof(Transaction.StartDate), "Cannot start maintenance before its scheduled start date.");
+        }
+
+        await ChangeStatusAsync(
+            transactionId,
+            currentUserId,
+            TransactionConstants.Status.Maintenance,
+            FleetScheduleConstants.Type.Maintenance,
+            FleetScheduleConstants.Status.Maintenance,
+            action: "Updated",
+            description: $"Started maintenance for {transaction.TransactionCode}.");
+            
+        await _carRepository.UpdateStatusAsync(transaction.CarId, CarConstants.Status.Maintenance);
     }
 
     private static void ValidateMaintenanceDates(DateTime startDate, DateTime endDate)
@@ -216,7 +224,7 @@ public sealed class TransactionService
         }
 
         if (reservation.ScheduleType != FleetScheduleConstants.Type.Reservation
-            || reservation.Status is not FleetScheduleConstants.Status.Pending and not FleetScheduleConstants.Status.Reserved)
+            || reservation.Status is not FleetScheduleConstants.Status.Pending and not FleetScheduleConstants.Status.Scheduled)
         {
             throw Validation(nameof(CreateTransactionFromReservationRequest.FleetScheduleId), "Only pending or reserved reservation schedules can be converted into transactions.");
         }
@@ -602,7 +610,7 @@ public sealed class TransactionService
         AccessControlService.EnforcePermission("Transactions.StartRental");
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
 
-        if (transaction.TransactionStatus != TransactionConstants.Status.Reserved)
+        if (transaction.TransactionStatus != TransactionConstants.Status.Scheduled)
         {
             throw Validation(nameof(Transaction.TransactionStatus), "Only reserved transactions can be started.");
         }
@@ -632,7 +640,7 @@ public sealed class TransactionService
         AccessControlService.EnforcePermission("Transactions.Cancel");
         string? trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         Transaction transaction = await GetActiveTransactionAsync(transactionId);
-        string scheduleType = transaction.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved
+        string scheduleType = transaction.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Scheduled
             ? FleetScheduleConstants.Type.Reservation
             : FleetScheduleConstants.Type.Rental;
 
@@ -734,7 +742,7 @@ public sealed class TransactionService
                 throw Validation(nameof(Transaction.FleetScheduleId), "Linked fleet schedule was not found.");
             }
 
-            if (amountPaid > 0)
+            if (amountPaid > 0 && transaction.TransactionType != "Maintenance")
             {
                 await _transactionPaymentRepository.AddAsync(new TransactionPayment
                 {
@@ -752,7 +760,7 @@ public sealed class TransactionService
             decimal finalPaid = await _transactionPaymentRepository.GetTotalPaidAsync(transactionId, dbTransaction);
             string finalPaymentStatus = GetPaymentStatus(finalPaid, finalTotal);
 
-            if (finalPaymentStatus == TransactionConstants.PaymentStatus.Paid)
+            if (finalPaymentStatus == TransactionConstants.PaymentStatus.Paid || transaction.TransactionType == "Maintenance")
             {
                 schedule.EndDate = newEndDate.Date;
                 await _scheduleService.PrepareForSaveAsync(schedule, schedule.ScheduleId, isInternalWorkflow: true, transaction: dbTransaction);
@@ -1263,20 +1271,20 @@ public sealed class TransactionService
     private static string GetReservationStatusForPaidAmount(decimal amountPaid)
     {
         return amountPaid > 0
-            ? FleetScheduleConstants.Status.Reserved
+            ? FleetScheduleConstants.Status.Scheduled
             : FleetScheduleConstants.Status.Pending;
     }
 
     private static string GetReservationTransactionStatusForPaidAmount(decimal amountPaid)
     {
         return amountPaid > 0
-            ? TransactionConstants.Status.Reserved
+            ? TransactionConstants.Status.Scheduled
             : TransactionConstants.Status.Pending;
     }
 
     private async Task SyncReservationTransactionPaymentStatusAsync(Transaction transaction, SqlTransaction dbTransaction)
     {
-        if (transaction.TransactionStatus is not (TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved))
+        if (transaction.TransactionStatus is not (TransactionConstants.Status.Pending or TransactionConstants.Status.Scheduled))
         {
             return;
         }

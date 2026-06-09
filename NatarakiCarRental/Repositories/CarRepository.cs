@@ -37,11 +37,15 @@ public sealed class CarRepository
                         SELECT 1 FROM dbo.OffsiteRecords o 
                         WHERE o.CarId = c.CarId AND o.Status = N'{OffsiteConstants.Status.Ongoing}' AND o.IsArchived = 0
                           AND o.OffsiteType IN @MaintenanceTypes AND o.StartDate <= @ReferenceDate AND ISNULL(o.ExpectedReturnDate, @ReferenceDate) >= @ReferenceDate
+                    ) OR EXISTS (
+                        SELECT 1 FROM dbo.Transactions t
+                        WHERE t.CarId = c.CarId AND t.TransactionType = N'Maintenance' AND t.TransactionStatus = N'{TransactionConstants.Status.Maintenance}' AND t.IsArchived = 0
+                          AND t.StartDate <= @ReferenceDate AND t.EndDate >= @ReferenceDate
                     ) THEN N'{CarConstants.Status.Maintenance}'
                     WHEN EXISTS (
                         SELECT 1 FROM dbo.FleetSchedules s 
                         WHERE s.CarId = c.CarId AND s.ScheduleType = N'{FleetScheduleConstants.Type.Reservation}' AND s.Status IN @ActiveReservationStatuses AND s.IsArchived = 0 AND s.StartDate <= @ReferenceDate AND s.EndDate >= @ReferenceDate
-                    ) THEN N'{CarConstants.Status.Reserved}'
+                    ) THEN N'{CarConstants.Status.Scheduled}'
                     ELSE N'{CarConstants.Status.Available}'
                 END AS ComputedStatus
             FROM dbo.Cars c
@@ -189,7 +193,7 @@ public sealed class CarRepository
                     ReferenceDate = referenceDate.Date,
                     MaintenanceTypes = OffsiteConstants.Type.MaintenanceCategory,
                     ActiveRentalStatuses = new[] { FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Status.Rented },
-                    ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending, FleetScheduleConstants.Status.Reserved }
+                    ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending, FleetScheduleConstants.Status.Scheduled }
                 },
                 transaction);
         }
@@ -223,7 +227,7 @@ public sealed class CarRepository
                 ReferenceDate = referenceDate.Date,
                 MaintenanceTypes = OffsiteConstants.Type.MaintenanceCategory,
                 ActiveRentalStatuses = new[] { FleetScheduleConstants.Status.Ongoing, FleetScheduleConstants.Status.Rented },
-                ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending, FleetScheduleConstants.Status.Reserved }
+                ActiveReservationStatuses = new[] { FleetScheduleConstants.Status.Pending, FleetScheduleConstants.Status.Scheduled }
             });
 
         return counts ?? new CarCounts();

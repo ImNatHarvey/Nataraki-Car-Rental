@@ -24,12 +24,10 @@ public sealed class MaintenanceTransactionDetailsForm : Form
     private readonly DateTimePicker _startDatePicker = CreateDatePicker();
     private readonly DateTimePicker _endDatePicker = CreateDatePicker();
     private readonly NumericUpDown _estimatedCostInput = CreateMoneyInput();
-    private readonly NumericUpDown _amountPaidInput = CreateMoneyInput();
-    private readonly ComboBox _modeOfPaymentComboBox = CreateComboBox();
     private readonly TextBox _notesTextBox = new()
     {
         Width = 812,
-        Height = 86,
+        Height = 100,
         Multiline = true,
         ScrollBars = ScrollBars.Vertical,
         Font = FontHelper.Regular(10F)
@@ -65,7 +63,7 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(1060, 680);
+        ClientSize = new Size(1060, 560);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
 
@@ -85,7 +83,7 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         _validationLabel.ForeColor = ThemeHelper.Danger;
         _validationLabel.Visible = false;
 
-        Panel contentPanel = ControlFactory.CreateCardPanel(new Size(996, 480));
+        Panel contentPanel = ControlFactory.CreateCardPanel(new Size(996, 360));
         contentPanel.Location = new Point(32, 96);
         contentPanel.Padding = new Padding(24);
 
@@ -93,11 +91,10 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 5
+            RowCount = 4
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
@@ -109,18 +106,16 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         layout.Controls.Add(CreateInputPanel("Estimated Cost (₱) *", _estimatedCostInput), 1, 1);
         layout.Controls.Add(CreateInputPanel("Start Date *", _startDatePicker), 0, 2);
         layout.Controls.Add(CreateInputPanel("End Date *", _endDatePicker), 1, 2);
-        layout.Controls.Add(CreateInputPanel("Amount Paid (₱)", _amountPaidInput), 0, 3);
-        layout.Controls.Add(CreateInputPanel("Mode of Payment", _modeOfPaymentComboBox), 1, 3);
-        layout.Controls.Add(CreateInputPanel("Internal Notes", _notesTextBox), 0, 4);
+        layout.Controls.Add(CreateInputPanel("Internal Notes", _notesTextBox), 0, 3);
         layout.SetColumnSpan(_notesTextBox.Parent!, 2);
 
         contentPanel.Controls.Add(layout);
 
         Button cancelButton = CreateSecondaryButton(_viewOnly ? "Close" : "Cancel", 120, 38);
-        cancelButton.Location = new Point(_viewOnly ? 908 : 716, 608);
+        cancelButton.Location = new Point(_viewOnly ? 908 : 716, 488);
         cancelButton.DialogResult = DialogResult.Cancel;
 
-        _saveButton.Location = new Point(848, 608);
+        _saveButton.Location = new Point(848, 488);
         _saveButton.Click += SaveButton_Click;
 
         Controls.Add(titleLabel);
@@ -138,9 +133,6 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         _maintenanceTypeComboBox.Items.AddRange(["Maintenance", "Repair", "Cleaning", "Inspection", "Body Work", "Engine Work", "Other"]);
         _maintenanceTypeComboBox.SelectedIndex = 0;
 
-        _modeOfPaymentComboBox.Items.AddRange(TransactionConstants.ModeOfPayment.All);
-        _modeOfPaymentComboBox.SelectedIndex = 0;
-
         _startDatePicker.Value = DateTime.Today;
         _endDatePicker.Value = DateTime.Today.AddDays(1);
         
@@ -157,8 +149,6 @@ public sealed class MaintenanceTransactionDetailsForm : Form
             _startDatePicker.Enabled = false;
             _endDatePicker.Enabled = false;
             _estimatedCostInput.Enabled = false;
-            _amountPaidInput.Enabled = false;
-            _modeOfPaymentComboBox.Enabled = false;
             _notesTextBox.ReadOnly = true;
         }
     }
@@ -215,8 +205,6 @@ public sealed class MaintenanceTransactionDetailsForm : Form
         _startDatePicker.Value = transaction.StartDate;
         _endDatePicker.Value = transaction.EndDate;
         _estimatedCostInput.Value = transaction.TotalAmount;
-        _amountPaidInput.Value = transaction.AmountPaid;
-        _modeOfPaymentComboBox.SelectedItem = transaction.ModeOfPayment;
         _notesTextBox.Text = transaction.Notes;
     }
 
@@ -236,8 +224,6 @@ public sealed class MaintenanceTransactionDetailsForm : Form
             StartDate = _startDatePicker.Value,
             EndDate = _endDatePicker.Value,
             EstimatedCost = _estimatedCostInput.Value,
-            AmountPaid = _amountPaidInput.Value,
-            ModeOfPayment = _modeOfPaymentComboBox.SelectedItem?.ToString() ?? "Cash",
             Notes = _notesTextBox.Text
         };
 

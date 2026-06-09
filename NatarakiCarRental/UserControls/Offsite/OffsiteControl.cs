@@ -62,7 +62,7 @@ public sealed class OffsiteControl : UserControl
     
     private readonly MetricCardControl _maintenanceRecordsCard = new();
     private readonly MetricCardControl _activeMaintenanceCard = new();
-    private readonly MetricCardControl _unpaidMaintenanceCard = new();
+    private readonly MetricCardControl _upcomingMaintenanceCard = new();
     private readonly MetricCardControl _completedMaintenanceCard = new();
 
     private bool _mapReady;
@@ -192,7 +192,7 @@ public sealed class OffsiteControl : UserControl
         
         TableLayoutPanel metricsGrid = new() { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 12, 0, 8) };
         for (int i = 0; i < 4; i++) metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
-        AddMetricCard(metricsGrid, _maintenanceRecordsCard, 0); AddMetricCard(metricsGrid, _activeMaintenanceCard, 1); AddMetricCard(metricsGrid, _unpaidMaintenanceCard, 2); AddMetricCard(metricsGrid, _completedMaintenanceCard, 3);
+        AddMetricCard(metricsGrid, _maintenanceRecordsCard, 0); AddMetricCard(metricsGrid, _activeMaintenanceCard, 1); AddMetricCard(metricsGrid, _upcomingMaintenanceCard, 2); AddMetricCard(metricsGrid, _completedMaintenanceCard, 3);
         layout.Controls.Add(metricsGrid, 0, 0);
 
         Panel searchRow = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
@@ -228,7 +228,7 @@ public sealed class OffsiteControl : UserControl
 
     private void ConfigureFilters()
     {
-        _isInitializingFilters = true; _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList; _statusFilter.Font = FontHelper.Regular(10F); _statusFilter.Items.Clear(); _statusFilter.Items.AddRange(["All Status", "Maintenance", "Completed", "Cancelled"]); _statusFilter.SelectedIndex = 0; _statusFilter.Size = new Size(180, 30); _statusFilter.Location = new Point(292, 8); _isInitializingFilters = false; _statusFilter.SelectedIndexChanged += StatusFilter_SelectedIndexChanged;
+        _isInitializingFilters = true; _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList; _statusFilter.Font = FontHelper.Regular(10F); _statusFilter.Items.Clear(); _statusFilter.Items.AddRange(["All Status", "Scheduled", "Maintenance", "Completed", "Cancelled"]); _statusFilter.SelectedIndex = 0; _statusFilter.Size = new Size(180, 30); _statusFilter.Location = new Point(292, 8); _isInitializingFilters = false; _statusFilter.SelectedIndexChanged += StatusFilter_SelectedIndexChanged;
     }
 
     private async Task LoadRecordsAsync()
@@ -248,14 +248,26 @@ public sealed class OffsiteControl : UserControl
             var pagedItems = allItems.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
             _maintenanceGrid.Rows.Clear();
             foreach (var item in pagedItems) {
-                int rowIndex = _maintenanceGrid.Rows.Add(item.TransactionCode, $"{item.CarName} ({item.PlateNumber})", item.CustomerName, item.TransactionStatus, $"{item.StartDate:MMM d} - {item.EndDate:MMM d}", $"₱{item.TotalAmount:N2}", $"₱{item.AmountPaid:N2}", $"₱{item.BalanceAmount:N2}", string.Join("|", GetRowActions(item)));
+   int rowIndex = _maintenanceGrid.Rows.Add(item.TransactionCode, $"{item.CarName} ({item.PlateNumber})", item.CustomerName, item.TransactionStatus, $"{item.StartDate:MMM d} - {item.EndDate:MMM d}", $"₱{item.TotalAmount:N2}", $"₱{item.AmountPaid:N2}", $"₱{item.BalanceAmount:N2}", string.Join("|", GetRowActions(item)));
                 _maintenanceGrid.Rows[rowIndex].Tag = item;
             }
             _emptyStateLabel.Visible = !pagedItems.Any(); UpdatePagination(totalPages); await UpdateMetrics();
         } catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to load maintenance: {ex.Message}"); }
     }
 
-    private List<string> GetRowActions(TransactionListItem item) { if (_showArchived) return ["View", "Restore"]; if (item.TransactionStatus == "Maintenance") return ["View", "Payment", "Extend", "Complete", "Cancel"]; return ["View", "Archive"]; }
+    private List<string> GetRowActions(TransactionListItem item) 
+    { 
+        if (_showArchived) return ["View", "Restore"]; 
+        if (item.TransactionStatus == TransactionConstants.Status.Scheduled)
+        {
+            var actions = new List<string> { "View" };
+            if (item.StartDate.Date <= DateTime.Today) actions.Add("Start");
+            actions.Add("Cancel");
+            return actions;
+        }
+        if (item.TransactionStatus == TransactionConstants.Status.Maintenance) return ["View", "Payment", "Extend", "Complete", "Cancel"]; 
+        return ["View", "Archive"]; 
+    }
 
     private void SetupGrid()
     {
@@ -283,7 +295,7 @@ public sealed class OffsiteControl : UserControl
         if (action == null) return;
         switch (action) {
             case "View": await ViewTransactionAsync(item.TransactionId); break;
-            case "Payment": await AddPaymentAsync(item.TransactionId); break;
+            case "Start": await StartMaintenanceAsync(item.TransactionId); break;
             case "Extend": await ExtendTransactionAsync(item.TransactionId); break;
             case "Complete": await CompleteTransactionAsync(item.TransactionId); break;
             case "Cancel": await CancelTransactionAsync(item.TransactionId); break;
@@ -307,7 +319,7 @@ public sealed class OffsiteControl : UserControl
     }
 
     private async Task ViewTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null) new MaintenanceTransactionDetailsForm(_currentUserId, txn, true).ShowDialog(); }
-    private async Task AddPaymentAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionDetailsForm(txn, _currentUserId).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
+    private async Task StartMaintenanceAsync(int id) { try { await _transactionService.StartMaintenanceTransactionAsync(id, _currentUserId); MessageBoxHelper.ShowSuccess("Maintenance started successfully."); await LoadRecordsAsync(); } catch (Exception ex) { MessageBoxHelper.ShowError($"Failed to start maintenance: {ex.Message}"); } }
     private async Task ExtendTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionExtendRentalForm(txn).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
     private async Task CompleteTransactionAsync(int id) { Transaction? txn = await _transactionService.GetByIdAsync(id); if (txn != null && new TransactionReturnInspectionForm(txn).ShowDialog() == DialogResult.OK) await LoadRecordsAsync(); }
     private async Task CancelTransactionAsync(int id) { if (await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, "Cancel maintenance") && MessageBoxHelper.ShowConfirmWarning("Cancel maintenance transaction?", "Cancel")) { await _transactionService.CancelTransactionAsync(id, _currentUserId); await LoadRecordsAsync(); } }
@@ -325,12 +337,40 @@ public sealed class OffsiteControl : UserControl
     private void UpdateSubTabStyles() { ApplyTabStyle(_recordsSubTabButton, !_showArchived); ApplyTabStyle(_archivedSubTabButton, _showArchived); }
     private int GetRecordsPageSize() => Height > 700 ? 13 : 4;
     private void UpdatePagination(int totalPages) { _paginationLabel.Text = $"Page {_currentPage} of {totalPages} ({_totalItems} records)"; _prevPageButton.Enabled = _currentPage > 1; _nextPageButton.Enabled = _currentPage < totalPages; }
-    private async Task UpdateMetrics() { try { var m = await _transactionService.GetMetricsAsync(DateTime.Today); _maintenanceRecordsCard.SetMetric(IconChar.ClipboardList, "Total Maintenance", m.MaintenanceTransactions.ToString(), "All time", ThemeHelper.Primary); } catch { } }
+    private async Task UpdateMetrics() 
+    { 
+        try { 
+            var m = await _transactionService.GetMetricsAsync(DateTime.Today); 
+            _maintenanceRecordsCard.SetMetric(IconChar.ClipboardList, "Total Maintenance", m.TotalMaintenance.ToString(), "All time", ThemeHelper.Primary); 
+            _activeMaintenanceCard.SetMetric(IconChar.Tools, "Active Maintenance", m.ActiveMaintenance.ToString(), "Currently ongoing", ThemeHelper.Warning); 
+            _upcomingMaintenanceCard.SetMetric(IconChar.Calendar, "Upcoming", m.UpcomingMaintenance.ToString(), "Scheduled", ThemeHelper.Info); 
+            _completedMaintenanceCard.SetMetric(IconChar.CheckCircle, "Completed", m.CompletedMaintenance.ToString(), "Total finalized", ThemeHelper.Success); 
+        } catch { } 
+    }
 
     private static IconButton CreateToolbarIconButton(IconChar icon, string text, int width) { var b = new IconButton { Text = text, IconChar = icon, IconColor = Color.White, IconSize = 16, TextImageRelation = TextImageRelation.ImageBeforeText, Size = new Size(width, 34), BackColor = ThemeHelper.Primary, ForeColor = Color.White, Font = FontHelper.SemiBold(9F), FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand }; b.FlatAppearance.BorderSize = 0; return b; }
     private async Task InitializeMapAsync() { try { string p = Path.Combine(AppContext.BaseDirectory, "Assets", "Maps", "offsite-tracking-map.html"); if (File.Exists(p)) { await _mapWebView.EnsureCoreWebView2Async(); _mapWebView.Source = new Uri(p); _mapReady = true; } } catch { } }
     private async Task LoadCarsAsync() { try { var cars = await _trackingService.GetTrackableCarsAsync(); _carComboBox.Items.Clear(); _carComboBox.Items.Add("Select a vehicle"); foreach (var c in cars) _carComboBox.Items.Add(new CarOption(c.CarId, c.CarName, c.PlateNumber)); _carComboBox.SelectedIndex = 0; } catch { } }
-    private async Task RefreshSelectedCarLocationAsync(bool msg) { if (_isRefreshing || _carComboBox.SelectedItem is not CarOption car) return; try { _isRefreshing = true; var loc = await _trackingService.GetLatestLocationAsync(car.CarId); if (loc == null) { await ClearLocationDisplayAsync(car); return; } UpdateLocationDisplay(car, loc); await UpdateMapMarkerAsync(loc, car.Label); } finally { _isRefreshing = false; } }
+    private async Task RefreshSelectedCarLocationAsync(bool msg) 
+    { 
+        if (_isRefreshing || _carComboBox.SelectedItem is not CarOption car) return; 
+        try 
+        { 
+            _isRefreshing = true; 
+            var loc = await _trackingService.GetLatestLocationAsync(car.CarId); 
+            if (loc == null) { await ClearLocationDisplayAsync(car); return; } 
+            UpdateLocationDisplay(car, loc); 
+            await UpdateMapMarkerAsync(loc, car.Label); 
+        } 
+        catch (Exception ex)
+        {
+            if (msg) MessageBoxHelper.ShowError($"Failed to refresh location: {ex.Message}");
+        }
+        finally 
+        { 
+            _isRefreshing = false; 
+        } 
+    }
     private async Task StartDemoTrackingAsync() { if (!AccessControlService.HasPermission("Offsite.MapTracking") || _carComboBox.SelectedItem is not CarOption) return; _startTrackingButton.Enabled = false; _stopTrackingButton.Enabled = true; _autoRefreshLabel.Text = "Refresh: 5s"; _demoTimer.Start(); await InsertDemoLocationAsync(); }
     private void StopDemoTracking() { _demoTimer.Stop(); _startTrackingButton.Enabled = true; _stopTrackingButton.Enabled = false; _autoRefreshLabel.Text = "Refresh: 10m"; }
     private async Task InsertDemoLocationAsync() { if (_isDemoTickRunning || _carComboBox.SelectedItem is not CarOption car) return; try { _isDemoTickRunning = true; await _simulator.InsertNextAsync(car.CarId); await RefreshSelectedCarLocationAsync(false); } catch { StopDemoTracking(); } finally { _isDemoTickRunning = false; } }

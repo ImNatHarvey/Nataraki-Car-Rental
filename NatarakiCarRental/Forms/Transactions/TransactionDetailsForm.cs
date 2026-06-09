@@ -273,7 +273,7 @@ public sealed class TransactionDetailsForm : Form
         tab.Controls.Add(CreateInputPanel("Eligible Reservation *", _reservationComboBox, new Point(18, 16)));
         _reservationSummaryLabel.Location = new Point(18, 82);
         _reservationSummaryLabel.Size = new Size(920, 170);
-        _reservationSummaryLabel.Text = "Select a pending or reserved reservation to view its details.";
+        _reservationSummaryLabel.Text = "Select a pending or scheduled reservation to view its details.";
         tab.Controls.Add(_reservationSummaryLabel);
         _reservationComboBox.SelectedIndexChanged += (_, _) => UpdateReservationSummary();
         return tab;
@@ -344,7 +344,7 @@ public sealed class TransactionDetailsForm : Form
         CreateViewDetailsLayout();
         CreatePaymentsGrid(new Point(32, 376), new Size(996, 222));
 
-        if (_transaction?.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved or TransactionConstants.Status.Active)
+        if (_transaction?.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Scheduled or TransactionConstants.Status.Active)
         {
             CreateAddPaymentSection();
             _submitPaymentButton.Location = new Point(868, 786);
@@ -353,7 +353,7 @@ public sealed class TransactionDetailsForm : Form
         }
 
         Button closeButton = CreateSecondaryButton("Close", 110, 38);
-        closeButton.Location = _transaction?.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Reserved or TransactionConstants.Status.Active
+        closeButton.Location = _transaction?.TransactionStatus is TransactionConstants.Status.Pending or TransactionConstants.Status.Scheduled or TransactionConstants.Status.Active
             ? new Point(746, 786)
             : new Point(918, 622);
         closeButton.Click += (_, _) => Close();

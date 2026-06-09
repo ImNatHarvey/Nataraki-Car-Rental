@@ -15,7 +15,9 @@ public static class ThemeHelper
     public static Color PrimaryHover { get; private set; } = Color.FromArgb(29, 78, 216);
 
     public static Color Success { get; private set; } = Color.FromArgb(22, 163, 74);
+    public static Color Info { get; private set; } = Color.FromArgb(59, 130, 246);
     public static Color Warning { get; private set; } = Color.FromArgb(217, 119, 6);
+    public static Color WarningDark { get; private set; } = Color.FromArgb(180, 83, 9);
     public static Color Danger { get; private set; } = Color.FromArgb(220, 38, 38);
     public static Color Error => Danger;
 
@@ -26,6 +28,7 @@ public static class ThemeHelper
 
         // Harmonize semantic colors with the branding theme
         Success = HarmonizeColor(Color.FromArgb(22, 163, 74), color);
+        Info = HarmonizeColor(Color.FromArgb(59, 130, 246), color);
         Warning = HarmonizeColor(Color.FromArgb(217, 119, 6), color);
         Danger = HarmonizeColor(Color.FromArgb(220, 38, 38), color);
     }

@@ -17,7 +17,6 @@ public sealed class ReportsOperationsTab : UserControl, IReportTab
     private readonly MetricCardControl _lateReturnsCard = new();
     private readonly MetricCardControl _activeRentalsCard = new();
     private readonly MetricCardControl _upcomingReservationsCard = new();
-    private readonly MetricCardControl _reservedCarsCard = new();
     private readonly MetricCardControl _maintenanceCard = new();
     private readonly MetricCardControl _availableCarsCard = new();
     private readonly MetricCardControl _completedReturnsCard = new();
@@ -85,7 +84,6 @@ public sealed class ReportsOperationsTab : UserControl, IReportTab
         // Status Group
         ReportLayoutHelper.AddMetricCard(_generalStatusPanel, _availableCarsCard, IconChar.CircleCheck, "Available Cars", "0", "No blocking schedule", ThemeHelper.Success);
         ReportLayoutHelper.AddMetricCard(_generalStatusPanel, _activeRentalsCard, IconChar.Key, "Active Rentals", "0", "Ongoing rentals", ThemeHelper.Primary);
-        ReportLayoutHelper.AddMetricCard(_generalStatusPanel, _reservedCarsCard, IconChar.Bookmark, "Reserved Cars", "0", "Confirmed reservations", ThemeHelper.Warning);
         ReportLayoutHelper.AddMetricCard(_generalStatusPanel, _maintenanceCard, IconChar.ScrewdriverWrench, "Under Maintenance", "0", "Schedule-based", ThemeHelper.Danger);
 
         // Returns Group
@@ -117,7 +115,7 @@ public sealed class ReportsOperationsTab : UserControl, IReportTab
 
     private void LayoutCards()
     {
-        ReportLayoutHelper.LayoutMetricCards(_generalStatusPanel, [_availableCarsCard, _activeRentalsCard, _reservedCarsCard, _maintenanceCard]);
+        ReportLayoutHelper.LayoutMetricCards(_generalStatusPanel, [_availableCarsCard, _activeRentalsCard, _maintenanceCard]);
         ReportLayoutHelper.LayoutMetricCards(_returnsActivityPanel, [_upcomingReturnsCard, _lateReturnsCard, _completedReturnsCard, _upcomingReservationsCard]);
     }
 
@@ -127,7 +125,6 @@ public sealed class ReportsOperationsTab : UserControl, IReportTab
         _lateReturnsCard.SetMetric(IconChar.TriangleExclamation, "Late Returns", metrics.LateReturns.ToString(), "Past expected date", ThemeHelper.Danger);
         _activeRentalsCard.SetMetric(IconChar.Key, "Active Rentals", metrics.ActiveRentals.ToString(), "Ongoing rentals", ThemeHelper.Primary);
         _upcomingReservationsCard.SetMetric(IconChar.CalendarDays, "Upcoming Starts", metrics.UpcomingReservations.ToString(), "Starting in range", ThemeHelper.Warning);
-        _reservedCarsCard.SetMetric(IconChar.Bookmark, "Reserved Cars", metrics.ReservedCars.ToString(), "Confirmed reservations", ThemeHelper.Warning);
         _maintenanceCard.SetMetric(IconChar.ScrewdriverWrench, "Under Maintenance", metrics.CarsUnderMaintenance.ToString(), "Schedule-based", ThemeHelper.Danger);
         _availableCarsCard.SetMetric(IconChar.CircleCheck, "Available Cars", metrics.AvailableCars.ToString(), "No blocking schedule", ThemeHelper.Success);
         _completedReturnsCard.SetMetric(IconChar.FlagCheckered, "Completed Returns", metrics.CompletedReturns.ToString(), "Closed in range", ThemeHelper.GrayIcon);

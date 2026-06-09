@@ -557,7 +557,7 @@ public static class DatabaseInitializer
                 UPDATE dbo.FleetSchedules
                 SET Status = CASE
                     WHEN ScheduleType = N'Maintenance' AND Status = N'Active' THEN N'Ongoing'
-                    WHEN Status = N'Confirmed' THEN N'Reserved'
+                    WHEN Status = N'Confirmed' THEN N'Scheduled'
                     WHEN Status = N'Active' THEN N'Rented'
                     ELSE Status
                 END
@@ -603,22 +603,21 @@ public static class DatabaseInitializer
                     WHEN ScheduleType = N'Maintenance' AND Status = N'Ongoing' THEN N'Maintenance'
                     WHEN ScheduleType = N'Rental' AND Status = N'Ongoing' THEN N'Rented'
                     WHEN ScheduleType = N'Rental' AND Status = N'Active' THEN N'Rented'
-                    WHEN ScheduleType = N'Reservation' AND Status = N'Ongoing' THEN N'Reserved'
-                    WHEN ScheduleType = N'Reservation' AND Status = N'Active' THEN N'Reserved'
+                    WHEN ScheduleType = N'Reservation' AND Status = N'Scheduled' THEN N'Scheduled'
                     ELSE Status
                 END
-                WHERE Status IN (N'Ongoing', N'Active');
+                WHERE Status IN (N'Ongoing', N'Active', N'Scheduled');
 
                 ALTER TABLE dbo.FleetSchedules WITH CHECK
                 ADD CONSTRAINT CK_FleetSchedules_Status_Valid CHECK (
-                    Status IN (N'Pending', N'Reserved', N'Rented', N'Ongoing', N'Maintenance', N'Completed', N'Cancelled')
+                    Status IN (N'Pending', N'Scheduled', N'Rented', N'Ongoing', N'Maintenance', N'Completed', N'Cancelled')
                 );
 
                 ALTER TABLE dbo.FleetSchedules WITH CHECK
                 ADD CONSTRAINT CK_FleetSchedules_TypeStatus_Valid CHECK (
-                    (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Reserved', N'Cancelled'))
+                    (ScheduleType = N'Reservation' AND Status IN (N'Pending', N'Scheduled', N'Cancelled'))
                     OR (ScheduleType = N'Rental' AND Status IN (N'Rented', N'Completed', N'Cancelled'))
-                    OR (ScheduleType = N'Maintenance' AND Status IN (N'Pending', N'Maintenance', N'Completed', N'Cancelled'))
+                    OR (ScheduleType = N'Maintenance' AND Status IN (N'Scheduled', N'Maintenance', N'Completed', N'Cancelled'))
                 );
             END;
             """, connection, transaction);
@@ -665,7 +664,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Transactions_BalanceAmount_Valid CHECK (BalanceAmount >= 0 AND BalanceAmount = TotalAmount - AmountPaid),
                     CONSTRAINT CK_Transactions_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')),
                     CONSTRAINT CK_Transactions_PaymentStatus_Valid CHECK (PaymentStatus IN (N'Unpaid', N'Partial', N'Paid')),
-                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Maintenance', N'Completed', N'Cancelled'))
+                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Scheduled', N'Active', N'Maintenance', N'Completed', N'Cancelled'))
                 );
             END;
             """, connection, transaction);
@@ -689,7 +688,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.Transactions DROP CONSTRAINT CK_Transactions_Status_Valid;
                 END;
 
-                ALTER TABLE dbo.Transactions ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Maintenance', N'Completed', N'Cancelled'));
+                ALTER TABLE dbo.Transactions ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Scheduled', N'Active', N'Maintenance', N'Completed', N'Cancelled'));
             END;
             """, connection, transaction);
 
@@ -848,14 +847,12 @@ public static class DatabaseInitializer
                 END;
 
                 IF OBJECT_ID(N'dbo.CK_Transactions_Status_Valid', N'C') IS NULL
-                   AND NOT EXISTS (
-                        SELECT 1
-                        FROM dbo.Transactions
-                        WHERE TransactionStatus NOT IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled')
-                   )
                 BEGIN
+                    UPDATE dbo.Transactions SET TransactionStatus = N'Scheduled' WHERE TransactionType = N'Maintenance' AND TransactionStatus = N'Pending';
+                    UPDATE dbo.Transactions SET TransactionStatus = N'Scheduled' WHERE TransactionStatus = N'Scheduled';
+
                     ALTER TABLE dbo.Transactions WITH CHECK
-                    ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled'));
+                    ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Scheduled', N'Active', N'Maintenance', N'Completed', N'Cancelled'));
                 END;
             END;
             """, connection, transaction);
@@ -882,21 +879,6 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_TransactionPayments_Amount_Positive CHECK (Amount > 0),
                     CONSTRAINT CK_TransactionPayments_Mode_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'))
                 );
-            END;
-            """, connection, transaction);
-
-        ExecuteDatabaseCommand("""
-            IF OBJECT_ID(N'dbo.TransactionPayments', N'U') IS NOT NULL
-            BEGIN
-                IF COL_LENGTH(N'dbo.TransactionPayments', N'PaymentCategory') IS NULL
-                BEGIN
-                    ALTER TABLE dbo.TransactionPayments ADD PaymentCategory nvarchar(50) NULL;
-                    
-                    EXEC('UPDATE dbo.TransactionPayments SET PaymentCategory = N''Rental Payment'' WHERE PaymentCategory IS NULL');
-                    
-                    ALTER TABLE dbo.TransactionPayments ALTER COLUMN PaymentCategory nvarchar(50) NOT NULL;
-                    ALTER TABLE dbo.TransactionPayments ADD CONSTRAINT DF_TransactionPayments_PaymentCategory DEFAULT N'Rental Payment' FOR PaymentCategory;
-                END;
             END;
             """, connection, transaction);
 
@@ -1384,7 +1366,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_OffsiteRecords_EstimatedCost_NonNegative CHECK (EstimatedCost >= 0),
                     CONSTRAINT CK_OffsiteRecords_ActualCost_NonNegative CHECK (ActualCost >= 0),
                     CONSTRAINT CK_OffsiteRecords_Type_Valid CHECK (OffsiteType IN (N'Maintenance', N'Repair', N'Cleaning', N'Inspection', N'Other')),
-                    CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Pending', N'Reserved', N'Ongoing', N'Completed', N'Cancelled', N'Maintenance'))
+                    CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Pending', N'Scheduled', N'Ongoing', N'Completed', N'Cancelled', N'Maintenance'))
                 );
             END;
             """, connection, transaction);
@@ -1423,7 +1405,7 @@ public static class DatabaseInitializer
                     ALTER TABLE dbo.OffsiteRecords DROP CONSTRAINT CK_OffsiteRecords_Status_Valid;
                 END;
                 
-                ALTER TABLE dbo.OffsiteRecords ADD CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Pending', N'Reserved', N'Ongoing', N'Completed', N'Cancelled', N'Maintenance', N'Archived'));
+                ALTER TABLE dbo.OffsiteRecords ADD CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Pending', N'Scheduled', N'Ongoing', N'Completed', N'Cancelled', N'Maintenance', N'Archived'));
 
                 IF COL_LENGTH(N'dbo.OffsiteRecords', N'FollowUpRequired') IS NULL
                 BEGIN

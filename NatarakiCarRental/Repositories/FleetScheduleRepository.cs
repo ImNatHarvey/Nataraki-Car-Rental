@@ -224,7 +224,7 @@ public sealed class FleetScheduleRepository
             new
             {
                 MaintenanceType = FleetScheduleConstants.Type.Maintenance,
-                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Pending }
+                MaintenanceStatuses = new[] { FleetScheduleConstants.Status.Scheduled }
             });
 
         return (schedules ?? Enumerable.Empty<FleetSchedule>()).ToList();
@@ -410,7 +410,7 @@ public sealed class FleetScheduleRepository
             WHERE CarId = @CarId
               AND IsArchived = 0
               AND Status IN @OperationalStatuses
-              AND NOT (ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND Status = N'{FleetScheduleConstants.Status.Pending}')
+              AND NOT (ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND Status = N'{FleetScheduleConstants.Status.Scheduled}')
               AND (@ExcludedScheduleId IS NULL OR ScheduleId <> @ExcludedScheduleId)
               AND StartDate <= @EndDate
               AND EndDate >= @StartDate;
@@ -474,7 +474,7 @@ public sealed class FleetScheduleRepository
             WHERE schedules.CarId = @CarId
               AND schedules.IsArchived = 0
               AND schedules.Status IN @OperationalStatuses
-              AND NOT (schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND schedules.Status = N'{FleetScheduleConstants.Status.Pending}')
+              AND NOT (schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND schedules.Status = N'{FleetScheduleConstants.Status.Scheduled}')
               AND (@ExcludedScheduleId IS NULL OR schedules.ScheduleId <> @ExcludedScheduleId)
               AND schedules.StartDate <= @EndDate
               AND schedules.EndDate >= @StartDate

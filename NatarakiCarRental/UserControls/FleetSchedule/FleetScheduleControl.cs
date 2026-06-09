@@ -128,12 +128,12 @@ public sealed class FleetScheduleControl : UserControl
             Margin = new Padding(0, 0, 0, 4)
         };
 
-        AddLegendItem(panel, "Pending", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Pending));
-        AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Reserved));
-        AddLegendItem(panel, "Rented", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Rented));
-        AddLegendItem(panel, "Maintenance", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Maintenance));
-        AddLegendItem(panel, "Completed", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Completed));
-        AddLegendItem(panel, "Cancelled", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Cancelled));
+        AddLegendItem(panel, "Pending", StatusColorHelper.GetStatusColor("Pending"));
+        AddLegendItem(panel, "Scheduled", StatusColorHelper.GetStatusColor("Scheduled"));
+        AddLegendItem(panel, "Rented", StatusColorHelper.GetStatusColor("Rented"));
+        AddLegendItem(panel, "Maintenance", StatusColorHelper.GetStatusColor("Maintenance"));
+        AddLegendItem(panel, "Completed", StatusColorHelper.GetStatusColor("Completed"));
+        AddLegendItem(panel, "Cancelled", StatusColorHelper.GetStatusColor("Cancelled"));
 
         return panel;
     }

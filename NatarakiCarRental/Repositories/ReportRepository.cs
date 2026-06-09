@@ -636,7 +636,7 @@ public sealed class ReportRepository
                     FROM dbo.FleetSchedules
                     WHERE IsArchived = 0
                       AND ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
-                      AND Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}')
+                      AND Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}')
                       AND StartDate >= CONVERT(date, @From)
                       AND StartDate <= CONVERT(date, @To)
                 ),
@@ -645,7 +645,7 @@ public sealed class ReportRepository
                     FROM dbo.FleetSchedules
                     WHERE IsArchived = 0
                       AND ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
-                      AND Status = N'{FleetScheduleConstants.Status.Reserved}'
+                      AND Status = N'{FleetScheduleConstants.Status.Scheduled}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -667,7 +667,7 @@ public sealed class ReportRepository
                             FROM dbo.FleetSchedules AS schedules
                             WHERE schedules.CarId = cars.CarId
                               AND schedules.IsArchived = 0
-                              AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
+                              AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
                               AND schedules.StartDate <= CONVERT(date, @To)
                               AND schedules.EndDate >= CONVERT(date, @From)
                       )
@@ -788,7 +788,7 @@ public sealed class ReportRepository
                AND transactions.IsArchived = 0
             WHERE schedules.IsArchived = 0
               AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
-              AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}')
+              AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}')
               AND schedules.StartDate >= CONVERT(date, @From)
               AND schedules.StartDate <= CONVERT(date, @To)
             ORDER BY schedules.StartDate, schedules.ScheduleId;
@@ -840,7 +840,7 @@ public sealed class ReportRepository
                     FROM dbo.FleetSchedules AS schedules
                     WHERE schedules.CarId = cars.CarId
                       AND schedules.IsArchived = 0
-                      AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Reserved}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
+                      AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
                       AND schedules.StartDate <= CONVERT(date, @To)
                       AND schedules.EndDate >= CONVERT(date, @From)
               )

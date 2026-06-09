@@ -28,7 +28,7 @@ public sealed class DashboardRepository
                 AND NOT EXISTS (
                     SELECT 1 FROM dbo.FleetSchedules s 
                     WHERE s.CarId = c.CarId AND s.IsArchived = 0 
-                    AND s.Status IN ('Rented', 'Ongoing', 'Reserved')
+                    AND s.Status IN ('Rented', 'Ongoing', 'Scheduled')
                     AND s.StartDate <= @ToDate AND s.EndDate >= @FromDate
                 )
             );
@@ -36,14 +36,14 @@ public sealed class DashboardRepository
             DECLARE @ReservationLoadToday int = (
                 SELECT COUNT(1) FROM dbo.FleetSchedules 
                 WHERE IsArchived = 0 AND ScheduleType = 'Reservation' 
-                AND Status IN ('Pending', 'Reserved')
+                AND Status IN ('Pending', 'Scheduled')
                 AND StartDate <= @ToDate AND EndDate >= @FromDate
             );
             
             DECLARE @MaintenanceLoad int = (
                 SELECT COUNT(1) FROM dbo.FleetSchedules 
                 WHERE IsArchived = 0 AND ScheduleType = 'Maintenance' 
-                AND Status = 'Ongoing'
+                AND Status = 'Maintenance'
                 AND StartDate <= @ToDate AND EndDate >= @FromDate
             );
             
@@ -84,7 +84,7 @@ public sealed class DashboardRepository
             WHERE s.IsArchived = 0 
               AND s.EndDate >= @FromDate
               AND s.StartDate <= @ToDate
-              AND s.Status IN ('Pending', 'Reserved', 'Rented', 'Ongoing')
+              AND s.Status IN ('Pending', 'Scheduled', 'Rented', 'Ongoing')
             ORDER BY s.StartDate ASC;
 
             -- Vehicles Due / Overdue Returns

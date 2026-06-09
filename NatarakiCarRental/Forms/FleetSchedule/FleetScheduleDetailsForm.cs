@@ -56,6 +56,7 @@ public sealed class FleetScheduleDetailsForm : Form
 
     private IReadOnlyList<Car> _cars = [];
     private IReadOnlyList<Customer> _customers = [];
+    private IReadOnlyList<Customer> _offsiteClients = [];
 
     public FleetScheduleDetailsForm(
         FleetScheduleFormMode mode,
@@ -300,6 +301,7 @@ public sealed class FleetScheduleDetailsForm : Form
         {
             _cars = await _carService.GetActiveCarsAsync();
             _customers = await _customerService.SearchCustomersAsync(string.Empty, CustomerListFilter.Active);
+            _offsiteClients = await _customerService.SearchCustomersAsync(string.Empty, CustomerListFilter.OffsiteClients);
 
             if (_sourceSchedule?.CustomerId is int sourceCustomerId
                 && !_customers.Any(customer => customer.CustomerId == sourceCustomerId))
@@ -335,10 +337,7 @@ public sealed class FleetScheduleDetailsForm : Form
         _carComboBox.Items.Clear();
         _carComboBox.Items.AddRange(_cars.Select(car => new LookupOption(car.CarId, $"{car.CarName} ({car.PlateNumber})")).Cast<object>().ToArray());
 
-        _customerComboBox.Items.Clear();
-        _customerComboBox.Items.Add(new LookupOption(null, "No customer"));
-        _customerComboBox.Items.AddRange(_customers.Select(customer => new LookupOption(customer.CustomerId, $"{customer.FirstName} {customer.LastName}".Trim())).Cast<object>().ToArray());
-        _customerComboBox.SelectedIndex = 0;
+        UpdateCustomerList();
 
         _scheduleTypeComboBox.Items.Clear();
         
@@ -369,7 +368,7 @@ public sealed class FleetScheduleDetailsForm : Form
         _scheduleTypeComboBox.SelectedIndexChanged += async (_, _) => 
         {
             await UpdateStatusTextAsync();
-            UpdateCustomerVisibility();
+            UpdateCustomerList();
         };
         _carComboBox.SelectedIndexChanged += (_, _) => UpdateCodingDayIndicator();
         _startDatePicker.ValueChanged += (_, _) => UpdateCodingDayIndicator();
@@ -847,14 +846,15 @@ public sealed class FleetScheduleDetailsForm : Form
         _statusLabel.ForeColor = ThemeHelper.TextPrimary;
     }
 
-    private void UpdateCustomerVisibility()
+    private void UpdateCustomerList()
     {
         bool isMaintenance = _scheduleTypeComboBox.SelectedItem?.ToString() == FleetScheduleConstants.Type.Maintenance;
-        _customerComboBox.Enabled = !isMaintenance;
-        if (isMaintenance)
-        {
-            _customerComboBox.SelectedIndex = 0; // "No customer"
-        }
+        var customersToUse = isMaintenance ? _offsiteClients : _customers;
+        
+        _customerComboBox.Items.Clear();
+        _customerComboBox.Items.Add(new LookupOption(null, "No customer"));
+        _customerComboBox.Items.AddRange(customersToUse.Select(customer => new LookupOption(customer.CustomerId, (customer.CompanyName ?? $"{customer.FirstName} {customer.LastName}").Trim())).Cast<object>().ToArray());
+        _customerComboBox.SelectedIndex = 0;
     }
 
     private void UpdateCodingDayIndicator()

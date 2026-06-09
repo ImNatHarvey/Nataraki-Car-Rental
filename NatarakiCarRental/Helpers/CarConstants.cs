@@ -7,11 +7,11 @@ public static class CarConstants
         public const string Available = "Available";
         public const string Rented = "Rented";
         public const string Maintenance = "Maintenance";
-        public const string Reserved = "Reserved";
+        public const string Scheduled = "Scheduled";
         public const string Archived = "Archived";
 
         public static readonly string[] ManualSelectable = [Available, Maintenance];
-        public static readonly string[] All = [Available, Rented, Maintenance, Reserved, Archived];
+        public static readonly string[] All = [Available, Rented, Maintenance, Scheduled, Archived];
     }
 
     public static class Transmission

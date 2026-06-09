@@ -10,6 +10,11 @@ public static class FleetScheduleVisualHelper
 
     public static string GetDisplayStatus(string status, string? scheduleType = null)
     {
+        if (status == FleetScheduleConstants.Status.Pending && scheduleType == FleetScheduleConstants.Type.Maintenance)
+        {
+            return "Scheduled";
+        }
+
         return StatusOptions.FirstOrDefault(option => option.Value == status)?.Label ?? status;
     }
 
@@ -32,13 +37,18 @@ public static class FleetScheduleVisualHelper
         {
             FleetScheduleConstants.Type.Reservation => FleetScheduleConstants.Status.Pending,
             FleetScheduleConstants.Type.Rental => FleetScheduleConstants.Status.Rented,
-            FleetScheduleConstants.Type.Maintenance => FleetScheduleConstants.Status.Pending,
+            FleetScheduleConstants.Type.Maintenance => FleetScheduleConstants.Status.Scheduled,
             _ => string.Empty
         };
     }
 
     public static Color GetColor(string status, string? scheduleType = null)
     {
+        if (status == FleetScheduleConstants.Status.Pending && scheduleType == FleetScheduleConstants.Type.Maintenance)
+        {
+            return StatusColorHelper.GetStatusColor(FleetScheduleConstants.Status.Scheduled);
+        }
+
         return StatusColorHelper.GetStatusColor(status);
     }
 

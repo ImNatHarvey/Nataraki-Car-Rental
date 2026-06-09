@@ -15,25 +15,32 @@ public static class StatusColorHelper
             return ThemeHelper.GrayIcon;
         }
 
-        // Normalize status for mapping
         return status.Trim() switch
         {
-            // Primary - Blue (Reserved, Scheduled, Confirmed)
-            "Reserved" or "Scheduled" or "Reservation" or "Confirmed" => ThemeHelper.Primary,
+            // Pending - Brown
+            "Pending" => ThemeHelper.WarningDark,
 
-            // Success - Green (Rented, Active, Available, Paid)
-            "Rented" or "Active" or "Available" or "Paid" or "High" => ThemeHelper.Success,
+            // Scheduled - Blue
+            "Scheduled" => ThemeHelper.Primary,
 
-            // Warning - Orange (Maintenance, Pending, Ongoing, Medium)
-            "Pending" or "Maintenance" or "Ongoing" or "Medium" or "Extend" or "Partial" => ThemeHelper.Warning,
+            // Rented, Active, Available - Green
+            "Rented" or "Active" or "Available" => ThemeHelper.Success,
 
-            // Danger - Red (Cancelled, Blacklisted, Unpaid, Overdue)
-            "Cancelled" or "Blacklisted" or "Unpaid" or "Overdue" or "OVERDUE" or "Danger" or "Critical" => ThemeHelper.Danger,
+            // Maintenance, Ongoing - Orange
+            "Maintenance" or "Ongoing" => ThemeHelper.Warning,
 
-            // Secondary - Gray (Completed, Archived)
-            "Completed" or "Archived" or "Low" or "None" or "Not Applicable" => ThemeHelper.StatusGray,
+            // Completed, Archived - Gray
+            "Completed" or "Archived" => ThemeHelper.StatusGray,
 
-            // Default
+            // Cancelled, Overdue, Unpaid - Red
+            "Cancelled" or "Overdue" or "Unpaid" => ThemeHelper.Danger,
+
+            // Partial - Brown
+            "Partial" => ThemeHelper.WarningDark,
+
+            // Paid - Green
+            "Paid" => ThemeHelper.Success,
+
             _ => ThemeHelper.GrayIcon
         };
     }
