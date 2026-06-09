@@ -20,31 +20,38 @@ public sealed class ReportRepository
     public async Task<ReportSummaryMetrics> GetSummaryMetricsAsync(DateTime from, DateTime to)
     {
         string sql = $"""
-            -- Revenue Metrics
+            -- Revenue Metrics (Excluding Maintenance costs)
             DECLARE @TotalRevenue decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments
-                WHERE IsArchived = 0 AND PaymentDate >= @From AND PaymentDate <= @To
+                SELECT ISNULL(SUM(tp.Amount), 0) 
+                FROM dbo.TransactionPayments tp
+                INNER JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                WHERE tp.IsArchived = 0 AND t.IsArchived = 0 
+                  AND t.TransactionType <> N'Maintenance'
+                  AND t.TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
+                  AND tp.PaymentDate >= @From AND tp.PaymentDate <= @To
             );
 
             DECLARE @OutstandingBalance decimal(18,2) = (
                 SELECT ISNULL(SUM(BalanceAmount), 0) FROM dbo.Transactions
-                WHERE IsArchived = 0 AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND TransactionType <> N'Maintenance' 
+                  AND TransactionStatus <> N'{TransactionConstants.Status.Cancelled}'
+                  AND CreatedAt >= @From AND CreatedAt <= @To
             );
 
             -- Transaction Metrics (based on CreatedAt)
             DECLARE @PaidTransactions int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Paid}' AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND TransactionType <> N'Maintenance' AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Paid}' AND CreatedAt >= @From AND CreatedAt <= @To
             );
             
             DECLARE @PartialTransactions int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Partial}' AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND TransactionType <> N'Maintenance' AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Partial}' AND CreatedAt >= @From AND CreatedAt <= @To
             );
 
             DECLARE @UnpaidTransactions int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Unpaid}' AND CreatedAt >= @From AND CreatedAt <= @To
+                WHERE IsArchived = 0 AND TransactionType <> N'Maintenance' AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Unpaid}' AND CreatedAt >= @From AND CreatedAt <= @To
             );
 
             -- Operational Metrics
@@ -60,7 +67,7 @@ public sealed class ReportRepository
             
             DECLARE @CompletedRentals int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND TransactionStatus = N'{TransactionConstants.Status.Completed}' AND UpdatedAt >= @From AND UpdatedAt <= @To
+                WHERE IsArchived = 0 AND TransactionType = N'Rental' AND TransactionStatus = N'{TransactionConstants.Status.Completed}' AND UpdatedAt >= @From AND UpdatedAt <= @To
             );
 
             -- Car Performance
@@ -79,7 +86,7 @@ public sealed class ReportRepository
                     FROM dbo.Cars c
                     JOIN dbo.Transactions t ON t.CarId = c.CarId
                     JOIN dbo.TransactionPayments p ON p.TransactionId = t.TransactionId
-                    WHERE p.IsArchived = 0 AND p.PaymentDate >= @From AND p.PaymentDate <= @To
+                    WHERE p.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND p.PaymentDate >= @From AND p.PaymentDate <= @To
                     GROUP BY c.CarId, c.CarName, c.PlateNumber
                     ORDER BY SUM(p.Amount) DESC
                 ),
@@ -88,7 +95,7 @@ public sealed class ReportRepository
                     FROM dbo.Cars c
                     JOIN dbo.Transactions t ON t.CarId = c.CarId
                     JOIN dbo.TransactionPayments p ON p.TransactionId = t.TransactionId
-                    WHERE p.IsArchived = 0 AND p.PaymentDate >= @From AND p.PaymentDate <= @To
+                    WHERE p.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND p.PaymentDate >= @From AND p.PaymentDate <= @To
                     GROUP BY c.CarId
                     ORDER BY SUM(p.Amount) DESC
                 ),
@@ -96,7 +103,7 @@ public sealed class ReportRepository
                     SELECT TOP 1 CONCAT(c.CarName, ' (', c.PlateNumber, ')')
                     FROM dbo.Cars c
                     JOIN dbo.Transactions t ON t.CarId = c.CarId
-                    WHERE t.IsArchived = 0 AND t.CreatedAt >= @From AND t.CreatedAt <= @To
+                    WHERE t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND t.CreatedAt >= @From AND t.CreatedAt <= @To
                     GROUP BY c.CarId, c.CarName, c.PlateNumber
                     ORDER BY COUNT(t.TransactionId) DESC
                 ),
@@ -181,7 +188,7 @@ public sealed class ReportRepository
             FROM dbo.Cars c
             JOIN dbo.Transactions t ON t.CarId = c.CarId
             JOIN dbo.TransactionPayments p ON p.TransactionId = t.TransactionId
-            WHERE p.IsArchived = 0 AND p.PaymentDate >= @From AND p.PaymentDate <= @To
+            WHERE p.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND p.PaymentDate >= @From AND p.PaymentDate <= @To
             GROUP BY c.CarId, c.CarName, c.PlateNumber
             ORDER BY Revenue DESC;
             """;
@@ -201,13 +208,13 @@ public sealed class ReportRepository
                 OutstandingBalance = (
                     SELECT ISNULL(SUM(t2.BalanceAmount), 0)
                     FROM dbo.Transactions t2
-                    WHERE t2.CustomerId = cu.CustomerId AND t2.IsArchived = 0
+                    WHERE t2.CustomerId = cu.CustomerId AND t2.IsArchived = 0 AND t2.TransactionType <> N'Maintenance'
                       AND t2.CreatedAt >= @From AND t2.CreatedAt <= @To
                 )
             FROM dbo.Customers cu
             JOIN dbo.Transactions t ON t.CustomerId = cu.CustomerId
             JOIN dbo.TransactionPayments p ON p.TransactionId = t.TransactionId
-            WHERE p.IsArchived = 0 AND p.PaymentDate >= @From AND p.PaymentDate <= @To
+            WHERE p.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND p.PaymentDate >= @From AND p.PaymentDate <= @To
             GROUP BY cu.CustomerId, cu.FirstName, cu.LastName
             ORDER BY TotalPaid DESC;
             """;
@@ -224,7 +231,7 @@ public sealed class ReportRepository
                 [Status] = TransactionStatus,
                 [Count] = COUNT(1)
             FROM dbo.Transactions
-            WHERE IsArchived = 0 AND CreatedAt >= @From AND CreatedAt <= @To
+            WHERE IsArchived = 0 AND TransactionType <> N'Maintenance' AND CreatedAt >= @From AND CreatedAt <= @To
             GROUP BY TransactionStatus
             ORDER BY [Count] DESC;
             """;
@@ -245,7 +252,7 @@ public sealed class ReportRepository
             FROM dbo.Cars c
             JOIN dbo.Transactions t ON t.CarId = c.CarId
             JOIN dbo.TransactionPayments p ON p.TransactionId = t.TransactionId
-            WHERE p.IsArchived = 0 AND p.PaymentDate >= @From AND p.PaymentDate <= @To
+            WHERE p.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND p.PaymentDate >= @From AND p.PaymentDate <= @To
             GROUP BY c.CarId, c.CarName, c.PlateNumber
             ORDER BY Revenue DESC;
             """;
@@ -265,12 +272,12 @@ public sealed class ReportRepository
                     SELECT ISNULL(SUM(p2.Amount), 0)
                     FROM dbo.TransactionPayments p2
                     JOIN dbo.Transactions t2 ON t2.TransactionId = p2.TransactionId
-                    WHERE t2.CarId = c.CarId AND p2.IsArchived = 0 AND p2.PaymentDate >= @From AND p2.PaymentDate <= @To
+                    WHERE t2.CarId = c.CarId AND p2.IsArchived = 0 AND t2.TransactionType <> N'Maintenance' AND p2.PaymentDate >= @From AND p2.PaymentDate <= @To
                 ),
                 RentalCount = COUNT(t.TransactionId)
             FROM dbo.Cars c
             JOIN dbo.Transactions t ON t.CarId = c.CarId
-            WHERE t.IsArchived = 0 AND t.CreatedAt >= @From AND t.CreatedAt <= @To
+            WHERE t.IsArchived = 0 AND t.TransactionType <> N'Maintenance' AND t.CreatedAt >= @From AND t.CreatedAt <= @To
             GROUP BY c.CarId, c.CarName, c.PlateNumber
             ORDER BY RentalCount DESC;
             """;
@@ -326,6 +333,7 @@ public sealed class ReportRepository
                 INNER JOIN dbo.TransactionPayments AS payments
                     ON payments.TransactionId = transactions.TransactionId
                 WHERE transactions.IsArchived = 0
+                  AND transactions.TransactionType <> N'Maintenance'
                   AND payments.IsArchived = 0
                   AND payments.PaymentDate >= @From
                   AND payments.PaymentDate <= @To
@@ -336,6 +344,7 @@ public sealed class ReportRepository
                 SELECT CarId, RentalCount = COUNT(1)
                 FROM dbo.Transactions
                 WHERE IsArchived = 0
+                  AND TransactionType <> N'Maintenance'
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
                   AND TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
@@ -371,6 +380,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
@@ -379,16 +389,17 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
                 CarsUnderMaintenance = (
                     SELECT COUNT(DISTINCT CarId)
-                    FROM dbo.FleetSchedules
+                    FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
-                      AND Status = N'{FleetScheduleConstants.Status.Ongoing}'
+                      AND TransactionType = N'Maintenance'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Maintenance}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 );
@@ -413,10 +424,10 @@ public sealed class ReportRepository
                         CASE WHEN StartDate < CONVERT(date, @From) THEN CONVERT(date, @From) ELSE StartDate END,
                         CASE WHEN EndDate > CONVERT(date, @To) THEN CONVERT(date, @To) ELSE EndDate END
                     ) + 1
-                FROM dbo.FleetSchedules
+                FROM dbo.Transactions
                 WHERE IsArchived = 0
-                  AND ScheduleType = N'{FleetScheduleConstants.Type.Rental}'
-                  AND Status IN (N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Completed}')
+                  AND TransactionType = N'Rental'
+                  AND TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
             ),
@@ -425,6 +436,7 @@ public sealed class ReportRepository
                 SELECT CarId, RentalCount = COUNT(1)
                 FROM dbo.Transactions
                 WHERE IsArchived = 0
+                  AND TransactionType = N'Rental'
                   AND StartDate <= CONVERT(date, @To)
                   AND EndDate >= CONVERT(date, @From)
                   AND TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
@@ -470,6 +482,7 @@ public sealed class ReportRepository
             LEFT JOIN dbo.Transactions AS transactions
                 ON transactions.CarId = cars.CarId
                AND transactions.IsArchived = 0
+               AND transactions.TransactionType <> N'Maintenance'
             LEFT JOIN dbo.TransactionPayments AS payments
                 ON payments.TransactionId = transactions.TransactionId
                AND payments.IsArchived = 0
@@ -502,6 +515,7 @@ public sealed class ReportRepository
             LEFT JOIN dbo.Transactions AS transactions
                 ON transactions.CarId = cars.CarId
                AND transactions.IsArchived = 0
+               AND transactions.TransactionType <> N'Maintenance'
                AND transactions.StartDate <= CONVERT(date, @To)
                AND transactions.EndDate >= CONVERT(date, @From)
                AND transactions.TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Completed}')
@@ -526,19 +540,19 @@ public sealed class ReportRepository
             SELECT
                 cars.CarName,
                 cars.PlateNumber,
-                schedules.Title,
-                schedules.StartDate,
-                schedules.EndDate,
-                schedules.Status
-            FROM dbo.FleetSchedules AS schedules
-            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
-            WHERE schedules.IsArchived = 0
+                Title = t.TransactionCode,
+                t.StartDate,
+                t.EndDate,
+                Status = t.TransactionStatus
+            FROM dbo.Transactions AS t
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = t.CarId
+            WHERE t.IsArchived = 0
               AND cars.IsArchived = 0
-              AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
-              AND schedules.Status = N'{FleetScheduleConstants.Status.Ongoing}'
-              AND schedules.StartDate <= CONVERT(date, @To)
-              AND schedules.EndDate >= CONVERT(date, @From)
-            ORDER BY schedules.StartDate, cars.CarName;
+              AND t.TransactionType = N'Maintenance'
+              AND t.TransactionStatus = N'{TransactionConstants.Status.Maintenance}'
+              AND t.StartDate <= CONVERT(date, @To)
+              AND t.EndDate >= CONVERT(date, @From)
+            ORDER BY t.StartDate, cars.CarName;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -554,6 +568,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND EndDate >= CONVERT(date, @From)
                       AND EndDate <= CONVERT(date, @To)
@@ -562,6 +577,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND EndDate < CONVERT(date, @Today)
                 ),
@@ -569,6 +585,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
@@ -593,10 +610,10 @@ public sealed class ReportRepository
                 ),
                 CarsUnderMaintenance = (
                     SELECT COUNT(DISTINCT CarId)
-                    FROM dbo.FleetSchedules
+                    FROM dbo.Transactions
                     WHERE IsArchived = 0
-                      AND ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
-                      AND Status = N'{FleetScheduleConstants.Status.Ongoing}'
+                      AND TransactionType = N'Maintenance'
+                      AND TransactionStatus = N'{TransactionConstants.Status.Maintenance}'
                       AND StartDate <= CONVERT(date, @To)
                       AND EndDate >= CONVERT(date, @From)
                 ),
@@ -618,6 +635,7 @@ public sealed class ReportRepository
                     SELECT COUNT(1)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
                       AND EndDate >= CONVERT(date, @From)
                       AND EndDate <= CONVERT(date, @To)
@@ -646,6 +664,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
+              AND transactions.TransactionType = N'Rental'
               AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.EndDate >= CONVERT(date, @From)
               AND transactions.EndDate <= CONVERT(date, @To)
@@ -674,6 +693,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
+              AND transactions.TransactionType = N'Rental'
               AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.EndDate < CONVERT(date, @Today)
             ORDER BY DaysLate DESC, transactions.EndDate;
@@ -700,6 +720,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
+              AND transactions.TransactionType = N'Rental'
               AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.StartDate <= CONVERT(date, @To)
               AND transactions.EndDate >= CONVERT(date, @From)
@@ -728,6 +749,7 @@ public sealed class ReportRepository
             LEFT JOIN dbo.Transactions AS transactions
                 ON transactions.FleetScheduleId = schedules.ScheduleId
                AND transactions.IsArchived = 0
+               AND transactions.TransactionType = N'Rental'
             WHERE schedules.IsArchived = 0
               AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Reservation}'
               AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}')
@@ -745,20 +767,20 @@ public sealed class ReportRepository
     {
         string sql = $"""
             SELECT
-                schedules.StartDate,
-                schedules.EndDate,
+                t.StartDate,
+                t.EndDate,
                 cars.CarName,
                 cars.PlateNumber,
-                schedules.Status,
-                Source = N'Fleet Schedule'
-            FROM dbo.FleetSchedules AS schedules
-            INNER JOIN dbo.Cars AS cars ON cars.CarId = schedules.CarId
-            WHERE schedules.IsArchived = 0
+                Status = t.TransactionStatus,
+                Source = N'Maintenance Transaction'
+            FROM dbo.Transactions AS t
+            INNER JOIN dbo.Cars AS cars ON cars.CarId = t.CarId
+            WHERE t.IsArchived = 0
               AND cars.IsArchived = 0
-              AND schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}'
-              AND schedules.StartDate <= CONVERT(date, @To)
-              AND schedules.EndDate >= CONVERT(date, @From)
-            ORDER BY schedules.StartDate, cars.CarName;
+              AND t.TransactionType = N'Maintenance'
+              AND t.StartDate <= CONVERT(date, @To)
+              AND t.EndDate >= CONVERT(date, @From)
+            ORDER BY t.StartDate, cars.CarName;
             """;
 
         using var connection = _connectionFactory.CreateConnection();
@@ -779,12 +801,21 @@ public sealed class ReportRepository
             WHERE cars.IsArchived = 0
               AND NOT EXISTS (
                     SELECT 1
-                    FROM dbo.FleetSchedules AS schedules
-                    WHERE schedules.CarId = cars.CarId
-                      AND schedules.IsArchived = 0
-                      AND schedules.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
-                      AND schedules.StartDate <= CONVERT(date, @To)
-                      AND schedules.EndDate >= CONVERT(date, @From)
+                    FROM dbo.Transactions AS t
+                    WHERE t.CarId = cars.CarId
+                      AND t.IsArchived = 0
+                      AND t.TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Maintenance}')
+                      AND t.StartDate <= CONVERT(date, @To)
+                      AND t.EndDate >= CONVERT(date, @From)
+              )
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.FleetSchedules AS s
+                    WHERE s.CarId = cars.CarId
+                      AND s.IsArchived = 0
+                      AND s.Status IN (N'{FleetScheduleConstants.Status.Scheduled}')
+                      AND s.StartDate <= CONVERT(date, @To)
+                      AND s.EndDate >= CONVERT(date, @From)
               )
             ORDER BY cars.CarName, cars.PlateNumber;
             """;
@@ -808,6 +839,7 @@ public sealed class ReportRepository
                 INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
                 WHERE customers.IsWalkIn = 0
                   AND transactions.IsArchived = 0
+                  AND transactions.TransactionType <> N'Maintenance'
                   AND payments.IsArchived = 0
                   AND payments.PaymentDate >= @From
                   AND payments.PaymentDate <= @To
@@ -823,6 +855,7 @@ public sealed class ReportRepository
                 INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
                 WHERE customers.IsWalkIn = 0
                   AND transactions.IsArchived = 0
+                  AND transactions.TransactionType <> N'Maintenance'
                   AND transactions.StartDate <= CONVERT(date, @To)
                   AND transactions.EndDate >= CONVERT(date, @From)
                 GROUP BY customers.CustomerId, customers.FirstName, customers.LastName
@@ -858,6 +891,7 @@ public sealed class ReportRepository
                     SELECT COUNT(DISTINCT CustomerId)
                     FROM dbo.Transactions
                     WHERE IsArchived = 0
+                      AND TransactionType = N'Rental'
                       AND TransactionStatus = N'{TransactionConstants.Status.Active}'
                       AND EndDate < CONVERT(date, @Today)
                 ),
@@ -866,6 +900,7 @@ public sealed class ReportRepository
                     FROM dbo.Transactions AS transactions
                     INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
                     WHERE transactions.IsArchived = 0
+                      AND transactions.TransactionType <> N'Maintenance'
                       AND payments.IsArchived = 0
                       AND payments.PaymentDate >= @From
                       AND payments.PaymentDate <= @To
@@ -897,6 +932,7 @@ public sealed class ReportRepository
                     FROM dbo.Transactions AS openTransactions
                     WHERE openTransactions.CustomerId = customers.CustomerId
                       AND openTransactions.IsArchived = 0
+                      AND openTransactions.TransactionType <> N'Maintenance'
                       AND openTransactions.CreatedAt >= @From
                       AND openTransactions.CreatedAt <= @To
                 )
@@ -905,6 +941,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.TransactionPayments AS payments ON payments.TransactionId = transactions.TransactionId
             WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
+              AND transactions.TransactionType <> N'Maintenance'
               AND payments.IsArchived = 0
               AND payments.PaymentDate >= @From
               AND payments.PaymentDate <= @To
@@ -931,6 +968,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Transactions AS transactions ON transactions.CustomerId = customers.CustomerId
             WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
+              AND transactions.TransactionType = N'Rental'
               AND transactions.StartDate <= CONVERT(date, @To)
               AND transactions.EndDate >= CONVERT(date, @From)
             GROUP BY customers.CustomerId, customers.FirstName, customers.LastName, customers.PhoneNumber
@@ -957,6 +995,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
+              AND transactions.TransactionType <> N'Maintenance'
               AND transactions.PaymentStatus IN (N'{TransactionConstants.PaymentStatus.Unpaid}', N'{TransactionConstants.PaymentStatus.Partial}')
               AND transactions.CreatedAt >= @From
               AND transactions.CreatedAt <= @To
@@ -984,6 +1023,7 @@ public sealed class ReportRepository
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE customers.IsWalkIn = 0
               AND transactions.IsArchived = 0
+              AND transactions.TransactionType = N'Rental'
               AND transactions.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND transactions.EndDate < CONVERT(date, @Today)
             ORDER BY DaysLate DESC, transactions.EndDate;
@@ -1037,7 +1077,7 @@ public sealed class ReportRepository
                 SELECT ISNULL(SUM(TotalAmount), 0)
                 FROM dbo.Transactions
                 WHERE IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
-                  AND CreatedAt >= @From AND CreatedAt <= @To
+                  AND UpdatedAt >= @From AND UpdatedAt <= @To
             );
 
             SELECT 
@@ -1095,8 +1135,8 @@ public sealed class ReportRepository
                 AND o.IsArchived = 0 
                 AND o.TransactionType = N'Maintenance'
                 AND o.TransactionStatus = N'{TransactionConstants.Status.Completed}'
-                AND o.CreatedAt >= @From 
-                AND o.CreatedAt <= @To
+                AND o.UpdatedAt >= @From 
+                AND o.UpdatedAt <= @To
             WHERE c.IsArchived = 0
             GROUP BY c.CarId, c.CarName, c.PlateNumber
             HAVING SUM(ISNULL(o.TotalAmount, 0)) > 0 OR (

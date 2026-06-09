@@ -26,40 +26,57 @@ public sealed class DashboardRepository
                 SELECT COUNT(1) FROM dbo.Cars c 
                 WHERE c.IsArchived = 0 
                 AND NOT EXISTS (
+                    SELECT 1 FROM dbo.Transactions t 
+                    WHERE t.CarId = c.CarId AND t.IsArchived = 0 
+                    AND t.TransactionStatus IN (N'{TransactionConstants.Status.Active}', N'{TransactionConstants.Status.Maintenance}')
+                    AND t.StartDate <= @ToDate AND t.EndDate >= @FromDate
+                )
+                AND NOT EXISTS (
                     SELECT 1 FROM dbo.FleetSchedules s 
                     WHERE s.CarId = c.CarId AND s.IsArchived = 0 
-                    AND s.Status IN ('Rented', 'Ongoing', 'Scheduled')
+                    AND s.Status IN (N'{FleetScheduleConstants.Status.Scheduled}')
                     AND s.StartDate <= @ToDate AND s.EndDate >= @FromDate
                 )
             );
             
             DECLARE @ReservationLoadToday int = (
                 SELECT COUNT(1) FROM dbo.FleetSchedules 
-                WHERE IsArchived = 0 AND ScheduleType = 'Reservation' 
-                AND Status IN ('Pending', 'Scheduled')
+                WHERE IsArchived = 0 AND ScheduleType = N'{FleetScheduleConstants.Type.Reservation}' 
+                AND Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}')
                 AND StartDate <= @ToDate AND EndDate >= @FromDate
             );
             
             DECLARE @MaintenanceLoad int = (
-                SELECT COUNT(1) FROM dbo.FleetSchedules 
-                WHERE IsArchived = 0 AND ScheduleType = 'Maintenance' 
-                AND Status = 'Maintenance'
+                SELECT COUNT(1) FROM dbo.Transactions 
+                WHERE IsArchived = 0 AND TransactionType = N'Maintenance' 
+                AND TransactionStatus = N'{TransactionConstants.Status.Maintenance}'
                 AND StartDate <= @ToDate AND EndDate >= @FromDate
-            );
-            
-            DECLARE @OffsiteLoad int = (
-                SELECT COUNT(1) FROM dbo.OffsiteRecords 
-                WHERE IsArchived = 0 AND Status = 'Ongoing'
             );
             
             DECLARE @PendingPaymentsCount int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND PaymentStatus IN ('Unpaid', 'Partial')
+                WHERE IsArchived = 0 AND PaymentStatus IN (N'{TransactionConstants.PaymentStatus.Unpaid}', N'{TransactionConstants.PaymentStatus.Partial}')
             );
             
             DECLARE @OverdueTransactionsCount int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND TransactionStatus = 'Active' AND EndDate < @FromDate
+                WHERE IsArchived = 0 AND TransactionType = N'Rental' AND TransactionStatus = N'{TransactionConstants.Status.Active}' AND EndDate < @FromDate
+            );
+
+            DECLARE @RevenueToday decimal(18,2) = (
+                SELECT ISNULL(SUM(tp.Amount), 0)
+                FROM dbo.TransactionPayments tp
+                JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                WHERE tp.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance'
+                  AND CONVERT(date, tp.PaymentDate) = CONVERT(date, GETDATE())
+            );
+
+            DECLARE @RevenueThisWeek decimal(18,2) = (
+                SELECT ISNULL(SUM(tp.Amount), 0)
+                FROM dbo.TransactionPayments tp
+                JOIN dbo.Transactions t ON tp.TransactionId = t.TransactionId
+                WHERE tp.IsArchived = 0 AND t.IsArchived = 0 AND t.TransactionType <> N'Maintenance'
+                  AND tp.PaymentDate >= DATEADD(day, -7, GETDATE())
             );
 
             -- Results
@@ -68,30 +85,34 @@ public sealed class DashboardRepository
                 AvailableCars = @AvailableCars,
                 ReservationLoadToday = @ReservationLoadToday,
                 MaintenanceLoad = @MaintenanceLoad,
-                OffsiteLoad = @OffsiteLoad,
+                OffsiteLoad = @MaintenanceLoad, -- Map maintenance to offsite load for dashboard compatibility
                 PendingPaymentsCount = @PendingPaymentsCount,
                 OverdueTransactionsCount = @OverdueTransactionsCount,
-                FleetUtilizationPercentage = CASE WHEN @ActiveCars > 0 THEN (CAST((@ActiveCars - @AvailableCars) AS float) / @ActiveCars) * 100 ELSE 0 END;
+                FleetUtilizationPercentage = CASE WHEN @ActiveCars > 0 THEN (CAST((@ActiveCars - @AvailableCars) AS float) / @ActiveCars) * 100 ELSE 0 END,
+                RevenueToday = @RevenueToday,
+                RevenueThisWeek = @RevenueThisWeek,
+                TopRentedVehicle = ISNULL((SELECT TOP 1 c.CarName FROM dbo.Transactions t JOIN dbo.Cars c ON c.CarId = t.CarId WHERE t.TransactionType = N'Rental' GROUP BY c.CarId, c.CarName ORDER BY COUNT(1) DESC), N'N/A'),
+                MostActiveCustomer = ISNULL((SELECT TOP 1 CONCAT(cu.FirstName, N' ', cu.LastName) FROM dbo.Transactions t JOIN dbo.Customers cu ON cu.CustomerId = t.CustomerId WHERE t.TransactionType = N'Rental' GROUP BY cu.CustomerId, cu.FirstName, cu.LastName ORDER BY COUNT(1) DESC), N'N/A');
 
             -- Upcoming Schedules & Maintenance
             SELECT 
                 s.ScheduleId, s.Title, s.StartDate, s.EndDate, s.Status, s.CarId, s.CustomerId, s.ScheduleType,
                 CarName = c.CarName, PlateNumber = c.PlateNumber,
-                CustomerName = ISNULL(CONCAT(cu.FirstName, ' ', cu.LastName), 'Walk-In')
+                CustomerName = ISNULL(NULLIF(LTRIM(RTRIM(CONCAT(cu.FirstName, N' ', cu.LastName))), N''), cu.CompanyName)
             FROM dbo.FleetSchedules s
             JOIN dbo.Cars c ON c.CarId = s.CarId
             LEFT JOIN dbo.Customers cu ON cu.CustomerId = s.CustomerId
             WHERE s.IsArchived = 0 
               AND s.EndDate >= @FromDate
               AND s.StartDate <= @ToDate
-              AND s.Status IN ('Pending', 'Scheduled', 'Rented', 'Ongoing')
+              AND s.Status IN (N'{FleetScheduleConstants.Status.Pending}', N'{FleetScheduleConstants.Status.Scheduled}', N'{FleetScheduleConstants.Status.Rented}', N'{FleetScheduleConstants.Status.Ongoing}')
             ORDER BY s.StartDate ASC;
 
             -- Vehicles Due / Overdue Returns
             SELECT 
                 ExpectedReturn = t.EndDate,
                 t.TransactionCode,
-                CustomerName = CONCAT(cu.FirstName, ' ', cu.LastName),
+                CustomerName = LTRIM(RTRIM(CONCAT(cu.FirstName, N' ', cu.LastName))),
                 Contact = cu.PhoneNumber,
                 c.CarName,
                 c.PlateNumber,
@@ -100,27 +121,29 @@ public sealed class DashboardRepository
             JOIN dbo.Customers cu ON cu.CustomerId = t.CustomerId
             JOIN dbo.Cars c ON c.CarId = t.CarId
             WHERE t.IsArchived = 0 
-              AND t.TransactionStatus = 'Active'
+              AND t.TransactionType = N'Rental'
+              AND t.TransactionStatus = N'{TransactionConstants.Status.Active}'
               AND t.EndDate <= @ToDate
             ORDER BY t.EndDate ASC;
 
-            -- Ongoing Offsite
+            -- Ongoing Maintenance (replaced legacy Offsite)
             SELECT 
-                o.OffsiteRecordId, o.CarId, o.OffsiteType, o.Status, o.LocationName, 
-                o.StartDate, o.ExpectedReturnDate,
+                TransactionId = t.TransactionId, CarId = t.CarId, TransactionType = t.TransactionType, Status = t.TransactionStatus, LocationName = cu.CompanyName, 
+                t.StartDate, ExpectedReturnDate = t.EndDate,
                 CarName = c.CarName, PlateNumber = c.PlateNumber,
-                ContactPerson = o.ContactPerson, ContactNumber = o.ContactNumber
-            FROM dbo.OffsiteRecords o
-            JOIN dbo.Cars c ON c.CarId = o.CarId
-            WHERE o.IsArchived = 0 AND o.Status = 'Ongoing'
-            ORDER BY o.StartDate ASC;
+                ContactPerson = cu.FirstName, ContactNumber = cu.PhoneNumber
+            FROM dbo.Transactions t
+            JOIN dbo.Cars c ON c.CarId = t.CarId
+            JOIN dbo.Customers cu ON cu.CustomerId = t.CustomerId
+            WHERE t.IsArchived = 0 AND t.TransactionType = N'Maintenance' AND t.TransactionStatus = N'{TransactionConstants.Status.Maintenance}'
+            ORDER BY t.StartDate ASC;
 
             -- Recent High Priority Activity
             SELECT TOP 10
                 ActivityLogId, UserId, UserFullName, Module, Action, EntityId, EntityName, Description, CreatedAt
             FROM dbo.ActivityLogs
-            WHERE Action IN ('Archived', 'Cancelled', 'Completed', 'Blacklisted', 'Restored', 'Maintenance')
-               OR Module = 'OffsiteRecord'
+            WHERE Action IN (N'Archived', N'Cancelled', N'Completed', N'Blacklisted', N'Restored', N'Maintenance')
+               OR Module IN (N'Transaction', N'Customer')
             ORDER BY CreatedAt DESC;
             """;
 
@@ -131,7 +154,7 @@ public sealed class DashboardRepository
         data.UpcomingSchedules = (await multi.ReadAsync<FleetSchedule>()).ToList();
         data.VehiclesDueToday = (await multi.ReadAsync<OperationsReturnItem>()).ToList();
         
-        // Skip reading OngoingOffsite results
+        // Skip reading OngoingMaintenance results for now or map them if needed
         await multi.ReadAsync<dynamic>();
         
         data.HighPriorityActivities = (await multi.ReadAsync<ActivityLog>()).ToList();
