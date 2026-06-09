@@ -4,6 +4,7 @@ public sealed class ReportSummaryMetrics
 {
     public decimal TotalRevenue { get; set; }
     public decimal RentalRevenue { get; set; }
+    public decimal MaintenanceRevenue { get; set; }
     public decimal ExtensionFees { get; set; }
     public decimal DamageFees { get; set; }
     public decimal LateReturnFees { get; set; }
@@ -14,6 +15,7 @@ public sealed class ReportSummaryMetrics
     public int UnpaidTransactions { get; set; }
     
     public int ActiveRentals { get; set; }
+    public int ActiveMaintenance { get; set; }
     public int CompletedRentals { get; set; }
     
     public string? TopEarningCar { get; set; }

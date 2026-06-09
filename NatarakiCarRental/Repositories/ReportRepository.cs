@@ -22,12 +22,17 @@ public sealed class ReportRepository
         string sql = $"""
             -- Revenue Metrics
             DECLARE @TotalRevenue decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
+                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments
                 WHERE IsArchived = 0 AND PaymentDate >= @From AND PaymentDate <= @To
             );
-            
+
+            DECLARE @MaintenanceRevenue decimal(18,2) = (
+                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments
+                WHERE IsArchived = 0 AND PaymentCategory = N'Maintenance Payment' AND PaymentDate >= @From AND PaymentDate <= @To
+            );
+
             DECLARE @RentalRevenue decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
+                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments
                 WHERE IsArchived = 0 AND PaymentCategory = N'Rental Payment' AND PaymentDate >= @From AND PaymentDate <= @To
             );
             
@@ -70,7 +75,12 @@ public sealed class ReportRepository
             -- Operational Metrics
             DECLARE @ActiveRentals int = (
                 SELECT COUNT(1) FROM dbo.Transactions 
-                WHERE IsArchived = 0 AND TransactionStatus = N'{TransactionConstants.Status.Active}'
+                WHERE IsArchived = 0 AND TransactionType = N'Rental' AND TransactionStatus = N'{TransactionConstants.Status.Active}'
+            );
+
+            DECLARE @ActiveMaintenance int = (
+                SELECT COUNT(1) FROM dbo.Transactions 
+                WHERE IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'Maintenance'
             );
             
             DECLARE @CompletedRentals int = (
@@ -82,6 +92,7 @@ public sealed class ReportRepository
             SELECT 
                 TotalRevenue = @TotalRevenue,
                 RentalRevenue = @RentalRevenue,
+                MaintenanceRevenue = @MaintenanceRevenue,
                 ExtensionFees = @ExtensionFees,
                 DamageFees = @DamageFees,
                 LateReturnFees = @LateReturnFees,
@@ -90,6 +101,7 @@ public sealed class ReportRepository
                 PartialTransactions = @PartialTransactions,
                 UnpaidTransactions = @UnpaidTransactions,
                 ActiveRentals = @ActiveRentals,
+                ActiveMaintenance = @ActiveMaintenance,
                 CompletedRentals = @CompletedRentals,
                 
                 TopEarningCar = (

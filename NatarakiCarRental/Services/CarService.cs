@@ -66,6 +66,11 @@ public sealed class CarService
         return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: false, DateTime.Today, null, 1, 1000);
     }
 
+    public async Task<IReadOnlyList<Car>> GetAllCarsAsync()
+    {
+        return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: false, DateTime.Today, null, 1, 1000);
+    }
+
     public async Task<IReadOnlyList<Car>> GetArchivedCarsAsync()
     {
         return await _carRepository.SearchCarsAsync(string.Empty, includeArchived: true, DateTime.Today, null, 1, 1000);

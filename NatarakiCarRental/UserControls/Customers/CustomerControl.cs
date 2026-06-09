@@ -19,6 +19,7 @@ public sealed class CustomerControl : UserControl
     private readonly MetricCardControl _archivedCustomersCard = new();
     private readonly TextBox _searchTextBox = new();
     private readonly IconButton _activeButton = new();
+    private readonly IconButton _offsiteClientsButton = new();
     private readonly IconButton _blacklistedButton = new();
     private readonly IconButton _archivedButton = new();
     private readonly DataGridView _customersGrid = new();
@@ -181,9 +182,10 @@ public sealed class CustomerControl : UserControl
             BackColor = ThemeHelper.ContentBackground
         };
 
-        ConfigureTabButton(_activeButton, "Customers", IconChar.Users, new Point(0, 10));
-        ConfigureTabButton(_archivedButton, "Archived", IconChar.BoxArchive, new Point(132, 10));
-        ConfigureTabButton(_blacklistedButton, "Blacklisted", IconChar.UserSlash, new Point(256, 10));
+        ConfigureTabButton(_activeButton, "Customers", IconChar.Users, new Point(0, 10), 124);
+        ConfigureTabButton(_offsiteClientsButton, "Offsite Clients", IconChar.Building, new Point(132, 10), 140);
+        ConfigureTabButton(_archivedButton, "Archived", IconChar.BoxArchive, new Point(280, 10), 116);
+        ConfigureTabButton(_blacklistedButton, "Blacklisted", IconChar.UserSlash, new Point(404, 10), 124);
 
         IconButton addCustomerButton = new()
         {
@@ -206,10 +208,12 @@ public sealed class CustomerControl : UserControl
 
         panel.Resize += (_, _) => addCustomerButton.Left = panel.Width - addCustomerButton.Width;
         _activeButton.Click += async (_, _) => await SwitchFilterAsync(CustomerListFilter.Active);
+        _offsiteClientsButton.Click += async (_, _) => await SwitchFilterAsync(CustomerListFilter.OffsiteClients);
         _blacklistedButton.Click += async (_, _) => await SwitchFilterAsync(CustomerListFilter.Blacklisted);
         _archivedButton.Click += async (_, _) => await SwitchFilterAsync(CustomerListFilter.Archived);
 
         panel.Controls.Add(_activeButton);
+        panel.Controls.Add(_offsiteClientsButton);
         panel.Controls.Add(_archivedButton);
         panel.Controls.Add(_blacklistedButton);
         panel.Controls.Add(addCustomerButton);
@@ -269,14 +273,14 @@ public sealed class CustomerControl : UserControl
         return panel;
     }
 
-    private static void ConfigureTabButton(IconButton button, string text, IconChar icon, Point location)
+    private static void ConfigureTabButton(IconButton button, string text, IconChar icon, Point location, int width)
     {
         button.Text = text;
         button.IconChar = icon;
         button.IconSize = 16;
         button.TextImageRelation = TextImageRelation.ImageBeforeText;
         button.Location = location;
-        button.Size = new Size(text == "Customers" ? 124 : text == "Blacklisted" ? 124 : 116, 34);
+        button.Size = new Size(width, 34);
         button.FlatStyle = FlatStyle.Flat;
         button.Cursor = Cursors.Hand;
         button.Font = FontHelper.SemiBold(9F);
@@ -314,7 +318,13 @@ public sealed class CustomerControl : UserControl
     {
         _customersGrid.Columns.Clear();
         _customersGrid.Columns.Add("CustomerId", "Customer ID");
-        _customersGrid.Columns.Add("FullName", "Full Name");
+        _customersGrid.Columns.Add("FullName", _filter == CustomerListFilter.OffsiteClients ? "Company / Client Name" : "Full Name");
+        
+        if (_filter == CustomerListFilter.OffsiteClients)
+        {
+            _customersGrid.Columns.Add("ContactPerson", "Contact Person");
+        }
+        
         _customersGrid.Columns.Add("PhoneNumber", "Phone Number");
         _customersGrid.Columns.Add("Email", "Email");
         _customersGrid.Columns.Add("Address", "Address");
@@ -340,6 +350,7 @@ public sealed class CustomerControl : UserControl
         }
 
         SetFillWeight("FullName", 100);
+        if (_filter == CustomerListFilter.OffsiteClients) SetFillWeight("ContactPerson", 100);
         SetFillWeight("PhoneNumber", 85);
         SetFillWeight("Email", 100);
         SetFillWeight("Address", 130);
@@ -424,6 +435,10 @@ public sealed class CustomerControl : UserControl
             {
                 actions += "|Edit|Blacklist|Archive";
             }
+            else if (_filter == CustomerListFilter.OffsiteClients)
+            {
+                actions += "|Edit|Archive";
+            }
             else if (_filter == CustomerListFilter.Blacklisted)
             {
                 actions += "|Edit|Remove Blacklist";
@@ -433,21 +448,40 @@ public sealed class CustomerControl : UserControl
                 actions += "|Restore";
             }
 
-            _customersGrid.Rows.Add(
-                customer.CustomerId,
-                $"{customer.FirstName} {customer.LastName}".Trim(),
-                customer.PhoneNumber,
-                string.IsNullOrWhiteSpace(customer.Email) ? "-" : customer.Email,
-                FormatAddress(customer),
-                GetStatusText(customer),
-                customer.BlacklistReason ?? "-",
-                actions);
+            string fullName = !string.IsNullOrWhiteSpace(customer.CompanyName) ? customer.CompanyName : $"{customer.FirstName} {customer.LastName}".Trim();
+
+            if (_filter == CustomerListFilter.OffsiteClients)
+            {
+                _customersGrid.Rows.Add(
+                    customer.CustomerId,
+                    fullName,
+                    string.IsNullOrWhiteSpace(customer.ContactPerson) ? "-" : customer.ContactPerson,
+                    customer.PhoneNumber,
+                    string.IsNullOrWhiteSpace(customer.Email) ? "-" : customer.Email,
+                    FormatAddress(customer),
+                    GetStatusText(customer),
+                    customer.BlacklistReason ?? "-",
+                    actions);
+            }
+            else
+            {
+                _customersGrid.Rows.Add(
+                    customer.CustomerId,
+                    fullName,
+                    customer.PhoneNumber,
+                    string.IsNullOrWhiteSpace(customer.Email) ? "-" : customer.Email,
+                    FormatAddress(customer),
+                    GetStatusText(customer),
+                    customer.BlacklistReason ?? "-",
+                    actions);
+            }
         }
 
         _emptyStateLabel.Text = _filter switch
         {
             CustomerListFilter.Archived => "No archived customer records found.",
             CustomerListFilter.Blacklisted => "No blacklisted customer records found.",
+            CustomerListFilter.OffsiteClients => "No offsite clients found.",
             _ => "No active customer records found."
         };
         _emptyStateLabel.Visible = totalItems == 0;
@@ -481,6 +515,7 @@ public sealed class CustomerControl : UserControl
     private void UpdateTabStyles()
     {
         ApplyTabStyle(_activeButton, _filter == CustomerListFilter.Active);
+        ApplyTabStyle(_offsiteClientsButton, _filter == CustomerListFilter.OffsiteClients);
         ApplyTabStyle(_blacklistedButton, _filter == CustomerListFilter.Blacklisted);
         ApplyTabStyle(_archivedButton, _filter == CustomerListFilter.Archived);
     }
@@ -551,11 +586,11 @@ public sealed class CustomerControl : UserControl
             return;
         }
 
-        using CustomerDetailsForm form = new(CustomerFormMode.Add, currentUserId: _currentUserId);
+        string defaultType = _filter == CustomerListFilter.OffsiteClients ? "Maintenance" : "Rental";
+        using CustomerDetailsForm form = new(CustomerFormMode.Add, currentUserId: _currentUserId, defaultType: defaultType);
 
         if (form.ShowDialog(this) == DialogResult.OK)
         {
-            _filter = CustomerListFilter.Active;
             await LoadCustomersAsync();
         }
     }

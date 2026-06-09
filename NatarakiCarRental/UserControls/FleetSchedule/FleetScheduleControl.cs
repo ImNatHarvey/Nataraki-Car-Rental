@@ -47,7 +47,7 @@ public sealed class FleetScheduleControl : UserControl
             ColumnCount = 1,
             RowCount = 2
         };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 94F));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         mainLayout.Controls.Add(CreateToolbarPanel(), 0, 0);
@@ -57,7 +57,22 @@ public sealed class FleetScheduleControl : UserControl
 
     private Panel CreateToolbarPanel()
     {
-        Panel panel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground };
+        TableLayoutPanel panel = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemeHelper.ContentBackground,
+            ColumnCount = 1,
+            RowCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(0, 0, 0, 0)
+        };
+
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        Panel buttonPanel = new() { Dock = DockStyle.Fill, BackColor = ThemeHelper.ContentBackground, Margin = new Padding(0) };
+
         Button previousButton = CreateSecondaryButton("<", 38, 34);
         previousButton.Location = new Point(0, 10);
         previousButton.Click += async (_, _) => await ChangeMonthAsync(-1);
@@ -86,18 +101,16 @@ public sealed class FleetScheduleControl : UserControl
         addButton.Visible = AccessControlService.HasPermission("FleetSchedule.Create");
 
         FlowLayoutPanel legendPanel = CreateLegendPanel();
-        panel.Resize += (_, _) =>
-        {
-            legendPanel.Width = Math.Max(panel.Width - legendPanel.Left, 280);
-            legendPanel.Height = panel.Height - legendPanel.Top;
-        };
 
-        panel.Controls.Add(previousButton);
-        panel.Controls.Add(_monthLabel);
-        panel.Controls.Add(nextButton);
-        panel.Controls.Add(todayButton);
-        panel.Controls.Add(addButton);
-        panel.Controls.Add(legendPanel);
+        buttonPanel.Controls.Add(previousButton);
+        buttonPanel.Controls.Add(_monthLabel);
+        buttonPanel.Controls.Add(nextButton);
+        buttonPanel.Controls.Add(todayButton);
+        buttonPanel.Controls.Add(addButton);
+
+        panel.Controls.Add(buttonPanel, 0, 0);
+        panel.Controls.Add(legendPanel, 0, 1);
+
         return panel;
     }
 
@@ -105,36 +118,23 @@ public sealed class FleetScheduleControl : UserControl
     {
         FlowLayoutPanel panel = new()
         {
-            Location = new Point(544, 8),
-            Size = new Size(510, 76),
+            Dock = DockStyle.Fill,
             BackColor = ThemeHelper.ContentBackground,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
-            Padding = new Padding(0, 7, 0, 0)
+            Padding = new Padding(0, 4, 0, 0),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(0, 0, 0, 4)
         };
 
-        // Reservation Category
-        Label resLabel = new() { Text = "Reservation:", Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
-        panel.Controls.Add(resLabel);
         AddLegendItem(panel, "Pending", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Pending));
         AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Reserved));
         AddLegendItem(panel, "Rented", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Rented));
-        AddLegendItem(panel, "Completed", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Completed));
-        AddLegendItem(panel, "Cancelled", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Cancelled));
-
-        // Separator
-        Label sep = new() { Text = " | ", Font = FontHelper.Regular(9F), ForeColor = ThemeHelper.Border, AutoSize = true, Margin = new Padding(8, 4, 8, 0) };
-        panel.Controls.Add(sep);
-
-        // Maintenance Category
-        Label maintLabel = new() { Text = "Maintenance:", Font = FontHelper.SemiBold(9F), ForeColor = ThemeHelper.TextSecondary, AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
-        panel.Controls.Add(maintLabel);
-        AddLegendItem(panel, "Pending", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Pending));
-        AddLegendItem(panel, "Reserved", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Reserved));
         AddLegendItem(panel, "Maintenance", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Maintenance));
         AddLegendItem(panel, "Completed", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Completed));
         AddLegendItem(panel, "Cancelled", FleetScheduleVisualHelper.GetColor(FleetScheduleConstants.Status.Cancelled));
-        
+
         return panel;
     }
 
@@ -436,12 +436,7 @@ public sealed class FleetScheduleControl : UserControl
         protected override void OnScroll(ScrollEventArgs se)
         {
             base.OnScroll(se);
-            if (se.ScrollOrientation == ScrollOrientation.HorizontalScroll)
-            {
-                // Invalidate the entire area to ensure the sticky column is redrawn correctly
-                // and to avoid bit-blit artifacts from AutoScroll.
-                Invalidate();
-            }
+            Invalidate();
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -462,7 +457,7 @@ public sealed class FleetScheduleControl : UserControl
             // Apply scroll transformation to EVERYTHING
             graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
 
-            // Determine visible range
+            // Determine visible range (scroll translated)
             Rectangle visibleRect = new(-AutoScrollPosition.X, -AutoScrollPosition.Y, ClientSize.Width, ClientSize.Height);
 
             using Pen gridPen = new(ThemeHelper.TableGridLine);
@@ -493,7 +488,25 @@ public sealed class FleetScheduleControl : UserControl
                 }
             }
 
-            // 2. Draw Row Lines and Car Names
+            // 2. Draw Top Left Corner
+            Rectangle carColHeaderRect = new(0, 0, CarColumnWidth, HeaderHeight);
+            graphics.FillRectangle(headerBrush, carColHeaderRect);
+            graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(14, 15));
+
+            // 3. Draw Header Days
+            for (int day = 0; day < days; day++)
+            {
+                int x = CarColumnWidth + day * DayWidth;
+                if (x + DayWidth < visibleRect.Left || x > visibleRect.Right) continue;
+
+                DateTime date = _owner.SelectedMonth.AddDays(day);
+                graphics.DrawString(date.Day.ToString(), FontHelper.SemiBold(9F), textBrush, new PointF(x + 13, 8));
+                graphics.DrawString(date.ToString("ddd"), FontHelper.Regular(8F), mutedBrush, new PointF(x + 10, 24));
+            }
+
+            graphics.DrawLine(majorGridPen, 0, HeaderHeight, totalWidth, HeaderHeight);
+
+            // 4. Draw Row Lines and Car Names
             int drawableRows = Math.Min(_owner._cars.Count, _rowLayouts.Count);
             for (int row = 0; row < drawableRows; row++)
             {
@@ -502,30 +515,32 @@ public sealed class FleetScheduleControl : UserControl
 
                 float nameY = rowLayout.Top + Math.Max((rowLayout.Height - 34) / 2F, 8);
                 
+                Rectangle carNameRect = new(0, rowLayout.Top, CarColumnWidth, rowLayout.Height);
+                graphics.FillRectangle(headerBrush, carNameRect);
+
+                graphics.DrawString(rowLayout.Car.CarName, FontHelper.SemiBold(9F), textBrush, new PointF(14, nameY));
+                graphics.DrawString(rowLayout.Car.PlateNumber, FontHelper.Regular(8.5F), mutedBrush, new PointF(14, nameY + 18));
+
                 graphics.DrawLine(gridPen, 0, rowLayout.Top, totalWidth, rowLayout.Top);
-                
-                // Draw name and plate (Sticky column effect is handled by redrawing everything on scroll, 
-                // but we draw background for the sticky column later)
             }
 
-            // 3. Draw Grid Vertical Lines
+            // 5. Draw Vertical Lines
             for (int day = 0; day <= days; day++)
             {
                 int x = CarColumnWidth + day * DayWidth;
                 if (x < visibleRect.Left || x > visibleRect.Right) continue;
 
                 DateTime date = day < days ? _owner.SelectedMonth.AddDays(day) : _owner.SelectedMonth.AddDays(days - 1).AddDays(1);
-                graphics.DrawLine(date.Day == 1 || day == days ? majorGridPen : gridPen, x, 0, x, totalHeight);
+                graphics.DrawLine(date.Day == 1 || day == days || day == 0 ? majorGridPen : gridPen, x, 0, x, totalHeight);
             }
 
-            // 4. Draw Schedules
+            // 6. Draw Schedules
             _scheduleBounds.Clear();
             foreach (ScheduleLayout layout in _rowLayouts.SelectMany(rowLayout => rowLayout.Schedules))
             {
                 Rectangle rect = layout.Bounds;
                 _scheduleBounds[layout.Schedule.ScheduleId] = rect;
 
-                // Only draw if visible
                 if (rect.Right < visibleRect.Left || rect.Left > visibleRect.Right || 
                     rect.Bottom < visibleRect.Top || rect.Top > visibleRect.Bottom) continue;
 
@@ -544,61 +559,15 @@ public sealed class FleetScheduleControl : UserControl
                 graphics.DrawString(displayStatus, FontHelper.SemiBold(8.5F), Brushes.White, new RectangleF(rect.X + 8, rect.Y, rect.Width - 12, rect.Height), format);
             }
 
-            // 5. Sticky Headers and Columns (Drawn last to be on top)
-            // Restore transformation for sticky elements
-            graphics.ResetTransform();
-
-            // Sticky Left Column (Cars)
-            Rectangle carColHeaderRect = new(0, 0, CarColumnWidth, HeaderHeight);
-            graphics.FillRectangle(headerBrush, carColHeaderRect);
-            graphics.DrawString("Car", FontHelper.SemiBold(9F), textBrush, new PointF(14, 15));
-            graphics.DrawLine(majorGridPen, CarColumnWidth, 0, CarColumnWidth, Height);
-            graphics.DrawLine(majorGridPen, 0, HeaderHeight, Width, HeaderHeight);
-
-            // Sticky Rows for visible range
-            for (int row = 0; row < drawableRows; row++)
-            {
-                RowLayout rowLayout = _rowLayouts[row];
-                int screenTop = rowLayout.Top + AutoScrollPosition.Y;
-                if (screenTop + rowLayout.Height < HeaderHeight || screenTop > Height) continue;
-
-                Rectangle carNameRect = new(0, screenTop, CarColumnWidth, rowLayout.Height);
-                graphics.FillRectangle(headerBrush, carNameRect);
-                graphics.DrawLine(gridPen, 0, screenTop, CarColumnWidth, screenTop);
-                
-                float nameY = screenTop + Math.Max((rowLayout.Height - 34) / 2F, 8);
-                graphics.DrawString(rowLayout.Car.CarName, FontHelper.SemiBold(9F), textBrush, new PointF(14, nameY));
-                graphics.DrawString(rowLayout.Car.PlateNumber, FontHelper.Regular(8.5F), mutedBrush, new PointF(14, nameY + 18));
-            }
-
-            // Sticky Top Header (Days)
-            graphics.SetClip(new Rectangle(CarColumnWidth + 1, 0, Width - CarColumnWidth - 1, HeaderHeight));
-            graphics.TranslateTransform(AutoScrollPosition.X, 0); // Only X scroll for day headers
-            for (int day = 0; day < days; day++)
-            {
-                int x = CarColumnWidth + day * DayWidth;
-                if (x + DayWidth < visibleRect.Left || x > visibleRect.Right) continue;
-
-                DateTime date = _owner.SelectedMonth.AddDays(day);
-                graphics.DrawString(date.Day.ToString(), FontHelper.SemiBold(9F), textBrush, new PointF(x + 13, 8));
-                graphics.DrawString(date.ToString("ddd"), FontHelper.Regular(8F), mutedBrush, new PointF(x + 10, 24));
-                
-                graphics.DrawLine(date.Day == 1 ? majorGridPen : gridPen, x, 0, x, HeaderHeight);
-            }
-            graphics.ResetTransform();
-            graphics.ResetClip();
-
-            // 6. Today Indicator (Must be scrolled)
-            graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
+            // 7. Today Indicator
             DrawTodayIndicator(graphics, days);
-            graphics.ResetTransform();
 
             if (_owner._cars.Count == 0)
             {
                 const string message = "No active cars available. Add cars in Car Garage first.";
                 SizeF messageSize = graphics.MeasureString(message, FontHelper.Regular(11F));
-                float x = (Width - messageSize.Width) / 2;
-                float y = (Height - messageSize.Height) / 2;
+                float x = (visibleRect.Width - messageSize.Width) / 2 + visibleRect.Left;
+                float y = (visibleRect.Height - messageSize.Height) / 2 + visibleRect.Top;
                 graphics.DrawString(message, FontHelper.Regular(11F), mutedBrush, new PointF(x, y));
             }
         }

@@ -24,8 +24,11 @@ public sealed class CustomerRepository
         const string sql = """
             SELECT
                 CustomerId,
+                CustomerType,
                 FirstName,
                 LastName,
+                CompanyName,
+                ContactPerson,
                 Email,
                 PhoneNumber,
                 Region,
@@ -37,6 +40,8 @@ public sealed class CustomerRepository
                 BlacklistReason,
                 IsWalkIn,
                 IsArchived,
+                Notes,
+                MaintenancePreferences,
                 DriverLicensePath,
                 ProofOfBillingPath,
                 ValidIdFilePath,
@@ -68,8 +73,11 @@ public sealed class CustomerRepository
         const string sql = """
             SELECT
                 CustomerId,
+                CustomerType,
                 FirstName,
                 LastName,
+                CompanyName,
+                ContactPerson,
                 Email,
                 PhoneNumber,
                 Region,
@@ -81,6 +89,8 @@ public sealed class CustomerRepository
                 BlacklistReason,
                 IsWalkIn,
                 IsArchived,
+                Notes,
+                MaintenancePreferences,
                 DriverLicensePath,
                 ProofOfBillingPath,
                 ValidIdFilePath,
@@ -107,8 +117,11 @@ public sealed class CustomerRepository
             BEGIN
                 SELECT TOP 1
                     CustomerId,
+                    CustomerType,
                     FirstName,
                     LastName,
+                    CompanyName,
+                    ContactPerson,
                     Email,
                     PhoneNumber,
                     Region,
@@ -120,6 +133,8 @@ public sealed class CustomerRepository
                     BlacklistReason,
                     IsWalkIn,
                     IsArchived,
+                    Notes,
+                    MaintenancePreferences,
                     DriverLicensePath,
                     ProofOfBillingPath,
                     ValidIdFilePath,
@@ -154,6 +169,7 @@ public sealed class CustomerRepository
                 BEGIN
                     INSERT INTO dbo.Customers
                     (
+                        CustomerType,
                         FirstName,
                         LastName,
                         PhoneNumber,
@@ -164,6 +180,7 @@ public sealed class CustomerRepository
                     )
                     VALUES
                     (
+                        N'Rental',
                         N'Walk-In',
                         N'Customer',
                         N'00000000000',
@@ -176,8 +193,11 @@ public sealed class CustomerRepository
 
                 SELECT TOP 1
                     CustomerId,
+                    CustomerType,
                     FirstName,
                     LastName,
+                    CompanyName,
+                    ContactPerson,
                     Email,
                     PhoneNumber,
                     Region,
@@ -189,6 +209,8 @@ public sealed class CustomerRepository
                     BlacklistReason,
                     IsWalkIn,
                     IsArchived,
+                    Notes,
+                    MaintenancePreferences,
                     DriverLicensePath,
                     ProofOfBillingPath,
                     ValidIdFilePath,
@@ -225,8 +247,11 @@ public sealed class CustomerRepository
         const string sql = """
             SELECT
                 CustomerId,
+                CustomerType,
                 FirstName,
                 LastName,
+                CompanyName,
+                ContactPerson,
                 Email,
                 PhoneNumber,
                 Region,
@@ -238,6 +263,8 @@ public sealed class CustomerRepository
                 BlacklistReason,
                 IsWalkIn,
                 IsArchived,
+                Notes,
+                MaintenancePreferences,
                 DriverLicensePath,
                 ProofOfBillingPath,
                 ValidIdFilePath,
@@ -248,14 +275,17 @@ public sealed class CustomerRepository
             FROM dbo.Customers
             WHERE IsWalkIn = 0
               AND (
-                    (@Filter = 0 AND IsArchived = 0 AND IsBlacklisted = 0)
-                    OR (@Filter = 1 AND IsArchived = 0 AND IsBlacklisted = 1)
+                    (@Filter = 0 AND IsArchived = 0 AND IsBlacklisted = 0 AND CustomerType = N'Rental')
+                    OR (@Filter = 1 AND IsArchived = 0 AND IsBlacklisted = 1 AND CustomerType = N'Rental')
                     OR (@Filter = 2 AND IsArchived = 1)
+                    OR (@Filter = 3 AND IsArchived = 0 AND IsBlacklisted = 0 AND CustomerType = N'Maintenance')
                   )
               AND (
                     @SearchText = N''
                     OR FirstName LIKE @SearchPattern
                     OR LastName LIKE @SearchPattern
+                    OR CompanyName LIKE @SearchPattern
+                    OR ContactPerson LIKE @SearchPattern
                     OR CONCAT(FirstName, N' ', LastName) LIKE @SearchPattern
                     OR Email LIKE @SearchPattern
                     OR PhoneNumber LIKE @SearchPattern
@@ -290,9 +320,9 @@ public sealed class CustomerRepository
     {
         const string sql = """
             SELECT
-                TotalCustomers = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
-                ActiveCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 0 THEN 1 END),
-                BlacklistedCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 1 THEN 1 END),
+                TotalCustomers = COUNT(CASE WHEN IsArchived = 0 AND CustomerType = N'Rental' THEN 1 END),
+                ActiveCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 0 AND CustomerType = N'Rental' THEN 1 END),
+                BlacklistedCustomers = COUNT(CASE WHEN IsArchived = 0 AND IsBlacklisted = 1 AND CustomerType = N'Rental' THEN 1 END),
                 ArchivedCustomers = COUNT(CASE WHEN IsArchived = 1 THEN 1 END)
             FROM dbo.Customers
             WHERE IsWalkIn = 0;
@@ -309,8 +339,11 @@ public sealed class CustomerRepository
         const string sql = """
             SELECT TOP (@Take)
                 CustomerId,
+                CustomerType,
                 FirstName,
                 LastName,
+                CompanyName,
+                ContactPerson,
                 Email,
                 PhoneNumber,
                 Region,
@@ -322,6 +355,8 @@ public sealed class CustomerRepository
                 BlacklistReason,
                 IsWalkIn,
                 IsArchived,
+                Notes,
+                MaintenancePreferences,
                 DriverLicensePath,
                 ProofOfBillingPath,
                 ValidIdFilePath,
@@ -332,6 +367,7 @@ public sealed class CustomerRepository
             FROM dbo.Customers
             WHERE IsArchived = 0
               AND IsWalkIn = 0
+              AND CustomerType = N'Rental'
             ORDER BY CreatedAt DESC, CustomerId DESC;
             """;
 
@@ -368,8 +404,11 @@ public sealed class CustomerRepository
         const string sql = """
             INSERT INTO dbo.Customers
             (
+                CustomerType,
                 FirstName,
                 LastName,
+                CompanyName,
+                ContactPerson,
                 Email,
                 PhoneNumber,
                 Region,
@@ -379,6 +418,8 @@ public sealed class CustomerRepository
                 StreetAddress,
                 IsBlacklisted,
                 BlacklistReason,
+                Notes,
+                MaintenancePreferences,
                 DriverLicensePath,
                 ProofOfBillingPath,
                 ValidIdFilePath,
@@ -387,8 +428,11 @@ public sealed class CustomerRepository
             OUTPUT INSERTED.CustomerId
             VALUES
             (
+                @CustomerType,
                 @FirstName,
                 @LastName,
+                @CompanyName,
+                @ContactPerson,
                 @Email,
                 @PhoneNumber,
                 @Region,
@@ -398,6 +442,8 @@ public sealed class CustomerRepository
                 @StreetAddress,
                 @IsBlacklisted,
                 @BlacklistReason,
+                @Notes,
+                @MaintenancePreferences,
                 @DriverLicensePath,
                 @ProofOfBillingPath,
                 @ValidIdFilePath,
@@ -413,8 +459,11 @@ public sealed class CustomerRepository
                 sql,
                 new
                 {
-                    customer.FirstName,
-                    customer.LastName,
+                    CustomerType = string.IsNullOrWhiteSpace(customer.CustomerType) ? "Rental" : customer.CustomerType,
+                    FirstName = NullIfWhiteSpace(customer.FirstName),
+                    LastName = NullIfWhiteSpace(customer.LastName),
+                    CompanyName = NullIfWhiteSpace(customer.CompanyName),
+                    ContactPerson = NullIfWhiteSpace(customer.ContactPerson),
                     Email = NullIfWhiteSpace(customer.Email),
                     customer.PhoneNumber,
                     Region = NullIfWhiteSpace(customer.Region),
@@ -424,6 +473,8 @@ public sealed class CustomerRepository
                     StreetAddress = NullIfWhiteSpace(customer.StreetAddress),
                     customer.IsBlacklisted,
                     BlacklistReason = NullIfWhiteSpace(customer.BlacklistReason),
+                    Notes = NullIfWhiteSpace(customer.Notes),
+                    MaintenancePreferences = NullIfWhiteSpace(customer.MaintenancePreferences),
                     DriverLicensePath = NullIfWhiteSpace(customer.DriverLicensePath),
                     ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath),
                     ValidIdFilePath = NullIfWhiteSpace(customer.ValidIdFilePath),
@@ -445,8 +496,11 @@ public sealed class CustomerRepository
         const string sql = """
             UPDATE dbo.Customers
             SET
+                CustomerType = @CustomerType,
                 FirstName = @FirstName,
                 LastName = @LastName,
+                CompanyName = @CompanyName,
+                ContactPerson = @ContactPerson,
                 Email = @Email,
                 PhoneNumber = @PhoneNumber,
                 Region = @Region,
@@ -456,6 +510,8 @@ public sealed class CustomerRepository
                 StreetAddress = @StreetAddress,
                 IsBlacklisted = @IsBlacklisted,
                 BlacklistReason = @BlacklistReason,
+                Notes = @Notes,
+                MaintenancePreferences = @MaintenancePreferences,
                 DriverLicensePath = @DriverLicensePath,
                 ProofOfBillingPath = @ProofOfBillingPath,
                 ValidIdFilePath = @ValidIdFilePath,
@@ -473,8 +529,11 @@ public sealed class CustomerRepository
                 new
                 {
                     customer.CustomerId,
-                    customer.FirstName,
-                    customer.LastName,
+                    CustomerType = string.IsNullOrWhiteSpace(customer.CustomerType) ? "Rental" : customer.CustomerType,
+                    FirstName = NullIfWhiteSpace(customer.FirstName),
+                    LastName = NullIfWhiteSpace(customer.LastName),
+                    CompanyName = NullIfWhiteSpace(customer.CompanyName),
+                    ContactPerson = NullIfWhiteSpace(customer.ContactPerson),
                     Email = NullIfWhiteSpace(customer.Email),
                     customer.PhoneNumber,
                     Region = NullIfWhiteSpace(customer.Region),
@@ -484,6 +543,8 @@ public sealed class CustomerRepository
                     StreetAddress = NullIfWhiteSpace(customer.StreetAddress),
                     customer.IsBlacklisted,
                     BlacklistReason = NullIfWhiteSpace(customer.BlacklistReason),
+                    Notes = NullIfWhiteSpace(customer.Notes),
+                    MaintenancePreferences = NullIfWhiteSpace(customer.MaintenancePreferences),
                     DriverLicensePath = NullIfWhiteSpace(customer.DriverLicensePath),
                     ProofOfBillingPath = NullIfWhiteSpace(customer.ProofOfBillingPath),
                     ValidIdFilePath = NullIfWhiteSpace(customer.ValidIdFilePath),

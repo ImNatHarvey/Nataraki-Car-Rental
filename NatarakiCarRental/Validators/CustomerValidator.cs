@@ -9,11 +9,18 @@ public sealed class CustomerValidator : AbstractValidator<Customer>
     {
         RuleFor(customer => customer.FirstName)
             .NotEmpty()
-            .WithMessage("First name is required.");
+            .When(customer => customer.CustomerType == "Rental")
+            .WithMessage("First name is required for rental customers.");
 
         RuleFor(customer => customer.LastName)
             .NotEmpty()
-            .WithMessage("Last name is required.");
+            .When(customer => customer.CustomerType == "Rental")
+            .WithMessage("Last name is required for rental customers.");
+
+        RuleFor(customer => customer.CompanyName)
+            .NotEmpty()
+            .When(customer => customer.CustomerType == "Maintenance")
+            .WithMessage("Company name or full client name is required for offsite clients.");
 
         ApplyPhoneNumberRules(RuleFor(customer => customer.PhoneNumber));
 
@@ -60,3 +67,4 @@ public sealed class CustomerValidator : AbstractValidator<Customer>
             || !string.IsNullOrWhiteSpace(customer.StreetAddress);
     }
 }
+

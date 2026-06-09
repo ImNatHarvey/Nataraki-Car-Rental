@@ -415,8 +415,11 @@ public static class DatabaseInitializer
                 CREATE TABLE dbo.Customers
                 (
                     CustomerId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    FirstName nvarchar(100) NOT NULL,
-                    LastName nvarchar(100) NOT NULL,
+                    CustomerType nvarchar(50) NOT NULL DEFAULT N'Rental',
+                    FirstName nvarchar(100) NULL,
+                    LastName nvarchar(100) NULL,
+                    CompanyName nvarchar(200) NULL,
+                    ContactPerson nvarchar(150) NULL,
                     Email nvarchar(150) NULL,
                     PhoneNumber nvarchar(30) NOT NULL,
                     Region nvarchar(150) NULL,
@@ -428,6 +431,8 @@ public static class DatabaseInitializer
                     BlacklistReason nvarchar(255) NULL,
                     IsWalkIn bit NOT NULL DEFAULT 0,
                     IsArchived bit NOT NULL DEFAULT 0,
+                    Notes nvarchar(max) NULL,
+                    MaintenancePreferences nvarchar(max) NULL,
                     DriverLicensePath nvarchar(500) NULL,
                     ProofOfBillingPath nvarchar(500) NULL,
                     ValidIdFilePath nvarchar(500) NULL,
@@ -436,6 +441,32 @@ public static class DatabaseInitializer
                     UpdatedAt datetime2 NULL,
                     ArchivedAt datetime2 NULL
                 );
+            END;
+            """, connection, transaction);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Customers', N'CustomerType') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD CustomerType nvarchar(50) NOT NULL DEFAULT N'Rental';
+                END;
+                IF COL_LENGTH(N'dbo.Customers', N'CompanyName') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD CompanyName nvarchar(200) NULL;
+                END;
+                IF COL_LENGTH(N'dbo.Customers', N'ContactPerson') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD ContactPerson nvarchar(150) NULL;
+                END;
+                IF COL_LENGTH(N'dbo.Customers', N'Notes') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD Notes nvarchar(max) NULL;
+                END;
+                IF COL_LENGTH(N'dbo.Customers', N'MaintenancePreferences') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Customers ADD MaintenancePreferences nvarchar(max) NULL;
+                END;
             END;
             """, connection, transaction);
 
@@ -599,6 +630,8 @@ public static class DatabaseInitializer
                 CREATE TABLE dbo.Transactions
                 (
                     TransactionId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    TransactionType nvarchar(50) NOT NULL DEFAULT N'Rental',
+                    MaintenanceType nvarchar(50) NULL,
                     TransactionCode nvarchar(40) NOT NULL,
                     FleetScheduleId int NOT NULL,
                     CustomerId int NOT NULL,
@@ -632,8 +665,31 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_Transactions_BalanceAmount_Valid CHECK (BalanceAmount >= 0 AND BalanceAmount = TotalAmount - AmountPaid),
                     CONSTRAINT CK_Transactions_ModeOfPayment_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')),
                     CONSTRAINT CK_Transactions_PaymentStatus_Valid CHECK (PaymentStatus IN (N'Unpaid', N'Partial', N'Paid')),
-                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Completed', N'Cancelled'))
+                    CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Maintenance', N'Completed', N'Cancelled'))
                 );
+            END;
+            """, connection, transaction);
+
+        ExecuteDatabaseCommand("""
+            IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Transactions', N'TransactionType') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD TransactionType nvarchar(50) NOT NULL DEFAULT N'Rental';
+                END;
+
+                IF COL_LENGTH(N'dbo.Transactions', N'MaintenanceType') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.Transactions ADD MaintenanceType nvarchar(50) NULL;
+                END;
+                
+                -- Update Status constraint
+                IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Transactions_Status_Valid')
+                BEGIN
+                    ALTER TABLE dbo.Transactions DROP CONSTRAINT CK_Transactions_Status_Valid;
+                END;
+
+                ALTER TABLE dbo.Transactions ADD CONSTRAINT CK_Transactions_Status_Valid CHECK (TransactionStatus IN (N'Pending', N'Reserved', N'Active', N'Maintenance', N'Completed', N'Cancelled'));
             END;
             """, connection, transaction);
 
@@ -950,6 +1006,13 @@ public static class DatabaseInitializer
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Customers', N'U') IS NOT NULL
             BEGIN
+                -- Make FirstName and LastName nullable to support Company-only clients
+                IF COL_LENGTH(N'dbo.Customers', N'FirstName') IS NOT NULL
+                    ALTER TABLE dbo.Customers ALTER COLUMN FirstName nvarchar(100) NULL;
+                
+                IF COL_LENGTH(N'dbo.Customers', N'LastName') IS NOT NULL
+                    ALTER TABLE dbo.Customers ALTER COLUMN LastName nvarchar(100) NULL;
+
                 UPDATE dbo.Customers
                 SET BlacklistReason = N'Legacy blacklist record'
                 WHERE IsBlacklisted = 1
@@ -972,17 +1035,24 @@ public static class DatabaseInitializer
                     ADD CONSTRAINT UQ_Customers_PhoneNumber UNIQUE (PhoneNumber);
                 END;
 
-                IF OBJECT_ID(N'dbo.CK_Customers_FirstName_NotEmpty', N'C') IS NULL
-                BEGIN
-                    ALTER TABLE dbo.Customers WITH CHECK
-                    ADD CONSTRAINT CK_Customers_FirstName_NotEmpty CHECK (LEN(LTRIM(RTRIM(FirstName))) > 0);
-                END;
+                -- Conditional Constraints for Names
+                IF OBJECT_ID(N'dbo.CK_Customers_FirstName_NotEmpty', N'C') IS NOT NULL
+                    ALTER TABLE dbo.Customers DROP CONSTRAINT CK_Customers_FirstName_NotEmpty;
+                
+                ALTER TABLE dbo.Customers WITH CHECK ADD CONSTRAINT CK_Customers_FirstName_NotEmpty 
+                    CHECK (CustomerType <> N'Rental' OR (FirstName IS NOT NULL AND LEN(LTRIM(RTRIM(FirstName))) > 0));
 
-                IF OBJECT_ID(N'dbo.CK_Customers_LastName_NotEmpty', N'C') IS NULL
-                BEGIN
-                    ALTER TABLE dbo.Customers WITH CHECK
-                    ADD CONSTRAINT CK_Customers_LastName_NotEmpty CHECK (LEN(LTRIM(RTRIM(LastName))) > 0);
-                END;
+                IF OBJECT_ID(N'dbo.CK_Customers_LastName_NotEmpty', N'C') IS NOT NULL
+                    ALTER TABLE dbo.Customers DROP CONSTRAINT CK_Customers_LastName_NotEmpty;
+
+                ALTER TABLE dbo.Customers WITH CHECK ADD CONSTRAINT CK_Customers_LastName_NotEmpty 
+                    CHECK (CustomerType <> N'Rental' OR (LastName IS NOT NULL AND LEN(LTRIM(RTRIM(LastName))) > 0));
+
+                IF OBJECT_ID(N'dbo.CK_Customers_CompanyName_NotEmpty', N'C') IS NOT NULL
+                    ALTER TABLE dbo.Customers DROP CONSTRAINT CK_Customers_CompanyName_NotEmpty;
+
+                ALTER TABLE dbo.Customers WITH CHECK ADD CONSTRAINT CK_Customers_CompanyName_NotEmpty 
+                    CHECK (CustomerType <> N'Maintenance' OR (CompanyName IS NOT NULL AND LEN(LTRIM(RTRIM(CompanyName))) > 0));
 
                 IF OBJECT_ID(N'dbo.CK_Customers_PhoneNumber_NotEmpty', N'C') IS NULL
                 BEGIN
@@ -1304,7 +1374,7 @@ public static class DatabaseInitializer
                     CONSTRAINT CK_OffsiteRecords_EstimatedCost_NonNegative CHECK (EstimatedCost >= 0),
                     CONSTRAINT CK_OffsiteRecords_ActualCost_NonNegative CHECK (ActualCost >= 0),
                     CONSTRAINT CK_OffsiteRecords_Type_Valid CHECK (OffsiteType IN (N'Maintenance', N'Repair', N'Cleaning', N'Inspection', N'Other')),
-                    CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Ongoing', N'Completed', N'Cancelled'))
+                    CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Pending', N'Reserved', N'Ongoing', N'Completed', N'Cancelled', N'Maintenance'))
                 );
             END;
             """, connection, transaction);
@@ -1336,6 +1406,14 @@ public static class DatabaseInitializer
                 BEGIN
                     ALTER TABLE dbo.OffsiteRecords ADD PaymentStatus nvarchar(50) NOT NULL CONSTRAINT DF_OffsiteRecords_PaymentStatus DEFAULT N'Unpaid';
                 END;
+
+                -- Fix Status constraint
+                IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_OffsiteRecords_Status_Valid')
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords DROP CONSTRAINT CK_OffsiteRecords_Status_Valid;
+                END;
+                
+                ALTER TABLE dbo.OffsiteRecords ADD CONSTRAINT CK_OffsiteRecords_Status_Valid CHECK (Status IN (N'Pending', N'Reserved', N'Ongoing', N'Completed', N'Cancelled', N'Maintenance', N'Archived'));
 
                 IF COL_LENGTH(N'dbo.OffsiteRecords', N'FollowUpRequired') IS NULL
                 BEGIN

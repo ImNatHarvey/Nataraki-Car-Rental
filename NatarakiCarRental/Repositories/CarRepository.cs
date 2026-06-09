@@ -451,6 +451,31 @@ public sealed class CarRepository
         }
     }
 
+    public async Task<int> UpdateStatusAsync(int carId, string status, IDbTransaction? transaction = null)
+    {
+        const string sql = """
+            UPDATE dbo.Cars
+            SET Status = @Status,
+                UpdatedAt = sysdatetime()
+            WHERE CarId = @CarId
+              AND IsArchived = 0;
+            """;
+
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
+
+        try
+        {
+            return await connection.ExecuteAsync(sql, new { CarId = carId, Status = status }, transaction);
+        }
+        finally
+        {
+            if (transaction is null)
+            {
+                connection.Dispose();
+            }
+        }
+    }
+
     private static string? NullIfWhiteSpace(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();

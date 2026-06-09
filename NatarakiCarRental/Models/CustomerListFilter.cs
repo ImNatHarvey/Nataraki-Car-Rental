@@ -4,5 +4,6 @@ public enum CustomerListFilter
 {
     Active,
     Blacklisted,
-    Archived
+    Archived,
+    OffsiteClients
 }

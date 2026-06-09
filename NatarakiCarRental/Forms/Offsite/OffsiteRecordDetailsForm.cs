@@ -197,11 +197,11 @@ public sealed class OffsiteRecordDetailsForm : Form
         GroupBox details = CreateDetailsSection(
             "Offsite Details",
             new Point(left, 230),
-            new Size(width, 205),
+            new Size(width, 146),
             (_scheduleTypeComboBox, _scheduleContactPersonTextBox, null),
             (_scheduleLocationTextBox, _scheduleContactNumberTextBox, null));
         GroupBox payment = CreatePaymentSection(
-            new Point(left, 449),
+            new Point(left, 390),
             new Size(width, 146),
             _scheduleModeOfPaymentComboBox,
             _scheduleAmountPaidInput,
@@ -387,7 +387,7 @@ public sealed class OffsiteRecordDetailsForm : Form
     {
         Label label = ControlFactory.CreateInputLabel(labelText);
         label.Location = labelLocation;
-        input.Location = new Point(labelLocation.X, labelLocation.Y + 22);
+        input.Location = new Point(labelLocation.X, labelLocation.Y + 20);
         input.Size = new Size(width, InputHeight);
         input.Font = FontHelper.Regular(10F);
         parent.Controls.Add(label);
@@ -404,7 +404,7 @@ public sealed class OffsiteRecordDetailsForm : Form
             Font = FontHelper.SemiBold(9F),
             ForeColor = ThemeHelper.TextSecondary
         };
-        valueLabel.Location = new Point(labelLocation.X, labelLocation.Y + 22);
+        valueLabel.Location = new Point(labelLocation.X, labelLocation.Y + 20);
         valueLabel.Size = new Size(width, 24);
         parent.Controls.Add(label);
         parent.Controls.Add(valueLabel);
@@ -414,9 +414,9 @@ public sealed class OffsiteRecordDetailsForm : Form
     {
         Label label = ControlFactory.CreateInputLabel(labelText);
         label.Location = labelLocation;
-        browseButton.Location = new Point(labelLocation.X, labelLocation.Y + 22);
-        openButton.Location = new Point(labelLocation.X + 98, labelLocation.Y + 22);
-        pathLabel.Location = new Point(labelLocation.X + 200, labelLocation.Y + 26);
+        browseButton.Location = new Point(labelLocation.X, labelLocation.Y + 20);
+        openButton.Location = new Point(labelLocation.X + 98, labelLocation.Y + 20);
+        pathLabel.Location = new Point(labelLocation.X + 200, labelLocation.Y + 24);
         pathLabel.Size = new Size(220, 20);
         parent.Controls.Add(label);
         parent.Controls.Add(browseButton);

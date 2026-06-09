@@ -445,8 +445,10 @@ public sealed class TransactionControl : UserControl
             }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Reserved)
             {
+                actions += "|Edit";
                 if (!isPaid) actions += "|Payment";
-                actions += "|Start Rental|Cancel";
+                if (transaction.StartDate.Date <= DateTime.Today) actions += "|Start Rental";
+                actions += "|Cancel";
             }
             else if (transaction.TransactionStatus == TransactionConstants.Status.Active)
             {

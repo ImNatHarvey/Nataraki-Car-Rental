@@ -23,9 +23,12 @@ public sealed class CustomerDetailsForm : Form
     private readonly CustomerFormMode _mode;
     private readonly Customer? _sourceCustomer;
     private readonly ErrorProvider _errorProvider = new();
+    private readonly string _customerType;
 
     private readonly TextBox _firstNameTextBox = ControlFactory.CreateTextBox(280);
     private readonly TextBox _lastNameTextBox = ControlFactory.CreateTextBox(280);
+    private readonly TextBox _companyNameTextBox = ControlFactory.CreateTextBox(280);
+    private readonly TextBox _contactPersonTextBox = ControlFactory.CreateTextBox(280);
     private readonly TextBox _phoneNumberTextBox = ControlFactory.CreateTextBox(280);
     private readonly TextBox _emailTextBox = ControlFactory.CreateTextBox(280);
     private readonly ComboBox _regionComboBox = CreateAddressComboBox();
@@ -53,11 +56,12 @@ public sealed class CustomerDetailsForm : Form
     private string? _selectedSelfieWithValidIdSourcePath;
     private bool _isInitializingAddress;
 
-    public CustomerDetailsForm(CustomerFormMode mode, Customer? customer = null, int? currentUserId = null)
+    public CustomerDetailsForm(CustomerFormMode mode, Customer? customer = null, int? currentUserId = null, string defaultType = "Rental")
     {
         _customerService = new CustomerService(currentUserId);
         _mode = mode;
         _sourceCustomer = customer;
+        _customerType = customer?.CustomerType ?? defaultType;
         InitializeForm();
         ConfigureInputs();
         Shown += async (_, _) => await InitializeAddressSelectorsAsync();
@@ -74,14 +78,16 @@ public sealed class CustomerDetailsForm : Form
     }
 
     private bool IsViewMode => _mode == CustomerFormMode.View;
+    private bool IsMaintenance => _customerType == "Maintenance";
 
     private void InitializeForm()
     {
+        string entityName = IsMaintenance ? "Offsite Client" : "Customer";
         string title = _mode switch
         {
-            CustomerFormMode.Edit => "Edit Customer",
-            CustomerFormMode.View => "View Customer",
-            _ => "Add Customer"
+            CustomerFormMode.Edit => $"Edit {entityName}",
+            CustomerFormMode.View => $"View {entityName}",
+            _ => $"Add {entityName}"
         };
 
         Text = title;
@@ -89,7 +95,7 @@ public sealed class CustomerDetailsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(1060, 840);
+        ClientSize = new Size(1060, IsMaintenance ? 600 : 840);
         BackColor = ThemeHelper.Surface;
         Font = FontHelper.Regular();
         ShowInTaskbar = false;
@@ -102,7 +108,7 @@ public sealed class CustomerDetailsForm : Form
             Text = title,
             AutoSize = false,
             Location = new Point(32, 24),
-            Size = new Size(280, 34),
+            Size = new Size(380, 34),
             Font = FontHelper.Title(18F),
             ForeColor = ThemeHelper.TextPrimary
         };
@@ -111,9 +117,9 @@ public sealed class CustomerDetailsForm : Form
         {
             Text = _mode switch
             {
-                CustomerFormMode.Edit => "Update customer contact details and attached documents.",
-                CustomerFormMode.View => "Review this customer record and saved documents.",
-                _ => "Create a customer record for rentals and document tracking."
+                CustomerFormMode.Edit => IsMaintenance ? "Update client details." : "Update customer contact details and attached documents.",
+                CustomerFormMode.View => IsMaintenance ? "Review client details." : "Review this customer record and saved documents.",
+                _ => IsMaintenance ? "Create a client record for offsite services." : "Create a customer record for tracking."
             },
             AutoSize = false,
             Location = new Point(34, 58),
@@ -132,7 +138,7 @@ public sealed class CustomerDetailsForm : Form
         Panel contentPanel = new()
         {
             Location = new Point(32, 116),
-            Size = new Size(996, 620),
+            Size = new Size(996, IsMaintenance ? 400 : 620),
             BackColor = ThemeHelper.Surface
         };
 
@@ -140,27 +146,40 @@ public sealed class CustomerDetailsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3
+            RowCount = IsMaintenance ? 2 : 3
         };
 
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 260F));
-        contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 205F));
+        if (IsMaintenance)
+        {
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F)); // Required section
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 270F)); // Contact section
+        }
+        else
+        {
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 260F));
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 205F));
+        }
 
         contentLayout.Controls.Add(CreateSection("Required Information", CreateRequiredLayout()), 0, 0);
         contentLayout.Controls.Add(CreateSection("Contact & Address", CreateContactLayout()), 0, 1);
-        contentLayout.Controls.Add(CreateSection("Documents", CreateDocumentsLayout()), 0, 2);
+        
+        if (!IsMaintenance)
+        {
+            contentLayout.Controls.Add(CreateSection("Documents", CreateDocumentsLayout()), 0, 2);
+        }
+
         contentPanel.Controls.Add(contentLayout);
 
         Button cancelButton = CreateSecondaryButton(IsViewMode ? "Close" : "Cancel", 118, 38);
-        cancelButton.Location = new Point(IsViewMode ? 910 : 756, 760);
+        cancelButton.Location = new Point(IsViewMode ? 910 : 756, IsMaintenance ? 534 : 760);
         cancelButton.DialogResult = DialogResult.Cancel;
 
         Button? saveButton = null;
         if (!IsViewMode)
         {
-            saveButton = ControlFactory.CreatePrimaryButton(_mode == CustomerFormMode.Edit ? "Save Changes" : "Add Customer", 140, 38);
-            saveButton.Location = new Point(888, 760);
+            saveButton = ControlFactory.CreatePrimaryButton(_mode == CustomerFormMode.Edit ? "Save Changes" : $"Add {entityName}", 140, 38);
+            saveButton.Location = new Point(888, IsMaintenance ? 534 : 760);
             saveButton.Click += SaveButton_Click;
             AcceptButton = saveButton;
         }
@@ -182,9 +201,25 @@ public sealed class CustomerDetailsForm : Form
     private TableLayoutPanel CreateRequiredLayout()
     {
         TableLayoutPanel layout = CreateGrid(3, 1);
-        layout.Controls.Add(CreateInputPanel("First Name *", _firstNameTextBox), 0, 0);
-        layout.Controls.Add(CreateInputPanel("Last Name *", _lastNameTextBox), 1, 0);
-        layout.Controls.Add(CreateInputPanel("Phone Number *", _phoneNumberTextBox), 2, 0);
+        
+        if (IsMaintenance)
+        {
+            layout.Controls.Add(CreateInputPanel("Company / Full Client Name *", _companyNameTextBox), 0, 0);
+            layout.Controls.Add(CreateInputPanel("Contact Person", _contactPersonTextBox), 1, 0);
+            layout.Controls.Add(CreateInputPanel("Phone Number *", _phoneNumberTextBox), 2, 0);
+
+            if (layout.RowStyles.Count > 0)
+            {
+                layout.RowStyles[0].Height = 75F;
+            }
+        }
+        else
+        {
+            layout.Controls.Add(CreateInputPanel("First Name *", _firstNameTextBox), 0, 0);
+            layout.Controls.Add(CreateInputPanel("Last Name *", _lastNameTextBox), 1, 0);
+            layout.Controls.Add(CreateInputPanel("Phone Number *", _phoneNumberTextBox), 2, 0);
+        }
+        
         return layout;
     }
 
@@ -201,9 +236,10 @@ public sealed class CustomerDetailsForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
 
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65F));
+        float rowHeight = 75F;
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
 
         layout.Controls.Add(CreateInputPanel("Email", _emailTextBox), 0, 0);
         layout.Controls.Add(CreateInputPanel("Street / House / Block No.", _streetAddressTextBox), 1, 0);
@@ -241,7 +277,7 @@ public sealed class CustomerDetailsForm : Form
         {
             Text = title,
             Dock = DockStyle.Fill,
-            Padding = new Padding(16, 30, 16, 12),
+            Padding = new Padding(16, 25, 16, 10),
             Font = FontHelper.SemiBold(9.5F),
             ForeColor = ThemeHelper.TextPrimary
         };
@@ -320,8 +356,10 @@ public sealed class CustomerDetailsForm : Form
     {
         _firstNameTextBox.PlaceholderText = "e.g. Juan";
         _lastNameTextBox.PlaceholderText = "e.g. Dela Cruz";
+        _companyNameTextBox.PlaceholderText = "e.g. ABC Corporation";
+        _contactPersonTextBox.PlaceholderText = "e.g. Juan Dela Cruz";
         _phoneNumberTextBox.PlaceholderText = "e.g. 09171234567";
-        _emailTextBox.PlaceholderText = "e.g. customer@email.com";
+        _emailTextBox.PlaceholderText = "e.g. contact@email.com";
         _streetAddressTextBox.PlaceholderText = "e.g. Block 3 Lot 8, Mabini Street";
 
         ResetComboBox(_regionComboBox, "Loading regions...", false);
@@ -403,6 +441,8 @@ public sealed class CustomerDetailsForm : Form
     {
         _firstNameTextBox.Text = customer.FirstName;
         _lastNameTextBox.Text = customer.LastName;
+        _companyNameTextBox.Text = customer.CompanyName;
+        _contactPersonTextBox.Text = customer.ContactPerson;
         _phoneNumberTextBox.Text = customer.PhoneNumber;
         _emailTextBox.Text = customer.Email ?? string.Empty;
         _streetAddressTextBox.Text = customer.StreetAddress ?? string.Empty;
@@ -475,12 +515,12 @@ public sealed class CustomerDetailsForm : Form
             if (_mode == CustomerFormMode.Edit)
             {
                 await _customerService.UpdateCustomerAsync(customer);
-                MessageBoxHelper.ShowSuccess("Customer record updated successfully.");
+                MessageBoxHelper.ShowSuccess($"{ (IsMaintenance ? "Client" : "Customer") } record updated successfully.");
             }
             else
             {
                 await _customerService.AddCustomerAsync(customer);
-                MessageBoxHelper.ShowSuccess("Customer record added successfully.");
+                MessageBoxHelper.ShowSuccess($"{ (IsMaintenance ? "Client" : "Customer") } record added successfully.");
             }
 
             DialogResult = DialogResult.OK;
@@ -500,7 +540,7 @@ public sealed class CustomerDetailsForm : Form
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newProofOfBillingPath, _sourceCustomer?.ProofOfBillingPath);
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newValidIdPath, _sourceCustomer?.ValidIdFilePath);
             UploadPathHelper.DeleteNewCustomerUploadIfSaveFailed(newSelfieWithValidIdPath, _sourceCustomer?.SelfieWithValidIdFilePath);
-            MessageBoxHelper.ShowError($"Unable to save customer record.\n\n{exception.Message}");
+            MessageBoxHelper.ShowError($"Unable to save record.\n\n{exception.Message}");
         }
         finally
         {
@@ -513,8 +553,13 @@ public sealed class CustomerDetailsForm : Form
         return new Customer
         {
             CustomerId = _sourceCustomer?.CustomerId ?? 0,
-            FirstName = _firstNameTextBox.Text,
-            LastName = _lastNameTextBox.Text,
+            CustomerType = _customerType,
+            FirstName = IsMaintenance ? null : NullIfWhiteSpace(_firstNameTextBox.Text),
+            LastName = IsMaintenance ? null : NullIfWhiteSpace(_lastNameTextBox.Text),
+            CompanyName = IsMaintenance ? NullIfWhiteSpace(_companyNameTextBox.Text) : null,
+            ContactPerson = IsMaintenance ? NullIfWhiteSpace(_contactPersonTextBox.Text) : null,
+            Notes = _sourceCustomer?.Notes,
+            MaintenancePreferences = _sourceCustomer?.MaintenancePreferences,
             PhoneNumber = _phoneNumberTextBox.Text,
             Email = NullIfWhiteSpace(_emailTextBox.Text),
             Region = GetSelectedAddressName(_regionComboBox),
@@ -616,6 +661,8 @@ public sealed class CustomerDetailsForm : Form
         {
             nameof(Customer.FirstName) => _firstNameTextBox,
             nameof(Customer.LastName) => _lastNameTextBox,
+            nameof(Customer.CompanyName) => _companyNameTextBox,
+            nameof(Customer.ContactPerson) => _contactPersonTextBox,
             nameof(Customer.PhoneNumber) => _phoneNumberTextBox,
             nameof(Customer.Email) => _emailTextBox,
             nameof(Customer.Region) => _regionComboBox,

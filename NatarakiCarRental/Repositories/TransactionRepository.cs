@@ -25,6 +25,7 @@ public sealed class TransactionRepository
         const string sql = """
             INSERT INTO dbo.Transactions
             (
+                TransactionType,
                 TransactionCode,
                 FleetScheduleId,
                 CustomerId,
@@ -45,6 +46,7 @@ public sealed class TransactionRepository
             OUTPUT INSERTED.TransactionId
             VALUES
             (
+                @TransactionType,
                 @TransactionCode,
                 @FleetScheduleId,
                 @CustomerId,
@@ -84,11 +86,15 @@ public sealed class TransactionRepository
         const string sql = """
             SELECT
                 transactions.TransactionId,
+                transactions.TransactionType,
                 transactions.TransactionCode,
                 transactions.FleetScheduleId,
                 transactions.CustomerId,
                 transactions.CarId,
-                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                CustomerName = CASE 
+                    WHEN customers.CustomerType = N'Maintenance' AND customers.CompanyName IS NOT NULL THEN customers.CompanyName
+                    ELSE LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName)))
+                END,
                 CustomerPhone = customers.PhoneNumber,
                 CustomerAddress = LTRIM(RTRIM(CONCAT(customers.StreetAddress, N' ', customers.Barangay, N' ', customers.City, N' ', customers.Province))),
                 cars.CarName,
@@ -135,11 +141,15 @@ public sealed class TransactionRepository
         const string sql = """
             SELECT TOP 1
                 transactions.TransactionId,
+                transactions.TransactionType,
                 transactions.TransactionCode,
                 transactions.FleetScheduleId,
                 transactions.CustomerId,
                 transactions.CarId,
-                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                CustomerName = CASE 
+                    WHEN customers.CustomerType = N'Maintenance' AND customers.CompanyName IS NOT NULL THEN customers.CompanyName
+                    ELSE LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName)))
+                END,
                 CustomerPhone = customers.PhoneNumber,
                 CustomerAddress = LTRIM(RTRIM(CONCAT(customers.StreetAddress, N' ', customers.Barangay, N' ', customers.City, N' ', customers.Province))),
                 cars.CarName,
@@ -188,11 +198,15 @@ public sealed class TransactionRepository
         const string sql = """
             SELECT
                 transactions.TransactionId,
+                transactions.TransactionType,
                 transactions.TransactionCode,
                 transactions.FleetScheduleId,
                 transactions.CustomerId,
                 transactions.CarId,
-                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                CustomerName = CASE 
+                    WHEN customers.CustomerType = N'Maintenance' AND customers.CompanyName IS NOT NULL THEN customers.CompanyName
+                    ELSE LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName)))
+                END,
                 CustomerPhone = customers.PhoneNumber,
                 CustomerAddress = LTRIM(RTRIM(CONCAT(customers.StreetAddress, N' ', customers.Barangay, N' ', customers.City, N' ', customers.Province))),
                 cars.CarName,
@@ -254,17 +268,22 @@ public sealed class TransactionRepository
         string? transactionStatus,
         string? paymentStatus,
         bool includeArchived = false,
+        string? transactionType = null,
         int maxRows = 100)
     {
         string normalizedSearchText = searchText?.Trim() ?? string.Empty;
         const string sql = """
             SELECT TOP (@MaxRows)
                 transactions.TransactionId,
+                transactions.TransactionType,
                 transactions.TransactionCode,
                 transactions.FleetScheduleId,
                 transactions.CustomerId,
                 transactions.CarId,
-                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                CustomerName = CASE 
+                    WHEN customers.CustomerType = N'Maintenance' AND customers.CompanyName IS NOT NULL THEN customers.CompanyName
+                    ELSE LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName)))
+                END,
                 CustomerPhone = customers.PhoneNumber,
                 CustomerAddress = LTRIM(RTRIM(CONCAT(customers.StreetAddress, N' ', customers.Barangay, N' ', customers.City, N' ', customers.Province))),
                 cars.CarName,
@@ -281,6 +300,7 @@ public sealed class TransactionRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = @IncludeArchived
+              AND (@TransactionType IS NULL OR transactions.TransactionType = @TransactionType)
               AND (@TransactionStatus IS NULL OR transactions.TransactionStatus = @TransactionStatus)
               AND (@PaymentStatus IS NULL OR transactions.PaymentStatus = @PaymentStatus)
               AND (
@@ -288,6 +308,7 @@ public sealed class TransactionRepository
                     OR transactions.TransactionCode LIKE @SearchPattern
                     OR customers.FirstName LIKE @SearchPattern
                     OR customers.LastName LIKE @SearchPattern
+                    OR customers.CompanyName LIKE @SearchPattern
                     OR CONCAT(customers.FirstName, N' ', customers.LastName) LIKE @SearchPattern
                     OR cars.CarName LIKE @SearchPattern
                     OR cars.PlateNumber LIKE @SearchPattern
@@ -303,6 +324,7 @@ public sealed class TransactionRepository
                 MaxRows = Math.Clamp(maxRows, 1, 500),
                 SearchText = normalizedSearchText,
                 SearchPattern = $"%{normalizedSearchText}%",
+                TransactionType = NullIfWhiteSpace(transactionType),
                 TransactionStatus = NullIfWhiteSpace(transactionStatus),
                 PaymentStatus = NullIfWhiteSpace(paymentStatus),
                 IncludeArchived = includeArchived
@@ -314,15 +336,17 @@ public sealed class TransactionRepository
     {
         string sql = $"""
             SELECT
-                TotalTransactions = COUNT(CASE WHEN IsArchived = 0 THEN 1 END),
-                ActiveTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionStatus = N'{TransactionConstants.Status.Active}' THEN 1 END),
-                UnpaidTransactions = COUNT(CASE WHEN IsArchived = 0 AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Unpaid}' THEN 1 END),
+                TotalTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Rental' THEN 1 END),
+                ActiveTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Rental' AND TransactionStatus = N'{TransactionConstants.Status.Active}' THEN 1 END),
+                UnpaidTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Rental' AND PaymentStatus = N'{TransactionConstants.PaymentStatus.Unpaid}' THEN 1 END),
                 CompletedTransactions = COUNT(CASE
                     WHEN IsArchived = 0
+                     AND TransactionType = N'Rental'
                      AND TransactionStatus = N'{TransactionConstants.Status.Completed}'
                      AND YEAR(ISNULL(UpdatedAt, CreatedAt)) = YEAR(@ReferenceDate)
                      AND MONTH(ISNULL(UpdatedAt, CreatedAt)) = MONTH(@ReferenceDate)
-                    THEN 1 END)
+                    THEN 1 END),
+                MaintenanceTransactions = COUNT(CASE WHEN IsArchived = 0 AND TransactionType = N'Maintenance' AND TransactionStatus = N'Maintenance' THEN 1 END)
             FROM dbo.Transactions;
             """;
 
@@ -338,11 +362,15 @@ public sealed class TransactionRepository
         const string sql = """
             SELECT TOP (@Take)
                 transactions.TransactionId,
+                transactions.TransactionType,
                 transactions.TransactionCode,
                 transactions.FleetScheduleId,
                 transactions.CustomerId,
                 transactions.CarId,
-                CustomerName = LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName))),
+                CustomerName = CASE 
+                    WHEN customers.CustomerType = N'Maintenance' AND customers.CompanyName IS NOT NULL THEN customers.CompanyName
+                    ELSE LTRIM(RTRIM(CONCAT(customers.FirstName, N' ', customers.LastName)))
+                END,
                 CustomerPhone = customers.PhoneNumber,
                 CustomerAddress = LTRIM(RTRIM(CONCAT(customers.StreetAddress, N' ', customers.Barangay, N' ', customers.City, N' ', customers.Province))),
                 cars.CarName,
@@ -359,6 +387,7 @@ public sealed class TransactionRepository
             INNER JOIN dbo.Customers AS customers ON customers.CustomerId = transactions.CustomerId
             INNER JOIN dbo.Cars AS cars ON cars.CarId = transactions.CarId
             WHERE transactions.IsArchived = 0
+              AND transactions.TransactionType = N'Rental'
             ORDER BY transactions.CreatedAt DESC, transactions.TransactionId DESC;
             """;
         using var connection = _connectionFactory.CreateConnection();

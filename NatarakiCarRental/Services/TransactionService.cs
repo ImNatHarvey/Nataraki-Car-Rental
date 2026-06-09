@@ -84,9 +84,115 @@ public sealed class TransactionService
         string? transactionStatus = null,
         string? paymentStatus = null,
         bool includeArchived = false,
+        string? transactionType = null,
         int maxRows = 100)
     {
-        return _transactionRepository.SearchAsync(searchText, transactionStatus, paymentStatus, includeArchived, maxRows);
+        return _transactionRepository.SearchAsync(searchText, transactionStatus, paymentStatus, includeArchived, transactionType, maxRows);
+    }
+
+    public async Task<int> CreateMaintenanceTransactionAsync(CreateMaintenanceTransactionRequest request)
+    {
+        AccessControlService.EnforcePermission("Offsite.Create");
+
+        Customer customer = await GetEligibleCustomerAsync(request.CustomerId);
+        Car car = await GetEligibleCarAsync(request.CarId);
+        
+        if (customer.CustomerType != "Maintenance")
+        {
+            throw Validation(nameof(CreateMaintenanceTransactionRequest.CustomerId), "Selected customer is not an offsite client.");
+        }
+
+        ValidateMaintenanceDates(request.StartDate.Date, request.EndDate.Date);
+
+        FleetSchedule schedule = new()
+        {
+            CarId = car.CarId,
+            CustomerId = customer.CustomerId,
+            Title = $"Maintenance: {request.MaintenanceType}",
+            ScheduleType = FleetScheduleConstants.Type.Maintenance,
+            Status = FleetScheduleConstants.Status.Maintenance,
+            StartDate = request.StartDate.Date,
+            EndDate = request.EndDate.Date,
+            Notes = request.Notes,
+            CreatedByUserId = _currentUserId
+        };
+
+        await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
+        using SqlTransaction dbTransaction = connection.BeginTransaction();
+
+        try
+        {
+            await _scheduleService.PrepareForSaveAsync(schedule, null, false, dbTransaction);
+            schedule.CreatedByUserId = _currentUserId;
+            int scheduleId = await _scheduleRepository.CreateAsync(schedule, dbTransaction);
+
+            Transaction transaction = new()
+            {
+                TransactionType = "Maintenance",
+                MaintenanceType = request.MaintenanceType,
+                FleetScheduleId = scheduleId,
+                CustomerId = customer.CustomerId,
+                CarId = car.CarId,
+                StartDate = request.StartDate.Date,
+                EndDate = request.EndDate.Date,
+                DailyRate = 1, // Not used but required by DB constraints for now
+                TotalDays = Math.Max(1, (request.EndDate.Date - request.StartDate.Date).Days + 1),
+                TotalAmount = request.EstimatedCost,
+                AmountPaid = request.AmountPaid,
+                BalanceAmount = request.EstimatedCost - request.AmountPaid,
+                ModeOfPayment = request.ModeOfPayment,
+                PaymentStatus = GetPaymentStatus(request.AmountPaid, request.EstimatedCost),
+                TransactionStatus = FleetScheduleConstants.Status.Maintenance,
+                Notes = request.Notes,
+                CreatedByUserId = _currentUserId
+            };
+
+            int transactionId = await CreateWithUniqueCodeAsync(transaction, dbTransaction);
+
+            if (request.AmountPaid > 0)
+            {
+                await _transactionPaymentRepository.AddAsync(
+                    new TransactionPayment
+                    {
+                        TransactionId = transactionId,
+                        PaymentDate = DateTime.Now,
+                        Amount = request.AmountPaid,
+                        ModeOfPayment = request.ModeOfPayment.Trim(),
+                        PaymentCategory = "Maintenance Payment",
+                        ReceiptFilePath = request.ReceiptFilePath,
+                        Notes = "Initial maintenance payment",
+                        CreatedByUserId = _currentUserId
+                    },
+                    dbTransaction);
+            }
+
+            await _carRepository.UpdateStatusAsync(car.CarId, CarConstants.Status.Maintenance, dbTransaction);
+
+            await _activityLogService.LogAsync(
+                action: "Created",
+                module: "Maintenance",
+                entityId: transactionId,
+                description: $"Created maintenance transaction {transaction.TransactionCode} for car {car.PlateNumber}.",
+                userId: _currentUserId,
+                entityName: transaction.TransactionCode,
+                transaction: dbTransaction);
+
+            dbTransaction.Commit();
+            return transactionId;
+        }
+        catch
+        {
+            RollbackQuietly(dbTransaction);
+            throw;
+        }
+    }
+
+    private static void ValidateMaintenanceDates(DateTime startDate, DateTime endDate)
+    {
+        if (startDate > endDate)
+        {
+            throw Validation(nameof(CreateMaintenanceTransactionRequest.EndDate), "End date must be on or after start date.");
+        }
     }
 
     public Task<TransactionMetrics> GetMetricsAsync(DateTime referenceDate)
@@ -499,6 +605,11 @@ public sealed class TransactionService
         if (transaction.TransactionStatus != TransactionConstants.Status.Reserved)
         {
             throw Validation(nameof(Transaction.TransactionStatus), "Only reserved transactions can be started.");
+        }
+
+        if (transaction.StartDate.Date > DateTime.Today)
+        {
+            throw Validation(nameof(Transaction.StartDate), "Cannot start a rental before its scheduled start date.");
         }
 
         if (transaction.PaymentStatus != TransactionConstants.PaymentStatus.Paid)

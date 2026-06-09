@@ -3,6 +3,7 @@ namespace NatarakiCarRental.Models;
 public sealed class TransactionListItem
 {
     public int TransactionId { get; set; }
+    public string TransactionType { get; set; } = "Rental";
     public string TransactionCode { get; set; } = string.Empty;
     public int FleetScheduleId { get; set; }
     public int CustomerId { get; set; }
