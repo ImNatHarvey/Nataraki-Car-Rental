@@ -565,6 +565,11 @@ public sealed class CarGarageControl : UserControl
             return;
         }
 
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Edit car: {car.CarName} ({car.PlateNumber})"))
+        {
+            return;
+        }
+
         using CarDetailsForm form = new(CarFormMode.Edit, car, _currentUserId);
 
         if (form.ShowDialog(this) == DialogResult.OK)

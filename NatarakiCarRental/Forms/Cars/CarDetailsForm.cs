@@ -573,11 +573,6 @@ public sealed class CarDetailsForm : Form
             return;
         }
 
-        if (_mode == CarFormMode.Edit && !await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Update car: {_carNameTextBox.Text} ({_plateNumberTextBox.Text})"))
-        {
-            return;
-        }
-
         string? newImagePath = null;
         string? newOrCrPath = null;
 

@@ -621,6 +621,15 @@ public sealed class CustomerControl : UserControl
             return;
         }
 
+        string customerName = string.IsNullOrWhiteSpace(customer.CompanyName)
+            ? $"{customer.FirstName} {customer.LastName}".Trim()
+            : customer.CompanyName.Trim();
+
+        if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Edit customer: {customerName}"))
+        {
+            return;
+        }
+
         using CustomerDetailsForm form = new(CustomerFormMode.Edit, customer, _currentUserId);
 
         if (form.ShowDialog(this) == DialogResult.OK)

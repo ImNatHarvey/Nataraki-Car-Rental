@@ -495,18 +495,6 @@ public sealed class CustomerDetailsForm : Form
             return;
         }
 
-        if (_mode == CustomerFormMode.Edit)
-        {
-            string currentCustomerName = string.IsNullOrWhiteSpace(_companyNameTextBox.Text) 
-                ? $"{_firstNameTextBox.Text} {_lastNameTextBox.Text}".Trim()
-                : _companyNameTextBox.Text.Trim();
-
-            if (!await _verificationService.RequireOwnerVerificationIfNeededAsync(_currentUserId, $"Update customer: {currentCustomerName}"))
-            {
-                return;
-            }
-        }
-
         string? newDriverLicensePath = null;
         string? newProofOfBillingPath = null;
         string? newValidIdPath = null;
