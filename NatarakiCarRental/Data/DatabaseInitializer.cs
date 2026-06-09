@@ -1366,6 +1366,16 @@ public static class DatabaseInitializer
                     CreatedAt datetime2 NOT NULL DEFAULT sysdatetime(),
                     UpdatedAt datetime2 NULL,
                     IsArchived bit NOT NULL DEFAULT 0,
+                    WorkResult nvarchar(50) NULL,
+                    ProofFilePath nvarchar(500) NULL,
+                    AmountPaid decimal(18,2) NOT NULL DEFAULT 0,
+                    BalanceAmount decimal(18,2) NOT NULL DEFAULT 0,
+                    ModeOfPayment nvarchar(50) NOT NULL DEFAULT N'None / Not Applicable',
+                    PaymentStatus nvarchar(50) NOT NULL DEFAULT N'Unpaid',
+                    FollowUpRequired bit NOT NULL DEFAULT 0,
+                    FollowUpReason nvarchar(300) NULL,
+                    SuggestedNextAction nvarchar(300) NULL,
+                    CompletedByUserId int NULL,
                     CONSTRAINT FK_OffsiteRecords_Cars FOREIGN KEY (CarId) REFERENCES dbo.Cars(CarId),
                     CONSTRAINT FK_OffsiteRecords_FleetSchedules FOREIGN KEY (FleetScheduleId) REFERENCES dbo.FleetSchedules(ScheduleId),
                     CONSTRAINT FK_OffsiteRecords_Users FOREIGN KEY (CreatedByUserId) REFERENCES dbo.Users(UserId),
@@ -1433,6 +1443,11 @@ public static class DatabaseInitializer
                 IF COL_LENGTH(N'dbo.OffsiteRecords', N'CompletedByUserId') IS NULL
                 BEGIN
                     ALTER TABLE dbo.OffsiteRecords ADD CompletedByUserId int NULL;
+                END;
+
+                IF COL_LENGTH(N'dbo.OffsiteRecords', N'WorkResult') IS NULL
+                BEGIN
+                    ALTER TABLE dbo.OffsiteRecords ADD WorkResult nvarchar(50) NULL;
                 END;
             END;
             """, connection, transaction);
