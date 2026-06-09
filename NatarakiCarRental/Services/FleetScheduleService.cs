@@ -441,6 +441,7 @@ public sealed class FleetScheduleService
                 schedule.StartDate,
                 schedule.EndDate,
                 excludedScheduleId,
+                schedule.ScheduleType,
                 transaction);
 
         if (conflict is not null)

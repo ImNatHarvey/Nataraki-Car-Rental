@@ -140,7 +140,7 @@ public sealed class TransactionService
                 TotalAmount = request.EstimatedCost,
                 AmountPaid = 0,
                 BalanceAmount = request.EstimatedCost,
-                ModeOfPayment = "N/A",
+                ModeOfPayment = TransactionConstants.ModeOfPayment.Cash,
                 PaymentStatus = TransactionConstants.PaymentStatus.Unpaid,
                 TransactionStatus = TransactionConstants.Status.Scheduled,
                 Notes = request.Notes,
@@ -721,6 +721,7 @@ public sealed class TransactionService
                 extensionStart,
                 extensionEnd,
                 transaction.FleetScheduleId,
+                null,
                 dbTransaction);
 
             if (hasConflict)

@@ -824,6 +824,17 @@ public static class DatabaseInitializer
                     ADD CONSTRAINT CK_Transactions_BalanceAmount_Valid CHECK (BalanceAmount >= 0 AND BalanceAmount = TotalAmount - AmountPaid);
                 END;
 
+                IF OBJECT_ID(N'dbo.CK_Transactions_ModeOfPayment_Valid', N'C') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM sys.check_constraints
+                        WHERE name = N'CK_Transactions_ModeOfPayment_Valid'
+                          AND (definition LIKE N'%Other%' OR definition LIKE N'%N''Other''%')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.Transactions DROP CONSTRAINT CK_Transactions_ModeOfPayment_Valid;
+                END;
+
                 IF OBJECT_ID(N'dbo.CK_Transactions_ModeOfPayment_Valid', N'C') IS NULL
                    AND NOT EXISTS (
                         SELECT 1
@@ -885,6 +896,28 @@ public static class DatabaseInitializer
         ExecuteDatabaseCommand("""
             IF OBJECT_ID(N'dbo.Transactions', N'U') IS NOT NULL
             BEGIN
+                IF OBJECT_ID(N'dbo.CK_TransactionPayments_Mode_Valid', N'C') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM sys.check_constraints
+                        WHERE name = N'CK_TransactionPayments_Mode_Valid'
+                          AND (definition LIKE N'%Other%' OR definition LIKE N'%N''Other''%')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.TransactionPayments DROP CONSTRAINT CK_TransactionPayments_Mode_Valid;
+                END;
+
+                IF OBJECT_ID(N'dbo.CK_TransactionPayments_Mode_Valid', N'C') IS NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.TransactionPayments
+                        WHERE ModeOfPayment NOT IN (N'Cash', N'GCash', N'Bank Transfer', N'Other')
+                   )
+                BEGIN
+                    ALTER TABLE dbo.TransactionPayments WITH CHECK
+                    ADD CONSTRAINT CK_TransactionPayments_Mode_Valid CHECK (ModeOfPayment IN (N'Cash', N'GCash', N'Bank Transfer', N'Other'));
+                END;
+
                 -- Migrate existing AmountPaid from Transactions to TransactionPayments if no non-archived payments exist yet.
                 INSERT INTO dbo.TransactionPayments
                 (

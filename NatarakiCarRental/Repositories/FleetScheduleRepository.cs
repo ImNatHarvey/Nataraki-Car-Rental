@@ -402,6 +402,7 @@ public sealed class FleetScheduleRepository
         DateTime startDate,
         DateTime endDate,
         int? excludedScheduleId = null,
+        string? currentScheduleType = null,
         IDbTransaction? transaction = null)
     {
         string sql = $"""
@@ -410,8 +411,8 @@ public sealed class FleetScheduleRepository
             WHERE CarId = @CarId
               AND IsArchived = 0
               AND Status IN @OperationalStatuses
-              AND NOT (ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND Status = N'{FleetScheduleConstants.Status.Scheduled}')
               AND (@ExcludedScheduleId IS NULL OR ScheduleId <> @ExcludedScheduleId)
+              AND (@CurrentScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}' OR ScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}')
               AND StartDate <= @EndDate
               AND EndDate >= @StartDate;
             """;
@@ -428,6 +429,7 @@ public sealed class FleetScheduleRepository
                     StartDate = startDate.Date,
                     EndDate = endDate.Date,
                     ExcludedScheduleId = excludedScheduleId,
+                    CurrentScheduleType = currentScheduleType,
                     OperationalStatuses = FleetScheduleConstants.Status.Operational
                 },
                 transaction);
@@ -448,6 +450,7 @@ public sealed class FleetScheduleRepository
         DateTime startDate,
         DateTime endDate,
         int? excludedScheduleId = null,
+        string? currentScheduleType = null,
         IDbTransaction? transaction = null)
     {
         string sql = $"""
@@ -474,8 +477,8 @@ public sealed class FleetScheduleRepository
             WHERE schedules.CarId = @CarId
               AND schedules.IsArchived = 0
               AND schedules.Status IN @OperationalStatuses
-              AND NOT (schedules.ScheduleType = N'{FleetScheduleConstants.Type.Maintenance}' AND schedules.Status = N'{FleetScheduleConstants.Status.Scheduled}')
               AND (@ExcludedScheduleId IS NULL OR schedules.ScheduleId <> @ExcludedScheduleId)
+              AND (@CurrentScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}' OR schedules.ScheduleType <> N'{FleetScheduleConstants.Type.Maintenance}')
               AND schedules.StartDate <= @EndDate
               AND schedules.EndDate >= @StartDate
             ORDER BY schedules.StartDate, schedules.ScheduleId;
@@ -493,6 +496,7 @@ public sealed class FleetScheduleRepository
                     StartDate = startDate.Date,
                     EndDate = endDate.Date,
                     ExcludedScheduleId = excludedScheduleId,
+                    CurrentScheduleType = currentScheduleType,
                     OperationalStatuses = FleetScheduleConstants.Status.Operational
                 },
                 transaction);
