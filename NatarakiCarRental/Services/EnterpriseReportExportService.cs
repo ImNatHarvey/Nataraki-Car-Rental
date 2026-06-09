@@ -36,7 +36,6 @@ public sealed class EnterpriseReportExportService
         var metrics = await _reportService.GetSummaryMetricsAsync(from, to);
         var profitability = await _reportService.GetOperatingProfitabilityAsync(from, to);
         var paymentMethods = await _reportService.GetPaymentMethodBreakdownAsync(from, to);
-        var categories = await _reportService.GetRevenueByCategoryAsync(from, to);
         var topCars = await _reportService.GetRevenueByCarAsync(from, to, 10);
 
         var kpis = new Dictionary<string, string>
@@ -53,9 +52,6 @@ public sealed class EnterpriseReportExportService
             
             column.Item().PaddingTop(10).Text("Revenue by Payment Method").FontSize(12).SemiBold().FontColor(ThemePrimaryDark);
             ComposeTable(column, paymentMethods);
-
-            column.Item().PaddingTop(15).Text("Revenue by Category").FontSize(12).SemiBold().FontColor(ThemePrimaryDark);
-            ComposeTable(column, categories);
 
             column.Item().PaddingTop(15).Text("Top Earning Vehicles").FontSize(12).SemiBold().FontColor(ThemePrimaryDark);
             ComposeTable(column, topCars);
@@ -222,7 +218,6 @@ public sealed class EnterpriseReportExportService
     {
         using var workbook = new XLWorkbook();
         AddSheet(workbook, "Payment Methods", await _reportService.GetPaymentMethodBreakdownAsync(from, to), "Financial Report", from, to, generatedBy);
-        AddSheet(workbook, "Categories", await _reportService.GetRevenueByCategoryAsync(from, to), "Financial Report", from, to, generatedBy);
         AddSheet(workbook, "Top Cars", await _reportService.GetRevenueByCarAsync(from, to, 50), "Financial Report", from, to, generatedBy);
         await Task.Run(() => workbook.SaveAs(path));
     }

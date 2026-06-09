@@ -292,7 +292,6 @@ public sealed class TransactionService
                         PaymentDate = DateTime.Now,
                         Amount = request.AmountPaid,
                         ModeOfPayment = request.ModeOfPayment.Trim(),
-                        PaymentCategory = "Rental Payment",
                         ReceiptFilePath = request.ReceiptFilePath,
                         Notes = "Initial payment",
                         CreatedByUserId = _currentUserId
@@ -417,7 +416,6 @@ public sealed class TransactionService
                         PaymentDate = DateTime.Now,
                         Amount = request.AmountPaid,
                         ModeOfPayment = request.ModeOfPayment.Trim(),
-                        PaymentCategory = "Rental Payment",
                         ReceiptFilePath = request.ReceiptFilePath,
                         Notes = "Initial payment",
                         CreatedByUserId = _currentUserId
@@ -506,12 +504,6 @@ public sealed class TransactionService
                         PaymentDate = DateTime.Now,
                         Amount = actualAdditionalCharge,
                         ModeOfPayment = "Other",
-                        PaymentCategory = request.ReturnCondition switch
-                        {
-                            "With Damage" => "Damage Fee",
-                            "Late Return" => "Late Fee",
-                            _ => "Additional Charge"
-                        },
                         ReceiptFilePath = request.ReceiptFilePath,
                         Notes = $"Additional charge for {request.ReturnCondition} paid during inspection.",
                         CreatedByUserId = currentUserId
@@ -750,7 +742,6 @@ public sealed class TransactionService
                     PaymentDate = DateTime.Now,
                     Amount = amountPaid,
                     ModeOfPayment = modeOfPayment.Trim(),
-                    PaymentCategory = "Extension Fee",
                     ReceiptFilePath = receiptFilePath,
                     Notes = $"Rental extension until {newEndDate:MMM d, yyyy} ({extraDays} extra days).",
                     CreatedByUserId = currentUserId
@@ -902,7 +893,6 @@ public sealed class TransactionService
                 PaymentDate = DateTime.Now,
                 Amount = request.Amount,
                 ModeOfPayment = request.ModeOfPayment.Trim(),
-                PaymentCategory = "Rental Payment",
                 ReferenceNumber = string.IsNullOrWhiteSpace(request.ReferenceNumber) ? null : request.ReferenceNumber.Trim(),
                 ReceiptFilePath = request.ReceiptFilePath,
                 Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),

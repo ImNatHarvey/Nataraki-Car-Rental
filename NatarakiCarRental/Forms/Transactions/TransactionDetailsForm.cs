@@ -641,7 +641,6 @@ public sealed class TransactionDetailsForm : Form
                 _paymentsGrid.Rows.Add(
                     payment.PaymentDate.ToString("yyyy-MM-dd HH:mm"),
                     FormatPeso(payment.Amount),
-                    payment.PaymentCategory,
                     payment.ModeOfPayment,
                     string.IsNullOrWhiteSpace(payment.ReceiptFilePath) ? "-" : "View",
                     payment.ReceiptFilePath ?? string.Empty);

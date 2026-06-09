@@ -8,14 +8,6 @@ public sealed class PaymentMethodBreakdownItem
     public decimal Percentage { get; set; }
 }
 
-public sealed class RevenueByCategoryItem
-{
-    public string PaymentCategory { get; set; } = string.Empty;
-    public decimal TotalAmount { get; set; }
-    public int PaymentCount { get; set; }
-    public decimal Percentage { get; set; }
-}
-
 public sealed class TransactionStatusBreakdownItem
 {
     public string Status { get; set; } = string.Empty;

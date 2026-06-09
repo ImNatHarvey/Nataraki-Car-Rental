@@ -26,12 +26,6 @@ public sealed class ReportService
         return _reportRepository.GetPaymentMethodBreakdownAsync(from, to);
     }
 
-    public Task<IReadOnlyList<RevenueByCategoryItem>> GetRevenueByCategoryAsync(DateTime from, DateTime to)
-    {
-        AccessControlService.EnforcePermission("Reports.View");
-        return _reportRepository.GetRevenueByCategoryAsync(from, to);
-    }
-
     public Task<IReadOnlyList<TransactionStatusBreakdownItem>> GetTransactionStatusBreakdownAsync(DateTime from, DateTime to)
     {
         AccessControlService.EnforcePermission("Reports.View");

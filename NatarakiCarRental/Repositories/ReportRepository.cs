@@ -169,30 +169,6 @@ public sealed class ReportRepository
         return results.ToList();
     }
 
-    public async Task<IReadOnlyList<RevenueByCategoryItem>> GetRevenueByCategoryAsync(DateTime from, DateTime to)
-    {
-        const string sql = """
-            DECLARE @TotalRangeRevenue decimal(18,2) = (
-                SELECT ISNULL(SUM(Amount), 0) FROM dbo.TransactionPayments 
-                WHERE IsArchived = 0 AND PaymentDate >= @From AND PaymentDate <= @To
-            );
-
-            SELECT 
-                PaymentCategory,
-                TotalAmount = SUM(Amount),
-                PaymentCount = COUNT(1),
-                Percentage = CASE WHEN @TotalRangeRevenue > 0 THEN (SUM(Amount) / @TotalRangeRevenue) * 100 ELSE 0 END
-            FROM dbo.TransactionPayments
-            WHERE IsArchived = 0 AND PaymentDate >= @From AND PaymentDate <= @To
-            GROUP BY PaymentCategory
-            ORDER BY TotalAmount DESC;
-            """;
-
-        using var connection = _connectionFactory.CreateConnection();
-        var results = await connection.QueryAsync<RevenueByCategoryItem>(sql, new { From = from, To = to });
-        return results.ToList();
-    }
-
     public async Task<IReadOnlyList<TransactionListItem>> GetOutstandingTransactionsAsync(DateTime from, DateTime to)
     {
         string sql = $"""

@@ -34,7 +34,6 @@ public sealed class ReportsFinancialTab : UserControl, IReportTab
     
     private readonly DataGridView _vehicleProfitabilityGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _paymentMethodGrid = ReportLayoutHelper.CreateSummaryGrid();
-    private readonly DataGridView _revenueCategoryGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _outstandingGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _carRevenueGrid = ReportLayoutHelper.CreateSummaryGrid();
     private readonly DataGridView _customerRevenueGrid = ReportLayoutHelper.CreateSummaryGrid();
@@ -60,7 +59,6 @@ public sealed class ReportsFinancialTab : UserControl, IReportTab
             UpdateSummaryCards(summaryTask.Result, profitabilityTask.Result);
             
             PopulatePaymentMethods(await _reportService.GetPaymentMethodBreakdownAsync(from, to));
-            PopulateRevenueCategories(await _reportService.GetRevenueByCategoryAsync(from, to));
             PopulateVehicleProfitability(await _reportService.GetVehicleProfitabilityAsync(from, to));
             PopulateOutstandingTransactions(await _reportService.GetOutstandingTransactionsAsync(from, to));
             PopulateCarRevenue(await _reportService.GetRevenueByCarAsync(from, to, 10));
@@ -86,7 +84,6 @@ public sealed class ReportsFinancialTab : UserControl, IReportTab
         breakdownLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         breakdownLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         breakdownLayout.Controls.Add(ReportLayoutHelper.CreateGridCard("Payment Method Breakdown", _paymentMethodGrid), 0, 0);
-        breakdownLayout.Controls.Add(ReportLayoutHelper.CreateGridCard("Revenue by Category", _revenueCategoryGrid), 1, 0);
         layout.Controls.Add(breakdownLayout);
 
         // 2. Profitability Section
@@ -242,16 +239,5 @@ public sealed class ReportsFinancialTab : UserControl, IReportTab
         _paymentMethodGrid.Columns.Add("Percent", "%");
         foreach (var item in items) _paymentMethodGrid.Rows.Add(item.ModeOfPayment, item.PaymentCount, ReportLayoutHelper.FormatPeso(item.TotalAmount), ReportLayoutHelper.FormatPercent(item.Percentage));
         ReportLayoutHelper.AddEmptyRow(_paymentMethodGrid);
-    }
-
-    private void PopulateRevenueCategories(IReadOnlyList<RevenueByCategoryItem> items)
-    {
-        _revenueCategoryGrid.Columns.Clear(); _revenueCategoryGrid.Rows.Clear();
-        _revenueCategoryGrid.Columns.Add("Category", "Category");
-        _revenueCategoryGrid.Columns.Add("Count", "Count");
-        _revenueCategoryGrid.Columns.Add("Amount", "Amount");
-        _revenueCategoryGrid.Columns.Add("Percent", "%");
-        foreach (var item in items) _revenueCategoryGrid.Rows.Add(item.PaymentCategory, item.PaymentCount, ReportLayoutHelper.FormatPeso(item.TotalAmount), ReportLayoutHelper.FormatPercent(item.Percentage));
-        ReportLayoutHelper.AddEmptyRow(_revenueCategoryGrid);
     }
 }
