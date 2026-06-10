@@ -486,6 +486,11 @@ public sealed class CustomerDetailsForm : Form
         _provinceComboBox.Enabled = false;
         _cityComboBox.Enabled = false;
         _barangayComboBox.Enabled = false;
+
+        _driverLicenseOpenButton.Enabled = !string.IsNullOrWhiteSpace(_sourceCustomer?.DriverLicensePath);
+        _proofOfBillingOpenButton.Enabled = !string.IsNullOrWhiteSpace(_sourceCustomer?.ProofOfBillingPath);
+        _validIdOpenButton.Enabled = !string.IsNullOrWhiteSpace(_sourceCustomer?.ValidIdFilePath);
+        _selfieWithValidIdOpenButton.Enabled = !string.IsNullOrWhiteSpace(_sourceCustomer?.SelfieWithValidIdFilePath);
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)

@@ -564,6 +564,8 @@ public sealed class CarDetailsForm : Form
 
         _imageBrowseButton.Enabled = false;
         _orCrBrowseButton.Enabled = false;
+        _imageOpenButton.Enabled = !string.IsNullOrWhiteSpace(_sourceCar?.ImagePath);
+        _orCrOpenButton.Enabled = !string.IsNullOrWhiteSpace(_sourceCar?.OrCrPath);
     }
 
     private async void SaveButton_Click(object? sender, EventArgs e)

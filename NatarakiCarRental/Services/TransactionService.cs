@@ -364,9 +364,6 @@ public sealed class TransactionService
             throw Validation(nameof(CreateWalkInTransactionRequest.TransactionType), "Transaction type is invalid.");
         }
 
-        Customer customer = request.CustomerId.HasValue
-            ? await GetEligibleCustomerAsync(request.CustomerId.Value)
-            : await GetWalkInCustomerAsync(request.WalkInFirstName, request.WalkInLastName);
         Car car = await GetEligibleCarAsync(request.CarId);
         decimal dailyRate = request.DailyRate ?? car.RatePerDay;
         ValidateCommercialInputs(request.StartDate.Date, request.EndDate.Date, dailyRate, request.AmountPaid, request.ModeOfPayment);
@@ -383,28 +380,38 @@ public sealed class TransactionService
             throw Validation(nameof(CreateWalkInTransactionRequest.AmountPaid), "Direct rental requires full payment before the car can be released.");
         }
 
-        FleetSchedule schedule = transactionType == FleetScheduleConstants.Type.Reservation
-            ? CreateReservationSchedule(
-                scheduleId: 0,
-                car.CarId,
-                customer.CustomerId,
-                request.StartDate.Date,
-                request.EndDate.Date,
-                request.Notes,
-                GetReservationStatusForPaidAmount(request.AmountPaid))
-            : CreateRentalSchedule(
-                scheduleId: 0,
-                car.CarId,
-                customer.CustomerId,
-                request.StartDate.Date,
-                request.EndDate.Date,
-                request.Notes);
-
         await using SqlConnection connection = await _connectionFactory.CreateOpenConnectionAsync();
         using SqlTransaction dbTransaction = connection.BeginTransaction();
 
         try
         {
+            Customer customer;
+            if (request.CustomerId.HasValue)
+            {
+                customer = await GetEligibleCustomerAsync(request.CustomerId.Value);
+            }
+            else
+            {
+                customer = await GetOrCreateWalkInCustomerInternalAsync(request.WalkInFirstName, request.WalkInLastName, dbTransaction);
+            }
+
+            FleetSchedule schedule = transactionType == FleetScheduleConstants.Type.Reservation
+                ? CreateReservationSchedule(
+                    scheduleId: 0,
+                    car.CarId,
+                    customer.CustomerId,
+                    request.StartDate.Date,
+                    request.EndDate.Date,
+                    request.Notes,
+                    GetReservationStatusForPaidAmount(request.AmountPaid))
+                : CreateRentalSchedule(
+                    scheduleId: 0,
+                    car.CarId,
+                    customer.CustomerId,
+                    request.StartDate.Date,
+                    request.EndDate.Date,
+                    request.Notes);
+
             await _scheduleService.PrepareForSaveAsync(schedule, null, false, dbTransaction);
             schedule.CreatedByUserId = _currentUserId;
             int scheduleId = await _scheduleRepository.CreateAsync(schedule, dbTransaction);
@@ -1130,11 +1137,11 @@ public sealed class TransactionService
         return customer;
     }
 
-    private async Task<Customer> GetWalkInCustomerAsync(string? firstName, string? lastName)
+    private async Task<Customer> GetOrCreateWalkInCustomerInternalAsync(string? firstName, string? lastName, SqlTransaction dbTransaction)
     {
         if (string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName))
         {
-            Customer walkInCustomer = await _customerRepository.GetOrCreateWalkInCustomerAsync();
+            Customer walkInCustomer = await _customerRepository.GetOrCreateWalkInCustomerAsync(dbTransaction);
             if (walkInCustomer.IsArchived)
             {
                 throw Validation(nameof(CreateWalkInTransactionRequest.CustomerId), "Walk-In Customer is archived. Restore the protected system customer before creating unnamed walk-in transactions.");
@@ -1153,16 +1160,28 @@ public sealed class TransactionService
         {
             phoneNumber = $"09{Random.Shared.Next(0, 1_000_000_000):000000000}";
         }
-        while (await _customerRepository.PhoneNumberExistsAsync(phoneNumber));
+        while (await _customerRepository.PhoneNumberExistsAsync(phoneNumber, null, dbTransaction));
 
         Customer customer = new()
         {
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
-            PhoneNumber = phoneNumber
+            PhoneNumber = phoneNumber,
+            CustomerType = "Rental"
         };
-        int customerId = await new CustomerService(_currentUserId).AddCustomerAsync(customer);
-        return await _customerRepository.GetCustomerByIdAsync(customerId)
+
+        int customerId = await _customerRepository.AddCustomerAsync(customer, dbTransaction);
+        
+        await _activityLogService.LogAsync(
+            action: "Added",
+            module: "Customer",
+            entityId: customerId,
+            description: $"Added walk-in customer {customer.FirstName} {customer.LastName} ({customer.PhoneNumber}) during transaction creation.",
+            userId: _currentUserId,
+            entityName: $"{customer.FirstName} {customer.LastName}",
+            transaction: dbTransaction);
+
+        return await _customerRepository.GetCustomerByIdAsync(customerId, dbTransaction)
             ?? throw new InvalidOperationException("Named walk-in customer could not be loaded after creation.");
     }
 
@@ -1293,11 +1312,14 @@ public sealed class TransactionService
 
     private static string GetPaymentStatus(decimal amountPaid, decimal totalAmount)
     {
+        if (amountPaid >= totalAmount)
+        {
+            return TransactionConstants.PaymentStatus.Paid;
+        }
+
         return amountPaid <= 0
             ? TransactionConstants.PaymentStatus.Unpaid
-            : amountPaid < totalAmount
-                ? TransactionConstants.PaymentStatus.Partial
-                : TransactionConstants.PaymentStatus.Paid;
+            : TransactionConstants.PaymentStatus.Partial;
     }
 
     private static decimal CalculateTotalAmount(DateTime startDate, DateTime endDate, decimal dailyRate)
