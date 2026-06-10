@@ -78,11 +78,9 @@ public static class DiffHelper
 
     private static bool ShouldIgnore(string name)
     {
-        // Ignore IDs, Timestamps, and file paths as per requirements or common sense
+        // Ignore IDs and Timestamps
         return name.EndsWith("Id") || 
                name.EndsWith("At") || 
-               name.EndsWith("Path") || 
-               name.EndsWith("FilePath") ||
                name == "PasswordHash" ||
                name == "Salt" ||
                name == "ConcurrencyToken";

@@ -376,7 +376,7 @@ public sealed class CustomerRepository
         return customers.ToList();
     }
 
-    public async Task<bool> PhoneNumberExistsAsync(string phoneNumber, int? excludingCustomerId = null)
+    public async Task<bool> PhoneNumberExistsAsync(string phoneNumber, int? excludingCustomerId = null, IDbTransaction? transaction = null)
     {
         string normalizedPhoneNumber = (phoneNumber ?? string.Empty).Trim();
 
@@ -387,14 +387,15 @@ public sealed class CustomerRepository
               AND (@ExcludingCustomerId IS NULL OR CustomerId <> @ExcludingCustomerId);
             """;
 
-        using var connection = _connectionFactory.CreateConnection();
+        IDbConnection connection = transaction?.Connection ?? _connectionFactory.CreateConnection();
         int count = await connection.ExecuteScalarAsync<int>(
             sql,
             new
             {
                 PhoneNumber = normalizedPhoneNumber,
                 ExcludingCustomerId = excludingCustomerId
-            });
+            },
+            transaction);
 
         return count > 0;
     }

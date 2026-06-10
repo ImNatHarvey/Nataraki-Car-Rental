@@ -1,3 +1,4 @@
+using System.Data;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.Data.SqlClient;
@@ -76,9 +77,9 @@ public sealed class CustomerService
         return _customerRepository.GetRecentCustomersAsync(take);
     }
 
-    public Task<bool> PhoneNumberExistsAsync(string phoneNumber, int? excludingCustomerId = null)
+    public Task<bool> PhoneNumberExistsAsync(string phoneNumber, int? excludingCustomerId = null, IDbTransaction? transaction = null)
     {
-        return _customerRepository.PhoneNumberExistsAsync(phoneNumber, excludingCustomerId);
+        return _customerRepository.PhoneNumberExistsAsync(phoneNumber, excludingCustomerId, transaction);
     }
 
     public Task<Customer?> GetCustomerByPhoneNumberAsync(string phoneNumber)
